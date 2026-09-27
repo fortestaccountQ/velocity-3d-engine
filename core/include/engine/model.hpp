@@ -41,6 +41,28 @@ public:
         }
         return box;
     }
+
+    float collision_scale() const {
+        return meshes.empty() ? 1.0f : meshes[0]->collision_scale;
+    }
+
+    void set_collision_scale(float scale) {
+        for (auto& m : meshes) {
+            if (m) m->collision_scale = scale;
+        }
+    }
+
+    void set_collision_padding(float px, float py, float pz) {
+        for (auto& m : meshes) {
+            if (m) m->collision_padding = { px, py, pz };
+        }
+    }
+
+    void set_cast_shadows(bool cast) {
+        for (auto& m : meshes) {
+            if (m) m->cast_shadows = cast;
+        }
+    }
 };
 
 } // namespace engine

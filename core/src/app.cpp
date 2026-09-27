@@ -535,15 +535,17 @@ void EngineApp::init_hud_and_line_pipelines() {
     lpip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
     lpip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
     lpip_desc.shader = lshd;
-    lpip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    lpip_desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
     lpip_desc.depth.write_enabled = false;
     lpip_desc.cull_mode = SG_CULLMODE_NONE;
+    lpip_desc.sample_count = sapp_sample_count();
     lpip_desc.label = "line-pipeline";
     sg_pipeline lpip = sg_make_pipeline(&lpip_desc);
     line_pip_id_ = lpip.id;
 
     sg_buffer_desc lbuf_desc{};
     lbuf_desc.size = 8192 * sizeof(LineVertex);
+    lbuf_desc.usage.vertex_buffer = true;
     lbuf_desc.usage.dynamic_update = true;
     lbuf_desc.label = "line-dynamic-vbuf";
     sg_buffer lbuf = sg_make_buffer(&lbuf_desc);
@@ -580,6 +582,7 @@ void EngineApp::init_hud_and_line_pipelines() {
     hpip_desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
     hpip_desc.depth.write_enabled = false;
     hpip_desc.cull_mode = SG_CULLMODE_NONE;
+    hpip_desc.sample_count = sapp_sample_count();
     hpip_desc.colors[0].blend.enabled = true;
     hpip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     hpip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -589,6 +592,7 @@ void EngineApp::init_hud_and_line_pipelines() {
 
     sg_buffer_desc hbuf_desc{};
     hbuf_desc.size = 16384 * sizeof(HUDVertex);
+    hbuf_desc.usage.vertex_buffer = true;
     hbuf_desc.usage.dynamic_update = true;
     hbuf_desc.label = "hud-dynamic-vbuf";
     sg_buffer hbuf = sg_make_buffer(&hbuf_desc);
@@ -656,6 +660,7 @@ void EngineApp::init_pipeline_and_shaders() {
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
     pip_desc.cull_mode = SG_CULLMODE_NONE;
+    pip_desc.sample_count = sapp_sample_count();
     pip_desc.label = "pbr-daylight-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     pip_id_ = pip.id;
@@ -702,7 +707,7 @@ void EngineApp::render_shadow_pass() {
     sg_apply_pipeline(pip);
 
     for (const auto& entity : scene_.entities()) {
-        if (!entity || !entity->visible || !entity->mesh) continue;
+        if (!entity || !entity->visible || !entity->mesh || !entity->cast_shadows) continue;
         if (!entity->mesh->ensure_gpu_buffers()) continue;
 
         glm::mat4 model = entity->world_model_matrix();
@@ -1144,6 +1149,7 @@ void EngineApp::run() {
 
     desc.width = config_.width;
     desc.height = config_.height;
+    desc.sample_count = 4;
     desc.window_title = config_.title.c_str();
     desc.logger.func = slog_func;
     desc.icon.sokol_default = true;

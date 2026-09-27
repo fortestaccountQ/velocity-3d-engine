@@ -144,6 +144,14 @@ class App:
     def debug_hitboxes(self, value: bool) -> None:
         self._core.debug_hitboxes = bool(value)
 
+    @property
+    def show_debug_hitboxes(self) -> bool:
+        return self._core.debug_hitboxes
+
+    @show_debug_hitboxes.setter
+    def show_debug_hitboxes(self, value: bool) -> None:
+        self._core.debug_hitboxes = bool(value)
+
     def toggle_debug_hitboxes(self) -> None:
         self._core.toggle_debug_hitboxes()
 

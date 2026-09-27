@@ -122,6 +122,107 @@ struct AABB {
     }
 };
 
+struct Cylinder {
+    glm::vec3 base{0.0f}; // Bottom center of cylinder
+    float radius{0.35f};
+    float height{1.8f};
+
+    Cylinder() = default;
+    Cylinder(const glm::vec3& base, float radius = 0.35f, float height = 1.8f)
+        : base(base), radius(radius), height(height) {}
+
+    AABB aabb() const {
+        return AABB(
+            glm::vec3(base.x - radius, base.y, base.z - radius),
+            glm::vec3(base.x + radius, base.y + height, base.z + radius)
+        );
+    }
+
+    bool intersects_aabb(const AABB& box) const {
+        if (!box.is_valid()) return false;
+        // 1. Vertical range overlap
+        if (base.y + height <= box.min_point.y || base.y >= box.max_point.y) {
+            return false;
+        }
+        // 2. Horizontal circle vs 2D box in XZ
+        float cx = std::clamp(base.x, box.min_point.x, box.max_point.x);
+        float cz = std::clamp(base.z, box.min_point.z, box.max_point.z);
+        float dx = base.x - cx;
+        float dz = base.z - cz;
+        return (dx * dx + dz * dz) < (radius * radius);
+    }
+
+    bool get_penetration_aabb(const AABB& box, glm::vec3& mtv_out) const {
+        if (!box.is_valid()) return false;
+
+        float top_y = base.y + height;
+        float bot_y = base.y;
+
+        if (top_y <= box.min_point.y || bot_y >= box.max_point.y) {
+            return false;
+        }
+
+        float cx = std::clamp(base.x, box.min_point.x, box.max_point.x);
+        float cz = std::clamp(base.z, box.min_point.z, box.max_point.z);
+        float dx = base.x - cx;
+        float dz = base.z - cz;
+        float dist_sq = dx * dx + dz * dz;
+
+        float push_up = box.max_point.y - bot_y;
+        float push_down = box.min_point.y - top_y;
+
+        if (dist_sq > 1e-8f) {
+            float dist = std::sqrt(dist_sq);
+            if (dist >= radius) {
+                return false;
+            }
+            float horiz_pen = radius - dist;
+            glm::vec3 horiz_dir = glm::vec3(dx / dist, 0.0f, dz / dist);
+
+            // Compare horizontal push vs vertical step-up
+            if (horiz_pen <= std::abs(push_up) && horiz_pen <= std::abs(push_down)) {
+                mtv_out = horiz_dir * horiz_pen;
+            } else if (std::abs(push_up) < std::abs(push_down)) {
+                mtv_out = glm::vec3(0.0f, push_up, 0.0f);
+            } else {
+                mtv_out = glm::vec3(0.0f, push_down, 0.0f);
+            }
+            return true;
+        } else {
+            // Circle center is inside the box bounds in XZ
+            float left_pen = (base.x - box.min_point.x) + radius;
+            float right_pen = (box.max_point.x - base.x) + radius;
+            float back_pen = (base.z - box.min_point.z) + radius;
+            float front_pen = (box.max_point.z - base.z) + radius;
+
+            float min_h = left_pen;
+            glm::vec3 h_mtv(-left_pen, 0.0f, 0.0f);
+
+            if (right_pen < min_h) {
+                min_h = right_pen;
+                h_mtv = glm::vec3(right_pen, 0.0f, 0.0f);
+            }
+            if (back_pen < min_h) {
+                min_h = back_pen;
+                h_mtv = glm::vec3(0.0f, 0.0f, -back_pen);
+            }
+            if (front_pen < min_h) {
+                min_h = front_pen;
+                h_mtv = glm::vec3(0.0f, 0.0f, front_pen);
+            }
+
+            if (min_h <= std::abs(push_up) && min_h <= std::abs(push_down)) {
+                mtv_out = h_mtv;
+            } else if (std::abs(push_up) < std::abs(push_down)) {
+                mtv_out = glm::vec3(0.0f, push_up, 0.0f);
+            } else {
+                mtv_out = glm::vec3(0.0f, push_down, 0.0f);
+            }
+            return true;
+        }
+    }
+};
+
 struct Ray {
     glm::vec3 origin{0.0f};
     glm::vec3 direction{0.0f, 0.0f, -1.0f};

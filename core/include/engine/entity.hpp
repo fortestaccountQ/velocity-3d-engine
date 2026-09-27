@@ -39,6 +39,8 @@ public:
 
     bool has_collision{true};
     float collision_scale{1.0f};
+    glm::vec3 collision_padding{0.0f};
+    bool cast_shadows{true};
 
     AABB world_aabb() const {
         if (!mesh || !mesh->local_aabb.is_valid()) {
@@ -47,6 +49,10 @@ public:
         AABB box = mesh->local_aabb.transformed(world_model_matrix());
         if (collision_scale != 1.0f && box.is_valid()) {
             box = box.scaled(collision_scale);
+        }
+        if (box.is_valid() && (collision_padding.x != 0.0f || collision_padding.y != 0.0f || collision_padding.z != 0.0f)) {
+            box.min_point += collision_padding;
+            box.max_point -= collision_padding;
         }
         return box;
     }

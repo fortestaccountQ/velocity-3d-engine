@@ -23,6 +23,7 @@ enum class Key : int {
     Escape = 256, Enter = 257, Tab = 258, Backspace = 259,
     Right = 262, Left = 263, Down = 264, Up = 265,
     PageUp = 266, PageDown = 267, Home = 268, End = 269,
+    F1 = 290, F2 = 291, F3 = 292, F4 = 293, F5 = 294,
     LeftShift = 340, LeftControl = 341, LeftAlt = 342
 };
 

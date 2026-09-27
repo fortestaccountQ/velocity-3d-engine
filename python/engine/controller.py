@@ -1,8 +1,8 @@
 """First-person character controller with mouse look, gravity, jump, AABB collision, depenetration, and audio."""
 
 import math
-from typing import Optional, List
-from engine import Key, Camera, InputManager, Scene, Entity, AABB, Vec3
+from typing import Optional, List, Tuple
+from engine import Key, Camera, InputManager, Scene, Entity, AABB, Cylinder, Vec3
 
 
 class FirstPersonController:
@@ -46,6 +46,40 @@ class FirstPersonController:
     def add_collider(self, aabb: AABB):
         """Add a static obstacle AABB box to collision checks."""
         self.custom_colliders.append(aabb)
+
+    def get_player_cylinder(self, px: float, py: float, pz: float, elevated: bool = True) -> Cylinder:
+        """Create player collision cylinder. If elevated=True, elevates base by step_height so feet slide over low thresholds."""
+        step = self.step_height if elevated else 0.0
+        base_y = py - self.player_height + step
+        h = max(0.2, self.player_height - step + 0.15)
+        return Cylinder(Vec3(px, base_y, pz), radius=self.player_radius, height=h)
+
+    def _check_cylinder_collision(self, cyl: Cylinder, ignore_entities: Optional[List[Entity]] = None) -> Optional[Tuple[bool, Vec3]]:
+        """Check if player cylinder intersects any obstacles and return MTV if penetrating."""
+        # 1. Custom colliders
+        for box in self.custom_colliders:
+            if box.is_valid() and cyl.intersects_aabb(box):
+                hit, mtv = cyl.get_penetration_aabb(box)
+                if hit:
+                    return hit, mtv
+
+        # 2. Scene entities
+        if self.scene:
+            for entity in self.scene.entities:
+                if not entity.visible or not entity.has_collision or entity.mesh is None:
+                    continue
+                if ignore_entities and entity in ignore_entities:
+                    continue
+                if "Plane" in entity.name or "floor" in entity.name.lower():
+                    continue
+
+                world_box = entity.world_aabb()
+                if world_box.is_valid() and cyl.intersects_aabb(world_box):
+                    hit, mtv = cyl.get_penetration_aabb(world_box)
+                    if hit:
+                        return hit, mtv
+
+        return None
 
     def get_player_aabb(self, px: float, py: float, pz: float) -> AABB:
         """Calculate player full bounding box for vertical/ground tests."""
@@ -198,7 +232,7 @@ class FirstPersonController:
 
         py = new_py
 
-        # [Sub-stepping for Horizontal Movement]
+        # [Sub-stepping for Horizontal Movement with Cylinder]
         dist_xz = math.hypot(dx, dz)
         max_substep = self.player_radius * 0.45
         substeps = max(1, math.ceil(dist_xz / max_substep))
@@ -206,30 +240,42 @@ class FirstPersonController:
         step_dz = dz / substeps
 
         for _ in range(substeps):
-            # [Axis X: Horizontal sliding]
-            if abs(step_dx) > 1e-6:
-                new_px = px + step_dx
-                box_x = self.get_player_horizontal_aabb(new_px, py, pz)
-                if self._check_collision(box_x) is None:
-                    px = new_px
+            # Check combined movement (step_dx, step_dz)
+            cand_cyl = self.get_player_cylinder(px + step_dx, py, pz + step_dz, elevated=True)
+            col = self._check_cylinder_collision(cand_cyl)
+            if col is None:
+                px += step_dx
+                pz += step_dz
+            else:
+                # Direct movement collided with obstacle: try sliding along obstacle face/corner
+                hit, mtv = col
+                slide_px = px + step_dx + mtv.x
+                slide_pz = pz + step_dz + mtv.z
+                slide_cyl = self.get_player_cylinder(slide_px, py, slide_pz, elevated=True)
+                if self._check_cylinder_collision(slide_cyl) is None:
+                    px = slide_px
+                    pz = slide_pz
+                else:
+                    # Separate single-axis slides
+                    if abs(step_dx) > 1e-6:
+                        x_cyl = self.get_player_cylinder(px + step_dx, py, pz, elevated=True)
+                        if self._check_cylinder_collision(x_cyl) is None:
+                            px += step_dx
+                    if abs(step_dz) > 1e-6:
+                        z_cyl = self.get_player_cylinder(px, py, pz + step_dz, elevated=True)
+                        if self._check_cylinder_collision(z_cyl) is None:
+                            pz += step_dz
 
-            # [Axis Z: Horizontal sliding]
-            if abs(step_dz) > 1e-6:
-                new_pz = pz + step_dz
-                box_z = self.get_player_horizontal_aabb(px, py, new_pz)
-                if self._check_collision(box_z) is None:
-                    pz = new_pz
-
-        # [Depenetration: Minimum Translation Vector Check]
-        current_box = self.get_player_aabb(px, py, pz)
+        # [Depenetration: Minimum Translation Vector Check via Cylinder]
+        current_cyl = self.get_player_cylinder(px, py, pz, elevated=False)
         for custom_box in self.custom_colliders:
             if custom_box.is_valid():
-                mtv = current_box.get_penetration(custom_box)
-                if mtv is not None:
+                hit, mtv = current_cyl.get_penetration_aabb(custom_box)
+                if hit:
                     px += mtv.x
                     py += mtv.y
                     pz += mtv.z
-                    current_box = self.get_player_aabb(px, py, pz)
+                    current_cyl = self.get_player_cylinder(px, py, pz, elevated=False)
 
         if self.scene:
             for entity in self.scene.entities:
@@ -239,15 +285,15 @@ class FirstPersonController:
                     continue
                 wbox = entity.world_aabb()
                 if wbox.is_valid():
-                    mtv = current_box.get_penetration(wbox)
-                    if mtv is not None:
+                    hit, mtv = current_cyl.get_penetration_aabb(wbox)
+                    if hit:
                         px += mtv.x
                         py += mtv.y
                         pz += mtv.z
                         if mtv.y > 0.001:
                             self.is_grounded = True
                             self.velocity_y = 0.0
-                        current_box = self.get_player_aabb(px, py, pz)
+                        current_cyl = self.get_player_cylinder(px, py, pz, elevated=False)
 
         # Apply resolved position to camera
         self.camera.set_position(px, py, pz)

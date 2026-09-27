@@ -90,6 +90,11 @@ NB_MODULE(_engine_core, m) {
         .value("LEFT_SHIFT", engine::Key::LeftShift)
         .value("LEFT_CONTROL", engine::Key::LeftControl)
         .value("LEFT_ALT", engine::Key::LeftAlt)
+        .value("F1", engine::Key::F1)
+        .value("F2", engine::Key::F2)
+        .value("F3", engine::Key::F3)
+        .value("F4", engine::Key::F4)
+        .value("F5", engine::Key::F5)
         .export_values();
 
     // -----------------------------------------------------------------------
@@ -188,6 +193,32 @@ NB_MODULE(_engine_core, m) {
         .def("__repr__", [](const engine::AABB& b) {
             return "AABB(min=(" + std::to_string(b.min_point.x) + ", " + std::to_string(b.min_point.y) + ", " + std::to_string(b.min_point.z) +
                    "), max=(" + std::to_string(b.max_point.x) + ", " + std::to_string(b.max_point.y) + ", " + std::to_string(b.max_point.z) + "))";
+        });
+
+    nb::class_<engine::Cylinder>(m, "Cylinder")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, float, float>(), "base"_a, "radius"_a = 0.35f, "height"_a = 1.8f)
+        .def_prop_rw("base",
+            [](engine::Cylinder& c) -> glm::vec3& { return c.base; },
+            [](engine::Cylinder& c, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) c.base = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) c.base = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("radius", &engine::Cylinder::radius)
+        .def_rw("height", &engine::Cylinder::height)
+        .def("aabb", &engine::Cylinder::aabb)
+        .def("intersects_aabb", &engine::Cylinder::intersects_aabb, "box"_a)
+        .def("get_penetration_aabb", [](const engine::Cylinder& c, const engine::AABB& b) -> nb::tuple {
+            glm::vec3 mtv{0.0f};
+            bool hit = c.get_penetration_aabb(b, mtv);
+            return nb::make_tuple(hit, mtv);
+        }, "box"_a)
+        .def("__repr__", [](const engine::Cylinder& c) {
+            return "Cylinder(base=(" + std::to_string(c.base.x) + ", " + std::to_string(c.base.y) + ", " + std::to_string(c.base.z) +
+                   "), r=" + std::to_string(c.radius) + ", h=" + std::to_string(c.height) + ")";
         });
 
     nb::class_<engine::Ray>(m, "Ray")
@@ -454,6 +485,16 @@ NB_MODULE(_engine_core, m) {
             }, nb::rv_policy::reference_internal)
         .def_rw("has_collision", &engine::Entity::has_collision)
         .def_rw("collision_scale", &engine::Entity::collision_scale)
+        .def_rw("cast_shadows", &engine::Entity::cast_shadows)
+        .def_prop_rw("collision_padding",
+            [](engine::Entity& e) -> glm::vec3& { return e.collision_padding; },
+            [](engine::Entity& e, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) e.collision_padding = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) e.collision_padding = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
         .def_prop_rw("parent",
             [](engine::Entity& e) -> std::shared_ptr<engine::Entity> { return e.parent; },
             [](engine::Entity& e, std::shared_ptr<engine::Entity> p) { e.parent = p; })
@@ -504,6 +545,12 @@ NB_MODULE(_engine_core, m) {
         .def_prop_rw("visible",
             &engine::Model::is_visible,
             &engine::Model::set_visible)
+        .def_prop_rw("collision_scale",
+            &engine::Model::collision_scale,
+            &engine::Model::set_collision_scale)
+        .def("set_collision_scale", &engine::Model::set_collision_scale, "scale"_a)
+        .def("set_collision_padding", &engine::Model::set_collision_padding, "px"_a, "py"_a, "pz"_a)
+        .def("set_cast_shadows", &engine::Model::set_cast_shadows, "cast"_a)
         .def("world_aabb", &engine::Model::world_aabb);
 
     // -----------------------------------------------------------------------

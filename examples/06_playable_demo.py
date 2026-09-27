@@ -61,25 +61,28 @@ def main():
     print("=" * 80)
 
     app = engine.App(
-        title="Engine 3D: Milestone 7 - Daylight & Shadows",
+        title="Engine 3D: Milestone 8 - Colliders, MSAA & Polish",
         width=960,
         height=720,
         clear_color=[0.4314, 0.6275, 0.8235, 1.0],  # Daylight sky blue #6ea0d0
     )
 
+    if "--debug-hitboxes" in sys.argv:
+        app.show_debug_hitboxes = True
+
     # 1. Daylight Atmosphere & Hemispheric Ambient Lighting Setup
-    app.scene.light.set_direction(-0.4, -0.85, -0.45)
+    app.scene.light.set_direction(-0.45, -0.85, -0.45)
     app.scene.light.set_color(1.15, 1.08, 0.95)   # Warm golden sunlight
     app.scene.light.intensity = 1.35
     app.scene.light.set_hemispheric_ambient(0.52, 0.62, 0.78, 0.26, 0.22, 0.20)
 
-    # 2. Textures & Materials
+    # 2. Textures & Materials (Soft light-gray tile floor with Mipmaps)
     floor_tex = Texture.create_checkerboard(
         width=128, height=128, tile_size=16,
-        color1=0xFFDFE2E8, color2=0xFFBFC4CF
+        color1=0xFF9A9AA2, color2=0xFF7A7A85
     )
     floor_mat = Material(floor_tex, roughness=0.82, metallic=0.0)
-    floor_mat.base_color = (0.95, 0.95, 0.98, 1.0)
+    floor_mat.base_color = (0.85, 0.85, 0.88, 1.0)
 
     wall_tex = Texture.create_checkerboard(
         width=64, height=64, tile_size=8,
@@ -100,6 +103,7 @@ def main():
     floor = app.scene.create_plane(size=32.0, uv_tiling=16.0, material=floor_mat)
     floor.name = "FloorPlane"
     floor.transform.position = (0.0, 0.0, 0.0)
+    floor.cast_shadows = False  # Floor receives shadows without self-shadow acne
 
     def create_wall(name: str, pos: tuple, scale: tuple, mat: Material):
         w = app.scene.create_cube()
@@ -123,31 +127,27 @@ def main():
     # 4. Load 3D Models into Arena
     assets_dir = repo_root / "assets"
 
-    # Model 1: Duck (Center Pedestal)
-    duck_pedestal = create_wall("Duck_Pedestal", (0.0, 0.4, 4.0), (1.2, 0.4, 1.2), wall_mat)
+    # Model 1: Duck (Center Pedestal - pedestal is slim so duck shadow falls on pedestal and cascades to floor)
+    duck_pedestal = create_wall("Duck_Pedestal", (0.0, 0.25, 4.0), (0.75, 0.25, 0.75), wall_mat)
     duck = app.scene.load_model(str(assets_dir / "duck.glb"))
     duck.name = "DuckModel"
     duck.transform.scale = (1.0, 1.0, 1.0)
-    duck.transform.position = (0.0, 0.8, 4.0)
-    # Refine collision scale so player doesn't bump empty air around wings
-    if hasattr(duck, "root") and duck.root:
-        duck.root.collision_scale = 0.75
+    duck.transform.position = (0.0, 0.50, 4.0)
+    duck.set_collision_scale(0.78)
 
     # Model 2: Textured Box
     box = app.scene.load_model(str(assets_dir / "box_textured.glb"))
     box.name = "BoxModel"
     box.transform.scale = (1.1, 1.1, 1.1)
     box.transform.position = (-4.5, 0.55, -3.5)
-    if hasattr(box, "root") and box.root:
-        box.root.collision_scale = 0.85
+    box.set_collision_scale(0.85)
 
     # Model 3: Avocado
     avocado = app.scene.load_model(str(assets_dir / "avocado.glb"))
     avocado.name = "AvocadoModel"
     avocado.transform.scale = (22.0, 22.0, 22.0)
     avocado.transform.position = (4.5, 0.0, -3.5)
-    if hasattr(avocado, "root") and avocado.root:
-        avocado.root.collision_scale = 0.80
+    avocado.set_collision_scale(0.75)
 
     # 5. Setup Camera & First-Person Controller with Audio Integration
     app.camera.set_position(0.0, 1.7, -8.0)
@@ -194,6 +194,11 @@ def main():
             app.set_mouse_locked(new_lock)
             print(f"[Input] Mouse Locked: {new_lock}")
         last_tab_down = tab_down
+
+        # Toggle Hitbox Wireframe with F1
+        if app.input.is_key_pressed(Key.F1):
+            app.show_debug_hitboxes = not app.show_debug_hitboxes
+            print(f"[Debug] Show Hitboxes: {app.show_debug_hitboxes}")
 
         # Update Player Controller (with sub-stepping, depenetration & footstep sound)
         controller.update(dt)
@@ -250,7 +255,7 @@ def main():
         # Update window title with live metrics periodically
         if frame_count % 30 == 0:
             cur_fps = 1.0 / dt if dt > 0 else 0.0
-            app.set_title(f"Engine 3D: Milestone 7 | FPS: {cur_fps:.0f} | Score: {score}")
+            app.set_title(f"Engine 3D: Milestone 8 | FPS: {cur_fps:.0f} | Score: {score}")
 
         if frame_count % 120 == 0 or ("--test" in sys.argv and frame_count >= 60):
             pos = app.camera.position
@@ -264,7 +269,8 @@ def main():
                 print("[Screenshot] Capturing game screen via direct computer-use...", flush=True)
                 sys.path.append("C:/Users/Admin/.gemini/config/skills/computer-use/scripts")
                 from computer import get_windows, capture_rect
-                out_png = "C:/Users/Admin/.gemini/antigravity-cli/brain/652d8d55-b5ed-48f3-a093-40b0b4448338/milestone7_daylight_shadows.png"
+                png_name = "milestone8_hitboxes_f1.png" if "--debug-hitboxes" in sys.argv else "milestone8_visual_polish.png"
+                out_png = f"C:/Users/Admin/.gemini/antigravity-cli/brain/652d8d55-b5ed-48f3-a093-40b0b4448338/{png_name}"
                 target = None
                 for w in get_windows():
                     if "Engine 3D" in w["title"]:

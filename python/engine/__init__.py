@@ -19,6 +19,7 @@ try:
         InputManager,
         AudioManager,
         AABB,
+        Cylinder,
         Ray,
         RaycastHit,
     )
@@ -27,7 +28,7 @@ except ImportError:
 
 from .controller import FirstPersonController
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = [
     "App",
     "Key",
@@ -45,6 +46,7 @@ __all__ = [
     "InputManager",
     "AudioManager",
     "AABB",
+    "Cylinder",
     "Ray",
     "RaycastHit",
     "FirstPersonController",
