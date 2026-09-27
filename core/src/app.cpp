@@ -534,7 +534,7 @@ void EngineApp::on_frame() {
             }
 
             if (!entity->mesh) {
-                entity->mesh = scene_.default_cube_mesh();
+                continue;
             }
 
             if (!entity->mesh || !entity->mesh->ensure_gpu_buffers()) {
@@ -555,8 +555,8 @@ void EngineApp::on_frame() {
             }
 
             // Compute MVP and Normal matrices
-            glm::mat4 model = entity->transform.model_matrix();
-            glm::mat4 normal_mat = entity->transform.normal_matrix();
+            glm::mat4 model = entity->world_model_matrix();
+            glm::mat4 normal_mat = entity->world_normal_matrix();
             glm::mat4 mvp = vp * model;
 
             VSParams vs_params{ mvp, model, normal_mat };

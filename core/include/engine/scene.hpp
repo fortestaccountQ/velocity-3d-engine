@@ -4,6 +4,7 @@
 #include "engine/light.hpp"
 #include "engine/texture.hpp"
 #include "engine/material.hpp"
+#include "engine/model.hpp"
 #include <vector>
 #include <memory>
 
@@ -15,6 +16,7 @@ public:
 
     Scene() = default;
 
+    std::shared_ptr<Model> load_model(const std::string& filepath);
     std::shared_ptr<Entity> create_cube(const glm::vec4& color = glm::vec4(1.0f));
     std::shared_ptr<Entity> create_plane(float size = 10.0f, float uv_tiling = 5.0f, std::shared_ptr<Material> material = nullptr);
     std::shared_ptr<Entity> create_entity(const std::string& name = "Entity");

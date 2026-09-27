@@ -1,8 +1,13 @@
 #include "engine/scene.hpp"
+#include "engine/model_loader.hpp"
 
 #include <algorithm>
 
 namespace engine {
+
+std::shared_ptr<Model> Scene::load_model(const std::string& filepath) {
+    return ModelLoader::load_model(*this, filepath);
+}
 
 std::shared_ptr<Mesh> Scene::default_cube_mesh() {
     if (!default_cube_mesh_) {

@@ -14,6 +14,8 @@
 #include "engine/texture.hpp"
 #include "engine/material.hpp"
 #include "engine/entity.hpp"
+#include "engine/model.hpp"
+#include "engine/model_loader.hpp"
 #include "engine/scene.hpp"
 #include "engine/input.hpp"
 #include "engine/app.hpp"
@@ -339,6 +341,7 @@ NB_MODULE(_engine_core, m) {
             }
             return s.create_cube(col);
         }, "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
+        .def("load_model", &engine::Scene::load_model, "filepath"_a)
         .def("create_plane", &engine::Scene::create_plane,
             "size"_a = 10.0f, "uv_tiling"_a = 5.0f, "material"_a = nullptr)
         .def("create_entity", &engine::Scene::create_entity, "name"_a = "Entity")
@@ -346,6 +349,24 @@ NB_MODULE(_engine_core, m) {
         .def("remove_entity", &engine::Scene::remove_entity, "entity"_a)
         .def("clear", &engine::Scene::clear)
         .def_prop_ro("entities", &engine::Scene::entities);
+
+    // -----------------------------------------------------------------------
+    // Model
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Model>(m, "Model")
+        .def_rw("name", &engine::Model::name)
+        .def_prop_ro("transform", [](engine::Model& mod) -> engine::Transform& {
+            return mod.transform();
+        }, nb::rv_policy::reference_internal)
+        .def_prop_ro("root_entity", [](engine::Model& mod) { return mod.root_entity; })
+        .def_prop_ro("meshes", [](engine::Model& mod) { return mod.meshes; })
+        .def("set_position", &engine::Model::set_position, "x"_a, "y"_a, "z"_a)
+        .def("set_rotation", &engine::Model::set_rotation, "rx"_a, "ry"_a, "rz"_a)
+        .def("set_scale", &engine::Model::set_scale, "sx"_a, "sy"_a, "sz"_a)
+        .def("set_visible", &engine::Model::set_visible, "visible"_a)
+        .def_prop_rw("visible",
+            &engine::Model::is_visible,
+            &engine::Model::set_visible);
 
     // -----------------------------------------------------------------------
     // InputManager
