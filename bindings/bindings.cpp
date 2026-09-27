@@ -11,6 +11,8 @@
 #include "engine/camera.hpp"
 #include "engine/light.hpp"
 #include "engine/mesh.hpp"
+#include "engine/texture.hpp"
+#include "engine/material.hpp"
 #include "engine/entity.hpp"
 #include "engine/scene.hpp"
 #include "engine/input.hpp"
@@ -20,7 +22,7 @@ namespace nb = nanobind;
 using namespace nb::literals;
 
 NB_MODULE(_engine_core, m) {
-    m.doc() = "Native C++20 3D Engine Core with Scene Graph, Lighting, and Input";
+    m.doc() = "Native C++20 3D Engine Core with Textures, Materials, and PBR-lite Pipeline";
 
     // -----------------------------------------------------------------------
     // Key Enum
@@ -109,6 +111,56 @@ NB_MODULE(_engine_core, m) {
         .def("__repr__", [](const glm::vec4& v) {
             return "Vec4(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ", " + std::to_string(v.w) + ")";
         });
+
+    // -----------------------------------------------------------------------
+    // Texture
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Texture>(m, "Texture")
+        .def(nb::init<>())
+        .def_static("load_from_file", &engine::Texture::load_from_file, "filepath"_a)
+        .def_static("create_checkerboard", &engine::Texture::create_checkerboard,
+            "width"_a = 64, "height"_a = 64, "tile_size"_a = 8,
+            "color1"_a = 0xFFFFFFFF, "color2"_a = 0xFF2A2A38)
+        .def_static("create_solid_color", &engine::Texture::create_solid_color,
+            "r"_a, "g"_a, "b"_a, "a"_a = 255)
+        .def_ro("width", &engine::Texture::width)
+        .def_ro("height", &engine::Texture::height)
+        .def_ro("channels", &engine::Texture::channels)
+        .def("is_valid", &engine::Texture::is_valid);
+
+    // -----------------------------------------------------------------------
+    // Material
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Material>(m, "Material")
+        .def(nb::init<>())
+        .def(nb::init<std::shared_ptr<engine::Texture>, float, float>(),
+            "texture"_a = nullptr, "roughness"_a = 0.5f, "metallic"_a = 0.0f)
+        .def_rw("albedo_map", &engine::Material::albedo_map)
+        .def_rw("roughness", &engine::Material::roughness)
+        .def_rw("metallic", &engine::Material::metallic)
+        .def_prop_rw("base_color",
+            [](engine::Material& mat) -> glm::vec4& { return mat.base_color; },
+            [](engine::Material& mat, const nb::object& val) {
+                if (nb::isinstance<glm::vec4>(val)) {
+                    mat.base_color = nb::cast<glm::vec4>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) mat.base_color = { seq[0], seq[1], seq[2], seq[3] };
+                    else if (seq.size() == 3) mat.base_color = { seq[0], seq[1], seq[2], 1.0f };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("uv_scale",
+            [](engine::Material& mat) -> std::pair<float, float> {
+                return { mat.uv_scale.x, mat.uv_scale.y };
+            },
+            [](engine::Material& mat, const nb::object& val) {
+                if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 2) mat.uv_scale = { seq[0], seq[1] };
+                }
+            })
+        .def("set_color", &engine::Material::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
+        .def("set_uv_scale", &engine::Material::set_uv_scale, "u"_a, "v"_a);
 
     // -----------------------------------------------------------------------
     // Transform
@@ -231,7 +283,10 @@ NB_MODULE(_engine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_rw("intensity", &engine::DirectionalLight::intensity)
-        .def_rw("shininess", &engine::DirectionalLight::shininess);
+        .def_rw("shininess", &engine::DirectionalLight::shininess)
+        .def("set_direction", &engine::DirectionalLight::set_direction, "x"_a, "y"_a, "z"_a)
+        .def("set_color", &engine::DirectionalLight::set_color, "r"_a, "g"_a, "b"_a)
+        .def("set_ambient", &engine::DirectionalLight::set_ambient, "r"_a, "g"_a, "b"_a);
 
     // -----------------------------------------------------------------------
     // Entity
@@ -241,6 +296,7 @@ NB_MODULE(_engine_core, m) {
         .def_rw("name", &engine::Entity::name)
         .def_rw("visible", &engine::Entity::visible)
         .def_rw("transform", &engine::Entity::transform)
+        .def_rw("material", &engine::Entity::material)
         .def_prop_rw("color",
             [](engine::Entity& e) -> glm::vec4& { return e.color; },
             [](engine::Entity& e, const nb::object& val) {
@@ -271,6 +327,8 @@ NB_MODULE(_engine_core, m) {
             }
             return s.create_cube(col);
         }, "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
+        .def("create_plane", &engine::Scene::create_plane,
+            "size"_a = 10.0f, "uv_tiling"_a = 5.0f, "material"_a = nullptr)
         .def("create_entity", &engine::Scene::create_entity, "name"_a = "Entity")
         .def("add_entity", &engine::Scene::add_entity, "entity"_a)
         .def("remove_entity", &engine::Scene::remove_entity, "entity"_a)
@@ -310,6 +368,14 @@ NB_MODULE(_engine_core, m) {
         .def_prop_ro("scene", &engine::EngineApp::scene, nb::rv_policy::reference_internal)
         .def_prop_ro("camera", &engine::EngineApp::camera, nb::rv_policy::reference_internal)
         .def_prop_ro("input", &engine::EngineApp::input, nb::rv_policy::reference_internal)
+
+        // Texture convenience loaders
+        .def("load_texture", [](engine::EngineApp&, const std::string& path) {
+            return engine::Texture::load_from_file(path);
+        }, "filepath"_a)
+        .def("create_checkerboard_texture", [](engine::EngineApp&, int w, int h, int tile) {
+            return engine::Texture::create_checkerboard(w, h, tile);
+        }, "width"_a = 64, "height"_a = 64, "tile_size"_a = 8)
 
         // Callbacks
         .def("set_update_callback", [](engine::EngineApp& self, std::optional<engine::EngineApp::UpdateCallback> cb) {

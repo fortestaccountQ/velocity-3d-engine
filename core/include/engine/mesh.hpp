@@ -9,6 +9,7 @@ namespace engine {
 struct Vertex {
     glm::vec3 position;
     glm::vec3 normal;
+    glm::vec2 uv;
     glm::vec4 color;
 };
 
@@ -22,6 +23,7 @@ public:
     int num_indices{0};
 
     static std::shared_ptr<Mesh> create_cube();
+    static std::shared_ptr<Mesh> create_plane(float size = 10.0f, float uv_tiling = 5.0f);
     void destroy();
 };
 

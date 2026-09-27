@@ -50,6 +50,16 @@ class App:
         """Input manager for keyboard and mouse query."""
         return self._core.input
 
+    def load_texture(self, filepath: str) -> _engine_core.Texture:
+        """Load an image file (PNG/JPG/BMP) into a GPU Texture."""
+        return self._core.load_texture(filepath)
+
+    def create_checkerboard_texture(
+        self, width: int = 64, height: int = 64, tile_size: int = 8
+    ) -> _engine_core.Texture:
+        """Generate a procedural checkerboard GPU texture."""
+        return self._core.create_checkerboard_texture(width, height, tile_size)
+
     def set_update_callback(self, callback: Optional[Callable[[float], None]]) -> None:
         """Register per-frame update callback accepting dt (delta time in seconds)."""
         self._update_callback = callback

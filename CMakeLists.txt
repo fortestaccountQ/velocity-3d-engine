@@ -48,6 +48,11 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# STB Dependency
+# ---------------------------------------------------------------------------
+set(STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb")
+
+# ---------------------------------------------------------------------------
 # Python & Nanobind
 # ---------------------------------------------------------------------------
 find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
@@ -72,6 +77,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(engine_core STATIC
     core/src/sokol_impl.cpp
+    core/src/texture.cpp
     core/src/mesh.cpp
     core/src/scene.cpp
     core/src/input.cpp
@@ -81,6 +87,7 @@ add_library(engine_core STATIC
 target_include_directories(engine_core PUBLIC
     core/include
     ${SOKOL_INCLUDE_DIR}
+    ${STB_INCLUDE_DIR}
 )
 
 target_link_libraries(engine_core PUBLIC glm::glm)

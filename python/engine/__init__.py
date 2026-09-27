@@ -1,4 +1,4 @@
-"""Modular 3D Engine package with C++20 core, Sokol GFX, GLM, and Nanobind."""
+"""Modular 3D Engine package with C++20 core, Sokol GFX, GLM, Nanobind, and PBR-lite texturing."""
 
 from .app import App
 
@@ -10,6 +10,8 @@ try:
         Transform,
         Camera,
         DirectionalLight,
+        Texture,
+        Material,
         Entity,
         Scene,
         InputManager,
@@ -17,7 +19,7 @@ try:
 except ImportError:
     pass
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "App",
     "Key",
@@ -26,6 +28,8 @@ __all__ = [
     "Transform",
     "Camera",
     "DirectionalLight",
+    "Texture",
+    "Material",
     "Entity",
     "Scene",
     "InputManager",

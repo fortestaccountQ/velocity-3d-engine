@@ -2,6 +2,7 @@
 
 #include "engine/transform.hpp"
 #include "engine/mesh.hpp"
+#include "engine/material.hpp"
 #include <string>
 #include <memory>
 
@@ -13,6 +14,7 @@ public:
     std::string name{"Entity"};
     Transform transform;
     std::shared_ptr<Mesh> mesh{nullptr};
+    std::shared_ptr<Material> material{nullptr};
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
     bool visible{true};
 
@@ -21,6 +23,9 @@ public:
 
     void set_color(float r, float g, float b, float a = 1.0f) {
         color = { r, g, b, a };
+        if (material) {
+            material->set_color(r, g, b, a);
+        }
     }
 };
 
