@@ -14,7 +14,7 @@ public:
     glm::vec3 up{0.0f, 1.0f, 0.0f};
     float fov{55.0f};
     float aspect{1.333333f};
-    float near_plane{0.1f};
+    float near_plane{0.05f};
     float far_plane{100.0f};
     float yaw{-90.0f};
     float pitch{0.0f};

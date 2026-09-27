@@ -11,6 +11,7 @@
 #include "engine/camera.hpp"
 #include "engine/scene.hpp"
 #include "engine/input.hpp"
+#include "engine/audio.hpp"
 
 namespace engine {
 
@@ -18,8 +19,8 @@ struct WindowConfig {
     std::string title = "Engine 3D Core";
     int width = 800;
     int height = 600;
-    // Dark-blue #1a1a24
-    std::array<float, 4> clear_color = { 0.10196f, 0.10196f, 0.14118f, 1.0f };
+    // Daylight sky-blue #6ea0d0 (RGB [0.431, 0.627, 0.823])
+    std::array<float, 4> clear_color = { 0.43137f, 0.62745f, 0.82353f, 1.0f };
 };
 
 class EngineApp {
@@ -44,15 +45,27 @@ public:
     int width() const { return config_.width; }
     int height() const { return config_.height; }
     const std::string& title() const { return config_.title; }
+    void set_title(const std::string& title);
 
     // Subsystems
     Scene& scene() { return scene_; }
     Camera& camera() { return camera_; }
     InputManager& input() { return input_; }
+    AudioManager& audio() { return audio_; }
 
     // Mouse lock & visibility
     void set_mouse_locked(bool locked);
     bool is_mouse_locked() const;
+
+    // HUD and Debug options
+    void set_show_hud(bool enable) { show_hud_ = enable; }
+    bool show_hud() const { return show_hud_; }
+    void set_hud_score(int score) { hud_score_ = score; }
+    int hud_score() const { return hud_score_; }
+
+    void set_debug_hitboxes(bool enable) { show_debug_hitboxes_ = enable; }
+    void toggle_debug_hitboxes() { show_debug_hitboxes_ = !show_debug_hitboxes_; }
+    bool is_debug_hitboxes() const { return show_debug_hitboxes_; }
 
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
@@ -65,6 +78,11 @@ public:
 
 private:
     void init_pipeline_and_shaders();
+    void init_shadow_pipeline();
+    void init_hud_and_line_pipelines();
+    void render_shadow_pass();
+    void render_debug_hitboxes(const glm::mat4& vp);
+    void render_hud(float screen_w, float screen_h, float fps);
 
     WindowConfig config_;
     bool running_{false};
@@ -73,14 +91,41 @@ private:
     Scene scene_;
     Camera camera_;
     InputManager input_;
+    AudioManager audio_;
 
     UpdateCallback update_callback_{nullptr};
     std::chrono::steady_clock::time_point last_frame_time_;
     bool has_last_frame_{false};
+    float current_fps_{60.0f};
 
     // Sokol graphics pipeline & shader handles
     uint32_t pip_id_{0};
     uint32_t shd_id_{0};
+
+    // Shadow Mapping resources
+    static constexpr int SHADOW_MAP_SIZE = 2048;
+    uint32_t shadow_color_img_id_{0};
+    uint32_t shadow_depth_img_id_{0};
+    uint32_t shadow_color_view_id_{0};
+    uint32_t shadow_depth_view_id_{0};
+    uint32_t shadow_tex_view_id_{0};
+    uint32_t shadow_sampler_id_{0};
+    uint32_t shadow_pip_id_{0};
+    uint32_t shadow_shd_id_{0};
+    glm::mat4 light_vp_{1.0f};
+
+    // Line & HUD rendering
+    uint32_t line_pip_id_{0};
+    uint32_t line_shd_id_{0};
+    uint32_t line_vbuf_id_{0};
+
+    uint32_t hud_pip_id_{0};
+    uint32_t hud_shd_id_{0};
+    uint32_t hud_vbuf_id_{0};
+
+    bool show_hud_{true};
+    bool show_debug_hitboxes_{false};
+    int hud_score_{0};
 };
 
 } // namespace engine

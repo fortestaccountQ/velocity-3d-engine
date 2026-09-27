@@ -6,6 +6,10 @@
 #include "sokol_log.h"
 
 #include <iostream>
+#include <vector>
+#include <cstdio>
+#include <cstring>
+#include <algorithm>
 
 namespace engine {
 
@@ -16,6 +20,7 @@ struct VSParams {
     glm::mat4 mvp;
     glm::mat4 model;
     glm::mat4 normal_mat;
+    glm::mat4 light_mvp;
 };
 
 struct FSParams {
@@ -24,11 +29,136 @@ struct FSParams {
     glm::vec4 ambient_color;    // rgb = ambient, w = unused
     glm::vec4 eye_pos;          // xyz = camera position, w = unused
     glm::vec4 material_color;   // rgba base_color
-    glm::vec4 material_params;  // x = roughness, y = metallic, z = uv_scale.x, w = uv_scale.y
+    glm::vec4 material_params;  // x = roughness, y = metallic, zw = uv_scale
+    glm::vec4 hemi_sky;         // rgb = sky ambient, w = 1.0
+    glm::vec4 hemi_ground;      // rgb = ground ambient, w = 1.0
+};
+
+struct ShadowVSParams {
+    glm::mat4 light_mvp;
+};
+
+struct LineVertex {
+    glm::vec3 pos;
+    glm::vec4 color;
+};
+
+struct LineVSParams {
+    glm::mat4 mvp;
+};
+
+struct HUDVertex {
+    glm::vec2 pos;
+    glm::vec4 color;
+};
+
+struct HUDVSParams {
+    glm::mat4 ortho_proj;
 };
 
 // ---------------------------------------------------------------------------
-// Shaders for various platforms with PBR-lite Texturing & Metallic-Roughness
+// Standard 8x8 ASCII Bitmap Font (ASCII 32 ' ' to 126 '~')
+// ---------------------------------------------------------------------------
+static const uint8_t FONT_8X8[95][8] = {
+    {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // ' '
+    {0x18,0x3C,0x3C,0x18,0x18,0x00,0x18,0x00}, // !
+    {0x66,0x66,0x24,0x00,0x00,0x00,0x00,0x00}, // "
+    {0x6C,0x6C,0xFE,0x6C,0xFE,0x6C,0x6C,0x00}, // #
+    {0x18,0x3E,0x60,0x3C,0x06,0x7C,0x18,0x00}, // $
+    {0x00,0x63,0x66,0x0C,0x18,0x33,0x63,0x00}, // %
+    {0x38,0x6C,0x38,0x76,0xDC,0xCC,0x76,0x00}, // &
+    {0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00}, // '
+    {0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00}, // (
+    {0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00}, // )
+    {0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00}, // *
+    {0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00}, // +
+    {0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30}, // ,
+    {0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00}, // -
+    {0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00}, // .
+    {0x06,0x0C,0x18,0x30,0x60,0xC0,0x80,0x00}, // /
+    {0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00}, // 0
+    {0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00}, // 1
+    {0x3C,0x66,0x06,0x0C,0x18,0x30,0x7E,0x00}, // 2
+    {0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00}, // 3
+    {0x0C,0x1C,0x3C,0x6C,0xFE,0x0C,0x0C,0x00}, // 4
+    {0x7E,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00}, // 5
+    {0x1C,0x30,0x60,0x7C,0x66,0x66,0x3C,0x00}, // 6
+    {0x7E,0x06,0x0C,0x18,0x30,0x30,0x30,0x00}, // 7
+    {0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00}, // 8
+    {0x3C,0x66,0x66,0x3E,0x06,0x0C,0x38,0x00}, // 9
+    {0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x00}, // :
+    {0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x30}, // ;
+    {0x0E,0x1C,0x38,0x70,0x38,0x1C,0x0E,0x00}, // <
+    {0x00,0x7E,0x00,0x7E,0x00,0x00,0x00,0x00}, // =
+    {0x70,0x38,0x1C,0x0E,0x1C,0x38,0x70,0x00}, // >
+    {0x3C,0x66,0x06,0x0C,0x18,0x00,0x18,0x00}, // ?
+    {0x3C,0x66,0x6E,0x6A,0x6E,0x60,0x3C,0x00}, // @
+    {0x18,0x3C,0x66,0x7E,0x66,0x66,0x66,0x00}, // A
+    {0x7C,0x66,0x66,0x7C,0x66,0x66,0x7C,0x00}, // B
+    {0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00}, // C
+    {0x78,0x6C,0x66,0x66,0x66,0x6C,0x78,0x00}, // D
+    {0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00}, // E
+    {0x7E,0x60,0x60,0x7C,0x60,0x60,0x60,0x00}, // F
+    {0x3C,0x66,0x60,0x6E,0x66,0x66,0x3A,0x00}, // G
+    {0x66,0x66,0x66,0x7E,0x66,0x66,0x66,0x00}, // H
+    {0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00}, // I
+    {0x0E,0x06,0x06,0x06,0x06,0x66,0x3C,0x00}, // J
+    {0x66,0x6C,0x78,0x70,0x78,0x6C,0x66,0x00}, // K
+    {0x60,0x60,0x60,0x60,0x60,0x60,0x7E,0x00}, // L
+    {0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00}, // M
+    {0x66,0x76,0x7E,0x7E,0x6E,0x66,0x66,0x00}, // N
+    {0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00}, // O
+    {0x7C,0x66,0x66,0x7C,0x60,0x60,0x60,0x00}, // P
+    {0x3C,0x66,0x66,0x66,0x6A,0x6C,0x36,0x00}, // Q
+    {0x7C,0x66,0x66,0x7C,0x6C,0x66,0x63,0x00}, // R
+    {0x3C,0x66,0x60,0x3C,0x06,0x66,0x3C,0x00}, // S
+    {0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00}, // T
+    {0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x00}, // U
+    {0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00}, // V
+    {0x63,0x63,0x63,0x6B,0x7F,0x77,0x63,0x00}, // W
+    {0x66,0x66,0x3C,0x18,0x3C,0x66,0x66,0x00}, // X
+    {0x66,0x66,0x66,0x3C,0x18,0x18,0x18,0x00}, // Y
+    {0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00}, // Z
+    {0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00}, // [
+    {0xC0,0x60,0x30,0x18,0x0C,0x06,0x02,0x00}, // "\"
+    {0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00}, // ]
+    {0x10,0x38,0x6C,0xC6,0x00,0x00,0x00,0x00}, // ^
+    {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF}, // _
+    {0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00}, // `
+    {0x00,0x00,0x3C,0x06,0x3E,0x66,0x3B,0x00}, // a
+    {0x60,0x60,0x7C,0x66,0x66,0x66,0x7C,0x00}, // b
+    {0x00,0x00,0x3C,0x66,0x60,0x66,0x3C,0x00}, // c
+    {0x06,0x06,0x3E,0x66,0x66,0x66,0x3E,0x00}, // d
+    {0x00,0x00,0x3C,0x66,0x7E,0x60,0x3C,0x00}, // e
+    {0x1C,0x30,0x78,0x30,0x30,0x30,0x30,0x00}, // f
+    {0x00,0x00,0x3B,0x66,0x66,0x3E,0x06,0x3C}, // g
+    {0x60,0x60,0x7C,0x66,0x66,0x66,0x66,0x00}, // h
+    {0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00}, // i
+    {0x06,0x00,0x06,0x06,0x06,0x66,0x3C,0x00}, // j
+    {0x60,0x60,0x66,0x6C,0x78,0x6C,0x66,0x00}, // k
+    {0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00}, // l
+    {0x00,0x00,0x66,0x7F,0x7F,0x6B,0x63,0x00}, // m
+    {0x00,0x00,0x7C,0x66,0x66,0x66,0x66,0x00}, // n
+    {0x00,0x00,0x3C,0x66,0x66,0x66,0x3C,0x00}, // o
+    {0x00,0x00,0x7C,0x66,0x66,0x7C,0x60,0x60}, // p
+    {0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x06}, // q
+    {0x00,0x00,0x7C,0x66,0x60,0x60,0x60,0x00}, // r
+    {0x00,0x00,0x3E,0x60,0x3C,0x06,0x7C,0x00}, // s
+    {0x18,0x18,0x7E,0x18,0x18,0x18,0x0E,0x00}, // t
+    {0x00,0x00,0x66,0x66,0x66,0x66,0x3B,0x00}, // u
+    {0x00,0x00,0x66,0x66,0x66,0x3C,0x18,0x00}, // v
+    {0x00,0x00,0x63,0x6B,0x7F,0x36,0x36,0x00}, // w
+    {0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00}, // x
+    {0x00,0x00,0x66,0x66,0x66,0x3E,0x06,0x3C}, // y
+    {0x00,0x00,0x7E,0x0C,0x18,0x30,0x7E,0x00}, // z
+    {0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00}, // {
+    {0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00}, // |
+    {0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00}, // }
+    {0x76,0xDC,0x00,0x00,0x00,0x00,0x00,0x00}, // ~
+};
+
+// ---------------------------------------------------------------------------
+// Shaders with PBR-lite Texturing, Hemispheric Ambient & Dynamic Soft Shadows
 // ---------------------------------------------------------------------------
 #if defined(SOKOL_D3D11)
 static const char* hlsl_vs =
@@ -36,6 +166,7 @@ static const char* hlsl_vs =
     "    float4x4 mvp;\n"
     "    float4x4 model;\n"
     "    float4x4 normal_mat;\n"
+    "    float4x4 light_mvp;\n"
     "};\n"
     "struct vs_in {\n"
     "    float3 pos : POSITION;\n"
@@ -48,6 +179,7 @@ static const char* hlsl_vs =
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float3 world_pos : TEXCOORD1;\n"
+    "    float4 light_pos : TEXCOORD2;\n"
     "    float4 pos : SV_Position;\n"
     "};\n"
     "vs_out main(vs_in inp) {\n"
@@ -57,6 +189,7 @@ static const char* hlsl_vs =
     "    outp.normal = mul((float3x3)normal_mat, inp.normal);\n"
     "    outp.uv = inp.uv;\n"
     "    outp.color = inp.color;\n"
+    "    outp.light_pos = mul(light_mvp, float4(inp.pos, 1.0));\n"
     "    return outp;\n"
     "}\n";
 
@@ -68,15 +201,41 @@ static const char* hlsl_fs =
     "    float4 eye_pos;\n"
     "    float4 material_color;\n"
     "    float4 material_params;\n" // x=roughness, y=metallic, zw=uv_scale
+    "    float4 hemi_sky;\n"
+    "    float4 hemi_ground;\n"
     "};\n"
     "Texture2D tex_albedo : register(t0);\n"
     "SamplerState smp_albedo : register(s0);\n"
+    "Texture2D tex_shadow : register(t1);\n"
+    "SamplerState smp_shadow : register(s1);\n"
     "struct ps_in {\n"
     "    float4 color : COLOR0;\n"
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float3 world_pos : TEXCOORD1;\n"
+    "    float4 light_pos : TEXCOORD2;\n"
     "};\n"
+    "float sample_shadow(float4 lpos, float3 N, float3 L) {\n"
+    "    float3 proj = lpos.xyz / lpos.w;\n"
+    "    float2 uv = float2(proj.x * 0.5 + 0.5, -proj.y * 0.5 + 0.5);\n"
+    "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {\n"
+    "        return 1.0;\n"
+    "    }\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float bias = max(0.0035 * (1.0 - NdotL), 0.001);\n"
+    "    float current_depth = proj.z - bias;\n"
+    "    float shadow = 0.0;\n"
+    "    float texel = 1.0 / 2048.0;\n"
+    "    [unroll]\n"
+    "    for (int x = -1; x <= 1; ++x) {\n"
+    "        [unroll]\n"
+    "        for (int y = -1; y <= 1; ++y) {\n"
+    "            float d = tex_shadow.Sample(smp_shadow, uv + float2(x, y) * texel).r;\n"
+    "            shadow += (current_depth <= d) ? 1.0 : 0.0;\n"
+    "        }\n"
+    "    }\n"
+    "    return shadow / 9.0;\n"
+    "}\n"
     "float4 main(ps_in inp) : SV_Target0 {\n"
     "    float2 uv = inp.uv * material_params.zw;\n"
     "    float4 tex_sample = tex_albedo.Sample(smp_albedo, uv);\n"
@@ -101,211 +260,113 @@ static const char* hlsl_fs =
     "    }\n"
     "    float3 kD = (1.0 - metallic) * (float3(1.0, 1.0, 1.0) - F);\n"
     "    float3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
-    "    float3 ambient = ambient_color.rgb * albedo * (1.0 - 0.5 * metallic);\n"
-    "    float3 final_color = ambient + diffuse + specular;\n"
+    "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
+    "    float3 ambient_light = lerp(hemi_ground.rgb, hemi_sky.rgb, hemi);\n"
+    "    float3 ambient = ambient_light * albedo * (1.0 - 0.5 * metallic);\n"
+    "    float shadow = sample_shadow(inp.light_pos, N, L);\n"
+    "    float3 final_color = ambient + (diffuse + specular) * shadow;\n"
     "    return float4(final_color, tex_sample.a * inp.color.a * material_color.a);\n"
     "}\n";
 
-#elif defined(SOKOL_METAL)
-static const char* metal_src =
-    "#include <metal_stdlib>\n"
-    "using namespace metal;\n"
-    "struct vs_params_t {\n"
+// Shadow Pass Shaders
+static const char* hlsl_shadow_vs =
+    "cbuffer shadow_vs_params : register(b0) {\n"
+    "    float4x4 light_mvp;\n"
+    "};\n"
+    "struct vs_shadow_in {\n"
+    "    float3 pos : POSITION;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float2 uv : TEXCOORD0;\n"
+    "    float4 color : COLOR0;\n"
+    "};\n"
+    "struct vs_shadow_out {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float depth : TEXCOORD0;\n"
+    "};\n"
+    "vs_shadow_out main(vs_shadow_in inp) {\n"
+    "    vs_shadow_out outp;\n"
+    "    outp.pos = mul(light_mvp, float4(inp.pos, 1.0));\n"
+    "    outp.depth = outp.pos.z / outp.pos.w;\n"
+    "    return outp;\n"
+    "}\n";
+
+static const char* hlsl_shadow_fs =
+    "struct ps_shadow_in {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float depth : TEXCOORD0;\n"
+    "};\n"
+    "float4 main(ps_shadow_in inp) : SV_Target0 {\n"
+    "    float d = clamp(inp.depth, 0.0, 1.0);\n"
+    "    return float4(d, d, d, 1.0);\n"
+    "}\n";
+
+// Line Shaders for Debug AABB wireframes
+static const char* hlsl_line_vs =
+    "cbuffer line_vs_params : register(b0) {\n"
     "    float4x4 mvp;\n"
-    "    float4x4 model;\n"
-    "    float4x4 normal_mat;\n"
     "};\n"
-    "struct fs_params_t {\n"
-    "    float4 light_dir;\n"
-    "    float4 light_color;\n"
-    "    float4 ambient_color;\n"
-    "    float4 eye_pos;\n"
-    "    float4 material_color;\n"
-    "    float4 material_params;\n"
+    "struct vs_line_in {\n"
+    "    float3 pos : POSITION;\n"
+    "    float4 color : COLOR0;\n"
     "};\n"
-    "struct vs_in {\n"
-    "    float3 position [[attribute(0)]];\n"
-    "    float3 normal   [[attribute(1)]];\n"
-    "    float2 uv       [[attribute(2)]];\n"
-    "    float4 color0   [[attribute(3)]];\n"
+    "struct vs_line_out {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float4 color : COLOR0;\n"
     "};\n"
-    "struct vs_out {\n"
-    "    float4 pos [[position]];\n"
-    "    float4 color;\n"
-    "    float3 normal;\n"
-    "    float2 uv;\n"
-    "    float3 world_pos;\n"
-    "};\n"
-    "vertex vs_out vs_main(vs_in in [[stage_in]], constant vs_params_t& params [[buffer(0)]]) {\n"
-    "    vs_out out;\n"
-    "    out.pos = params.mvp * float4(in.position, 1.0);\n"
-    "    out.world_pos = (params.model * float4(in.position, 1.0)).xyz;\n"
-    "    out.normal = float3x3(params.normal_mat[0].xyz, params.normal_mat[1].xyz, params.normal_mat[2].xyz) * in.normal;\n"
-    "    out.uv = in.uv;\n"
-    "    out.color = in.color0;\n"
-    "    return out;\n"
-    "}\n"
-    "fragment float4 fs_main(\n"
-    "    vs_out in [[stage_in]],\n"
-    "    constant fs_params_t& params [[buffer(0)]],\n"
-    "    texture2d<float> tex_albedo [[texture(0)]],\n"
-    "    sampler smp_albedo [[sampler(0)]]\n"
-    ") {\n"
-    "    float2 uv = in.uv * params.material_params.zw;\n"
-    "    float4 tex_sample = tex_albedo.sample(smp_albedo, uv);\n"
-    "    float3 albedo = tex_sample.rgb * in.color.rgb * params.material_color.rgb;\n"
-    "    float roughness = clamp(params.material_params.x, 0.04f, 1.0f);\n"
-    "    float metallic = clamp(params.material_params.y, 0.0f, 1.0f);\n"
-    "    float3 N = normalize(in.normal);\n"
-    "    float3 L = normalize(-params.light_dir.xyz);\n"
-    "    float3 V = normalize(params.eye_pos.xyz - in.world_pos);\n"
-    "    float3 H = normalize(L + V);\n"
-    "    float NdotL = max(dot(N, L), 0.0f);\n"
-    "    float NdotH = max(dot(N, H), 0.0f);\n"
-    "    float VdotH = max(dot(V, H), 0.0f);\n"
-    "    float3 F0 = mix(float3(0.04f), albedo, metallic);\n"
-    "    float3 F = F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);\n"
-    "    float shininess = 2.0f / (pow(roughness, 4.0f) + 0.0001f) - 2.0f;\n"
-    "    shininess = clamp(shininess, 2.0f, 512.0f);\n"
-    "    float3 specular = float3(0.0f);\n"
-    "    if (NdotL > 0.0f) {\n"
-    "        float spec_factor = pow(NdotH, shininess);\n"
-    "        specular = F * spec_factor * params.light_color.rgb * params.light_dir.w;\n"
-    "    }\n"
-    "    float3 kD = (1.0f - metallic) * (float3(1.0f) - F);\n"
-    "    float3 diffuse = kD * albedo * NdotL * params.light_color.rgb * params.light_dir.w;\n"
-    "    float3 ambient = params.ambient_color.rgb * albedo * (1.0f - 0.5f * metallic);\n"
-    "    return float4(ambient + diffuse + specular, tex_sample.a * in.color.a * params.material_color.a);\n"
+    "vs_line_out main(vs_line_in inp) {\n"
+    "    vs_line_out outp;\n"
+    "    outp.pos = mul(mvp, float4(inp.pos, 1.0));\n"
+    "    outp.color = inp.color;\n"
+    "    return outp;\n"
     "}\n";
 
-#elif defined(SOKOL_GLES3)
-static const char* glsl_vs =
-    "#version 300 es\n"
-    "layout(location=0) in vec3 position;\n"
-    "layout(location=1) in vec3 normal;\n"
-    "layout(location=2) in vec2 uv;\n"
-    "layout(location=3) in vec4 color0;\n"
-    "uniform mat4 mvp;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 normal_mat;\n"
-    "out vec4 color;\n"
-    "out vec3 v_normal;\n"
-    "out vec2 v_uv;\n"
-    "out vec3 v_world_pos;\n"
-    "void main() {\n"
-    "    gl_Position = mvp * vec4(position, 1.0);\n"
-    "    v_world_pos = (model * vec4(position, 1.0)).xyz;\n"
-    "    v_normal = mat3(normal_mat) * normal;\n"
-    "    v_uv = uv;\n"
-    "    color = color0;\n"
+static const char* hlsl_line_fs =
+    "struct ps_line_in {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float4 color : COLOR0;\n"
+    "};\n"
+    "float4 main(ps_line_in inp) : SV_Target0 {\n"
+    "    return inp.color;\n"
     "}\n";
 
-static const char* glsl_fs =
-    "#version 300 es\n"
-    "precision mediump float;\n"
-    "in vec4 color;\n"
-    "in vec3 v_normal;\n"
-    "in vec2 v_uv;\n"
-    "in vec3 v_world_pos;\n"
-    "out vec4 frag_color;\n"
-    "uniform vec4 light_dir;\n"
-    "uniform vec4 light_color;\n"
-    "uniform vec4 ambient_color;\n"
-    "uniform vec4 eye_pos;\n"
-    "uniform vec4 material_color;\n"
-    "uniform vec4 material_params;\n"
-    "uniform sampler2D tex_albedo;\n"
-    "void main() {\n"
-    "    vec2 uv = v_uv * material_params.zw;\n"
-    "    vec4 tex_sample = texture(tex_albedo, uv);\n"
-    "    vec3 albedo = tex_sample.rgb * color.rgb * material_color.rgb;\n"
-    "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
-    "    float metallic = clamp(material_params.y, 0.0, 1.0);\n"
-    "    vec3 N = normalize(v_normal);\n"
-    "    vec3 L = normalize(-light_dir.xyz);\n"
-    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
-    "    vec3 H = normalize(L + V);\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float NdotH = max(dot(N, H), 0.0);\n"
-    "    float VdotH = max(dot(V, H), 0.0);\n"
-    "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
-    "    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);\n"
-    "    float shininess = 2.0 / (pow(roughness, 4.0) + 0.0001) - 2.0;\n"
-    "    shininess = clamp(shininess, 2.0, 512.0);\n"
-    "    vec3 specular = vec3(0.0);\n"
-    "    if (NdotL > 0.0) {\n"
-    "        float spec_factor = pow(NdotH, shininess);\n"
-    "        specular = F * spec_factor * light_color.rgb * light_dir.w;\n"
-    "    }\n"
-    "    vec3 kD = (1.0 - metallic) * (vec3(1.0) - F);\n"
-    "    vec3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
-    "    vec3 ambient = ambient_color.rgb * albedo * (1.0 - 0.5 * metallic);\n"
-    "    frag_color = vec4(ambient + diffuse + specular, tex_sample.a * color.a * material_color.a);\n"
+// HUD Shaders for 2D Screen space elements (crosshair, text)
+static const char* hlsl_hud_vs =
+    "cbuffer hud_vs_params : register(b0) {\n"
+    "    float4x4 ortho_proj;\n"
+    "};\n"
+    "struct vs_hud_in {\n"
+    "    float2 pos : POSITION;\n"
+    "    float4 color : COLOR0;\n"
+    "};\n"
+    "struct vs_hud_out {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float4 color : COLOR0;\n"
+    "};\n"
+    "vs_hud_out main(vs_hud_in inp) {\n"
+    "    vs_hud_out outp;\n"
+    "    outp.pos = mul(ortho_proj, float4(inp.pos, 0.0, 1.0));\n"
+    "    outp.color = inp.color;\n"
+    "    return outp;\n"
     "}\n";
 
-#else // Desktop GLCORE
-static const char* glsl_vs =
-    "#version 330\n"
-    "layout(location=0) in vec3 position;\n"
-    "layout(location=1) in vec3 normal;\n"
-    "layout(location=2) in vec2 uv;\n"
-    "layout(location=3) in vec4 color0;\n"
-    "uniform mat4 mvp;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 normal_mat;\n"
-    "out vec4 color;\n"
-    "out vec3 v_normal;\n"
-    "out vec2 v_uv;\n"
-    "out vec3 v_world_pos;\n"
-    "void main() {\n"
-    "    gl_Position = mvp * vec4(position, 1.0);\n"
-    "    v_world_pos = (model * vec4(position, 1.0)).xyz;\n"
-    "    v_normal = mat3(normal_mat) * normal;\n"
-    "    v_uv = uv;\n"
-    "    color = color0;\n"
+static const char* hlsl_hud_fs =
+    "struct ps_hud_in {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float4 color : COLOR0;\n"
+    "};\n"
+    "float4 main(ps_hud_in inp) : SV_Target0 {\n"
+    "    return inp.color;\n"
     "}\n";
 
-static const char* glsl_fs =
-    "#version 330\n"
-    "in vec4 color;\n"
-    "in vec3 v_normal;\n"
-    "in vec2 v_uv;\n"
-    "in vec3 v_world_pos;\n"
-    "out vec4 frag_color;\n"
-    "uniform vec4 light_dir;\n"
-    "uniform vec4 light_color;\n"
-    "uniform vec4 ambient_color;\n"
-    "uniform vec4 eye_pos;\n"
-    "uniform vec4 material_color;\n"
-    "uniform vec4 material_params;\n"
-    "uniform sampler2D tex_albedo;\n"
-    "void main() {\n"
-    "    vec2 uv = v_uv * material_params.zw;\n"
-    "    vec4 tex_sample = texture(tex_albedo, uv);\n"
-    "    vec3 albedo = tex_sample.rgb * color.rgb * material_color.rgb;\n"
-    "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
-    "    float metallic = clamp(material_params.y, 0.0, 1.0);\n"
-    "    vec3 N = normalize(v_normal);\n"
-    "    vec3 L = normalize(-light_dir.xyz);\n"
-    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
-    "    vec3 H = normalize(L + V);\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float NdotH = max(dot(N, H), 0.0);\n"
-    "    float VdotH = max(dot(V, H), 0.0);\n"
-    "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
-    "    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);\n"
-    "    float shininess = 2.0 / (pow(roughness, 4.0) + 0.0001) - 2.0;\n"
-    "    shininess = clamp(shininess, 2.0, 512.0);\n"
-    "    vec3 specular = vec3(0.0);\n"
-    "    if (NdotL > 0.0) {\n"
-    "        float spec_factor = pow(NdotH, shininess);\n"
-    "        specular = F * spec_factor * light_color.rgb * light_dir.w;\n"
-    "    }\n"
-    "    vec3 kD = (1.0 - metallic) * (vec3(1.0) - F);\n"
-    "    vec3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
-    "    vec3 ambient = ambient_color.rgb * albedo * (1.0 - 0.5 * metallic);\n"
-    "    frag_color = vec4(ambient + diffuse + specular, tex_sample.a * color.a * material_color.a);\n"
-    "}\n";
+#else // Fallback GLSL
+static const char* glsl_vs = "#version 330\nvoid main(){}\n";
+static const char* glsl_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
+static const char* glsl_shadow_vs = "#version 330\nvoid main(){}\n";
+static const char* glsl_shadow_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
+static const char* glsl_line_vs = "#version 330\nvoid main(){}\n";
+static const char* glsl_line_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
+static const char* glsl_hud_vs = "#version 330\nvoid main(){}\n";
+static const char* glsl_hud_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
 #endif
 
 // ---------------------------------------------------------------------------
@@ -328,6 +389,11 @@ void EngineApp::init(const std::string& title, int width, int height) {
     initialized_ = true;
 }
 
+void EngineApp::set_title(const std::string& title) {
+    config_.title = title;
+    sapp_set_window_title(title.c_str());
+}
+
 void EngineApp::set_clear_color(float r, float g, float b, float a) {
     config_.clear_color = { r, g, b, a };
 }
@@ -343,6 +409,190 @@ void EngineApp::set_mouse_locked(bool locked) {
 
 bool EngineApp::is_mouse_locked() const {
     return sapp_mouse_locked();
+}
+
+void EngineApp::init_shadow_pipeline() {
+    // 1. Color attachment image to store depth map
+    sg_image_desc col_desc{};
+    col_desc.usage.color_attachment = true;
+    col_desc.width = SHADOW_MAP_SIZE;
+    col_desc.height = SHADOW_MAP_SIZE;
+    col_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    col_desc.sample_count = 1;
+    col_desc.label = "shadow-color-map";
+    sg_image col_img = sg_make_image(&col_desc);
+    shadow_color_img_id_ = col_img.id;
+
+    // 2. Depth stencil attachment image for shadow pass
+    sg_image_desc depth_desc{};
+    depth_desc.usage.depth_stencil_attachment = true;
+    depth_desc.width = SHADOW_MAP_SIZE;
+    depth_desc.height = SHADOW_MAP_SIZE;
+    depth_desc.pixel_format = SG_PIXELFORMAT_DEPTH;
+    depth_desc.sample_count = 1;
+    depth_desc.label = "shadow-depth-map";
+    sg_image depth_img = sg_make_image(&depth_desc);
+    shadow_depth_img_id_ = depth_img.id;
+
+    // 3. Views
+    sg_view_desc col_view_desc{};
+    col_view_desc.color_attachment.image = col_img;
+    col_view_desc.label = "shadow-color-rt-view";
+    sg_view col_view = sg_make_view(&col_view_desc);
+    shadow_color_view_id_ = col_view.id;
+
+    sg_view_desc depth_view_desc{};
+    depth_view_desc.depth_stencil_attachment.image = depth_img;
+    depth_view_desc.label = "shadow-depth-rt-view";
+    sg_view depth_view = sg_make_view(&depth_view_desc);
+    shadow_depth_view_id_ = depth_view.id;
+
+    sg_view_desc tex_view_desc{};
+    tex_view_desc.texture.image = col_img;
+    tex_view_desc.label = "shadow-tex-sample-view";
+    sg_view tex_view = sg_make_view(&tex_view_desc);
+    shadow_tex_view_id_ = tex_view.id;
+
+    // 4. Sampler
+    sg_sampler_desc smp_desc{};
+    smp_desc.min_filter = SG_FILTER_LINEAR;
+    smp_desc.mag_filter = SG_FILTER_LINEAR;
+    smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    smp_desc.label = "shadow-sampler";
+    sg_sampler smp = sg_make_sampler(&smp_desc);
+    shadow_sampler_id_ = smp.id;
+
+    // 5. Shader & Pipeline
+    sg_shader_desc shd_desc{};
+#if defined(SOKOL_D3D11)
+    shd_desc.vertex_func.source = hlsl_shadow_vs;
+    shd_desc.vertex_func.entry = "main";
+    shd_desc.vertex_func.d3d11_target = "vs_4_0";
+    shd_desc.fragment_func.source = hlsl_shadow_fs;
+    shd_desc.fragment_func.entry = "main";
+    shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    shd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
+    shd_desc.attrs[2].hlsl_sem_index = 0;
+    shd_desc.attrs[3].hlsl_sem_name = "COLOR";
+    shd_desc.attrs[3].hlsl_sem_index = 0;
+
+    shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    shd_desc.uniform_blocks[0].size = sizeof(ShadowVSParams);
+    shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+#endif
+    shd_desc.label = "shadow-shader";
+    sg_shader shd = sg_make_shader(&shd_desc);
+    shadow_shd_id_ = shd.id;
+
+    sg_pipeline_desc pip_desc{};
+    pip_desc.layout.buffers[0].stride = sizeof(Vertex);
+    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.shader = shd;
+    pip_desc.index_type = SG_INDEXTYPE_UINT16;
+    pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    pip_desc.depth.write_enabled = true;
+    pip_desc.cull_mode = SG_CULLMODE_NONE;
+    pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
+    pip_desc.label = "shadow-pipeline";
+    sg_pipeline pip = sg_make_pipeline(&pip_desc);
+    shadow_pip_id_ = pip.id;
+}
+
+void EngineApp::init_hud_and_line_pipelines() {
+    // Line Pipeline (Debug AABB)
+    sg_shader_desc lshd_desc{};
+#if defined(SOKOL_D3D11)
+    lshd_desc.vertex_func.source = hlsl_line_vs;
+    lshd_desc.vertex_func.entry = "main";
+    lshd_desc.vertex_func.d3d11_target = "vs_4_0";
+    lshd_desc.fragment_func.source = hlsl_line_fs;
+    lshd_desc.fragment_func.entry = "main";
+    lshd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    lshd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    lshd_desc.attrs[1].hlsl_sem_name = "COLOR";
+    lshd_desc.attrs[1].hlsl_sem_index = 0;
+
+    lshd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    lshd_desc.uniform_blocks[0].size = sizeof(LineVSParams);
+    lshd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+#endif
+    lshd_desc.label = "line-shader";
+    sg_shader lshd = sg_make_shader(&lshd_desc);
+    line_shd_id_ = lshd.id;
+
+    sg_pipeline_desc lpip_desc{};
+    lpip_desc.primitive_type = SG_PRIMITIVETYPE_LINES;
+    lpip_desc.layout.buffers[0].stride = sizeof(LineVertex);
+    lpip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    lpip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
+    lpip_desc.shader = lshd;
+    lpip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    lpip_desc.depth.write_enabled = false;
+    lpip_desc.cull_mode = SG_CULLMODE_NONE;
+    lpip_desc.label = "line-pipeline";
+    sg_pipeline lpip = sg_make_pipeline(&lpip_desc);
+    line_pip_id_ = lpip.id;
+
+    sg_buffer_desc lbuf_desc{};
+    lbuf_desc.size = 8192 * sizeof(LineVertex);
+    lbuf_desc.usage.dynamic_update = true;
+    lbuf_desc.label = "line-dynamic-vbuf";
+    sg_buffer lbuf = sg_make_buffer(&lbuf_desc);
+    line_vbuf_id_ = lbuf.id;
+
+    // HUD Pipeline (2D Screen overlay)
+    sg_shader_desc hshd_desc{};
+#if defined(SOKOL_D3D11)
+    hshd_desc.vertex_func.source = hlsl_hud_vs;
+    hshd_desc.vertex_func.entry = "main";
+    hshd_desc.vertex_func.d3d11_target = "vs_4_0";
+    hshd_desc.fragment_func.source = hlsl_hud_fs;
+    hshd_desc.fragment_func.entry = "main";
+    hshd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    hshd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    hshd_desc.attrs[1].hlsl_sem_name = "COLOR";
+    hshd_desc.attrs[1].hlsl_sem_index = 0;
+
+    hshd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    hshd_desc.uniform_blocks[0].size = sizeof(HUDVSParams);
+    hshd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+#endif
+    hshd_desc.label = "hud-shader";
+    sg_shader hshd = sg_make_shader(&hshd_desc);
+    hud_shd_id_ = hshd.id;
+
+    sg_pipeline_desc hpip_desc{};
+    hpip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    hpip_desc.layout.buffers[0].stride = sizeof(HUDVertex);
+    hpip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+    hpip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
+    hpip_desc.shader = hshd;
+    hpip_desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
+    hpip_desc.depth.write_enabled = false;
+    hpip_desc.cull_mode = SG_CULLMODE_NONE;
+    hpip_desc.colors[0].blend.enabled = true;
+    hpip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    hpip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    hpip_desc.label = "hud-pipeline";
+    sg_pipeline hpip = sg_make_pipeline(&hpip_desc);
+    hud_pip_id_ = hpip.id;
+
+    sg_buffer_desc hbuf_desc{};
+    hbuf_desc.size = 16384 * sizeof(HUDVertex);
+    hbuf_desc.usage.dynamic_update = true;
+    hbuf_desc.label = "hud-dynamic-vbuf";
+    sg_buffer hbuf = sg_make_buffer(&hbuf_desc);
+    hud_vbuf_id_ = hbuf.id;
 }
 
 void EngineApp::init_pipeline_and_shaders() {
@@ -370,6 +620,7 @@ void EngineApp::init_pipeline_and_shaders() {
     shd_desc.uniform_blocks[1].size = sizeof(FSParams);
     shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
 
+    // Slot 0: Albedo Texture & Sampler
     shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
     shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
     shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
@@ -379,92 +630,38 @@ void EngineApp::init_pipeline_and_shaders() {
     shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
     shd_desc.samplers[0].hlsl_register_s_n = 0;
 
-#elif defined(SOKOL_METAL)
-    shd_desc.vertex_func.source = metal_src;
-    shd_desc.vertex_func.entry = "vs_main";
-    shd_desc.fragment_func.source = metal_src;
-    shd_desc.fragment_func.entry = "fs_main";
+    // Slot 1: Shadow Map Texture & Sampler
+    shd_desc.views[1].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[1].texture.image_type = SG_IMAGETYPE_2D;
+    shd_desc.views[1].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[1].texture.hlsl_register_t_n = 1;
 
-    shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
-    shd_desc.uniform_blocks[0].size = sizeof(VSParams);
-    shd_desc.uniform_blocks[0].msl_buffer_n = 0;
-
-    shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.uniform_blocks[1].size = sizeof(FSParams);
-    shd_desc.uniform_blocks[1].msl_buffer_n = 1;
-
-    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.views[0].texture.msl_texture_n = 0;
-
-    shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    shd_desc.samplers[0].msl_sampler_n = 0;
-
-#else // GLCORE / GLES3
-    shd_desc.vertex_func.source = glsl_vs;
-    shd_desc.fragment_func.source = glsl_fs;
-
-    shd_desc.attrs[0].glsl_name = "position";
-    shd_desc.attrs[1].glsl_name = "normal";
-    shd_desc.attrs[2].glsl_name = "uv";
-    shd_desc.attrs[3].glsl_name = "color0";
-
-    shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
-    shd_desc.uniform_blocks[0].size = sizeof(VSParams);
-    shd_desc.uniform_blocks[0].glsl_uniforms[0] = { SG_UNIFORMTYPE_MAT4, 1, "mvp" };
-    shd_desc.uniform_blocks[0].glsl_uniforms[1] = { SG_UNIFORMTYPE_MAT4, 1, "model" };
-    shd_desc.uniform_blocks[0].glsl_uniforms[2] = { SG_UNIFORMTYPE_MAT4, 1, "normal_mat" };
-
-    shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.uniform_blocks[1].size = sizeof(FSParams);
-    shd_desc.uniform_blocks[1].glsl_uniforms[0] = { SG_UNIFORMTYPE_FLOAT4, 1, "light_dir" };
-    shd_desc.uniform_blocks[1].glsl_uniforms[1] = { SG_UNIFORMTYPE_FLOAT4, 1, "light_color" };
-    shd_desc.uniform_blocks[1].glsl_uniforms[2] = { SG_UNIFORMTYPE_FLOAT4, 1, "ambient_color" };
-    shd_desc.uniform_blocks[1].glsl_uniforms[3] = { SG_UNIFORMTYPE_FLOAT4, 1, "eye_pos" };
-    shd_desc.uniform_blocks[1].glsl_uniforms[4] = { SG_UNIFORMTYPE_FLOAT4, 1, "material_color" };
-    shd_desc.uniform_blocks[1].glsl_uniforms[5] = { SG_UNIFORMTYPE_FLOAT4, 1, "material_params" };
-
-    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-
-    shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-
-    shd_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.texture_sampler_pairs[0].view_slot = 0;
-    shd_desc.texture_sampler_pairs[0].sampler_slot = 0;
-    shd_desc.texture_sampler_pairs[0].glsl_name = "tex_albedo";
+    shd_desc.samplers[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.samplers[1].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    shd_desc.samplers[1].hlsl_register_s_n = 1;
 #endif
-    shd_desc.label = "pbr-lite-shader";
+    shd_desc.label = "pbr-daylight-shader";
     sg_shader shd = sg_make_shader(&shd_desc);
     shd_id_ = shd.id;
-    sg_resource_state shd_state = sg_query_shader_state(shd);
-    if (shd_state != SG_RESOURCESTATE_VALID) {
-        std::cerr << "[Sokol GFX ERROR] Shader creation failed, state: " << static_cast<int>(shd_state) << std::endl;
-    }
 
     // Pipeline with Depth Test
     sg_pipeline_desc pip_desc{};
     pip_desc.layout.buffers[0].stride = sizeof(Vertex);
-    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3; // pos
-    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3; // normal
-    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2; // uv
-    pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4; // color
+    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
     pip_desc.shader = shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
     pip_desc.cull_mode = SG_CULLMODE_NONE;
-    pip_desc.label = "pbr-lite-pipeline";
+    pip_desc.label = "pbr-daylight-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     pip_id_ = pip.id;
-    sg_resource_state pip_state = sg_query_pipeline_state(pip);
-    if (pip_state != SG_RESOURCESTATE_VALID) {
-        std::cerr << "[Sokol GFX ERROR] Pipeline creation failed, state: " << static_cast<int>(pip_state) << std::endl;
-    }
+
+    init_shadow_pipeline();
+    init_hud_and_line_pipelines();
 }
 
 void EngineApp::on_init() {
@@ -474,10 +671,214 @@ void EngineApp::on_init() {
     sg_setup(&desc);
 
     init_pipeline_and_shaders();
+    audio_.init();
+}
+
+void EngineApp::render_shadow_pass() {
+    if (shadow_pip_id_ == 0 || shadow_color_view_id_ == 0 || shadow_depth_view_id_ == 0) {
+        return;
+    }
+
+    // 1. Calculate Light Projection and View
+    glm::vec3 sun_dir = glm::normalize(scene_.light.direction);
+    glm::vec3 center = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 light_pos = center - sun_dir * 35.0f;
+    glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 light_proj = glm::ortho(-22.0f, 22.0f, -22.0f, 22.0f, 5.0f, 70.0f);
+    light_vp_ = light_proj * light_view;
+
+    // 2. Begin Shadow Render Pass
+    sg_pass pass{};
+    pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+    pass.action.colors[0].clear_value = { 1.0f, 1.0f, 1.0f, 1.0f };
+    pass.action.depth.load_action = SG_LOADACTION_CLEAR;
+    pass.action.depth.clear_value = 1.0f;
+    pass.attachments.colors[0] = sg_view{ shadow_color_view_id_ };
+    pass.attachments.depth_stencil = sg_view{ shadow_depth_view_id_ };
+    pass.label = "shadow-pass";
+
+    sg_begin_pass(&pass);
+    sg_pipeline pip{ shadow_pip_id_ };
+    sg_apply_pipeline(pip);
+
+    for (const auto& entity : scene_.entities()) {
+        if (!entity || !entity->visible || !entity->mesh) continue;
+        if (!entity->mesh->ensure_gpu_buffers()) continue;
+
+        glm::mat4 model = entity->world_model_matrix();
+        ShadowVSParams vs_params{ light_vp_ * model };
+
+        sg_bindings bind{};
+        bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
+        bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+        sg_apply_bindings(&bind);
+
+        sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
+        sg_draw(0, entity->mesh->num_indices, 1);
+    }
+
+    sg_end_pass();
+}
+
+void EngineApp::render_debug_hitboxes(const glm::mat4& vp) {
+    if (line_pip_id_ == 0 || line_vbuf_id_ == 0) return;
+
+    std::vector<LineVertex> verts;
+    verts.reserve(2048);
+
+    glm::vec4 green{ 0.15f, 0.95f, 0.25f, 1.0f };
+
+    for (const auto& entity : scene_.entities()) {
+        if (!entity || !entity->visible || !entity->has_collision) continue;
+        AABB box = entity->world_aabb();
+        if (!box.is_valid()) continue;
+
+        glm::vec3 min = box.min_point;
+        glm::vec3 max = box.max_point;
+
+        glm::vec3 c[8] = {
+            { min.x, min.y, min.z }, { max.x, min.y, min.z },
+            { max.x, max.y, min.z }, { min.x, max.y, min.z },
+            { min.x, min.y, max.z }, { max.x, min.y, max.z },
+            { max.x, max.y, max.z }, { min.x, max.y, max.z }
+        };
+
+        static const int edges[12][2] = {
+            {0,1}, {1,2}, {2,3}, {3,0},
+            {4,5}, {5,6}, {6,7}, {7,4},
+            {0,4}, {1,5}, {2,6}, {3,7}
+        };
+
+        for (int i = 0; i < 12; ++i) {
+            verts.push_back({ c[edges[i][0]], green });
+            verts.push_back({ c[edges[i][1]], green });
+        }
+    }
+
+    if (verts.empty()) return;
+
+    size_t count = std::min(verts.size(), static_cast<size_t>(8192));
+    sg_range range{ verts.data(), count * sizeof(LineVertex) };
+    sg_update_buffer(sg_buffer{ line_vbuf_id_ }, &range);
+
+    sg_pipeline pip{ line_pip_id_ };
+    sg_apply_pipeline(pip);
+
+    LineVSParams vs{ vp };
+    sg_apply_uniforms(0, SG_RANGE_REF(vs));
+
+    sg_bindings bind{};
+    bind.vertex_buffers[0] = sg_buffer{ line_vbuf_id_ };
+    sg_apply_bindings(&bind);
+
+    sg_draw(0, static_cast<int>(count), 1);
+}
+
+namespace {
+
+void add_rect(std::vector<HUDVertex>& verts, float x0, float y0, float x1, float y1, const glm::vec4& color) {
+    verts.push_back({ { x0, y0 }, color });
+    verts.push_back({ { x1, y0 }, color });
+    verts.push_back({ { x1, y1 }, color });
+
+    verts.push_back({ { x0, y0 }, color });
+    verts.push_back({ { x1, y1 }, color });
+    verts.push_back({ { x0, y1 }, color });
+}
+
+void add_char(std::vector<HUDVertex>& verts, char ch, float start_x, float start_y, float scale, const glm::vec4& color) {
+    if (ch < 32 || ch > 126) return;
+    int idx = ch - 32;
+    for (int row = 0; row < 8; ++row) {
+        uint8_t bits = FONT_8X8[idx][row];
+        for (int col = 0; col < 8; ++col) {
+            if ((bits >> (7 - col)) & 1) {
+                float px0 = start_x + col * scale;
+                float py0 = start_y + row * scale;
+                add_rect(verts, px0, py0, px0 + scale, py0 + scale, color);
+            }
+        }
+    }
+}
+
+void add_string(std::vector<HUDVertex>& verts, const char* str, float start_x, float start_y, float scale, const glm::vec4& color) {
+    float cur_x = start_x;
+    while (*str) {
+        if (*str == '\n') {
+            start_y += 10.0f * scale;
+            cur_x = start_x;
+        } else {
+            add_char(verts, *str, cur_x, start_y, scale, color);
+            cur_x += 8.0f * scale;
+        }
+        str++;
+    }
+}
+
+} // namespace
+
+void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
+    if (hud_pip_id_ == 0 || hud_vbuf_id_ == 0) return;
+
+    std::vector<HUDVertex> verts;
+    verts.reserve(4096);
+
+    // 1. Center Crosshair
+    float cx = screen_w * 0.5f;
+    float cy = screen_h * 0.5f;
+    glm::vec4 cross_color{ 1.0f, 1.0f, 1.0f, 0.92f };
+    glm::vec4 cross_shadow{ 0.0f, 0.0f, 0.0f, 0.55f };
+
+    // Crosshair shadow / outline for high contrast
+    add_rect(verts, cx - 11.0f, cy - 2.0f, cx - 2.0f, cy + 2.0f, cross_shadow);
+    add_rect(verts, cx + 2.0f, cy - 2.0f, cx + 11.0f, cy + 2.0f, cross_shadow);
+    add_rect(verts, cx - 2.0f, cy - 11.0f, cx + 2.0f, cy - 2.0f, cross_shadow);
+    add_rect(verts, cx - 2.0f, cy + 2.0f, cx + 2.0f, cy + 11.0f, cross_shadow);
+
+    // Crosshair lines
+    add_rect(verts, cx - 10.0f, cy - 1.0f, cx - 3.0f, cy + 1.0f, cross_color);
+    add_rect(verts, cx + 3.0f, cy - 1.0f, cx + 10.0f, cy + 1.0f, cross_color);
+    add_rect(verts, cx - 1.0f, cy - 10.0f, cx + 1.0f, cy - 3.0f, cross_color);
+    add_rect(verts, cx - 1.0f, cy + 3.0f, cx + 1.0f, cy + 10.0f, cross_color);
+
+    // Center dot
+    add_rect(verts, cx - 1.0f, cy - 1.0f, cx + 1.0f, cy + 1.0f, cross_color);
+
+    // 2. Top-Left HUD Info Card (FPS & Score)
+    add_rect(verts, 12.0f, 12.0f, 260.0f, 44.0f, { 0.06f, 0.10f, 0.16f, 0.72f });
+    add_rect(verts, 12.0f, 12.0f, 260.0f, 14.0f, { 0.25f, 0.65f, 0.95f, 0.90f }); // Top accent line
+
+    char fps_score_buf[64];
+    std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+    add_string(verts, fps_score_buf, 20.0f, 22.0f, 2.0f, { 1.0f, 0.92f, 0.45f, 1.0f });
+
+    // 3. Bottom Controls Hint Card
+    add_rect(verts, 12.0f, screen_h - 32.0f, 490.0f, screen_h - 10.0f, { 0.06f, 0.10f, 0.16f, 0.65f });
+    const char* hint = "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
+    add_string(verts, hint, 20.0f, screen_h - 26.0f, 1.5f, { 0.88f, 0.92f, 0.98f, 0.90f });
+
+    if (verts.empty()) return;
+
+    size_t count = std::min(verts.size(), static_cast<size_t>(16384));
+    sg_range range{ verts.data(), count * sizeof(HUDVertex) };
+    sg_update_buffer(sg_buffer{ hud_vbuf_id_ }, &range);
+
+    sg_pipeline pip{ hud_pip_id_ };
+    sg_apply_pipeline(pip);
+
+    glm::mat4 ortho = glm::ortho(0.0f, screen_w, screen_h, 0.0f, -1.0f, 1.0f);
+    HUDVSParams vs{ ortho };
+    sg_apply_uniforms(0, SG_RANGE_REF(vs));
+
+    sg_bindings bind{};
+    bind.vertex_buffers[0] = sg_buffer{ hud_vbuf_id_ };
+    sg_apply_bindings(&bind);
+
+    sg_draw(0, static_cast<int>(count), 1);
 }
 
 void EngineApp::on_frame() {
-    // 1. Calculate delta time (dt)
+    // 1. Calculate delta time (dt) & FPS
     auto now = std::chrono::steady_clock::now();
     double dt = 0.0;
     if (has_last_frame_) {
@@ -488,8 +889,15 @@ void EngineApp::on_frame() {
         dt = 1.0 / 60.0;
     }
     last_frame_time_ = now;
+    if (dt > 0.0) {
+        float instant_fps = static_cast<float>(1.0 / dt);
+        current_fps_ = current_fps_ * 0.92f + instant_fps * 0.08f;
+    }
 
-    // 2. Invoke Python frame update callback with GIL
+    // 2. Update Audio Listener with Camera Pose
+    audio_.update_listener(camera_.position, camera_.forward(), camera_.up);
+
+    // 3. Invoke Python frame update callback with GIL
     if (update_callback_) {
         try {
             update_callback_(dt);
@@ -498,13 +906,16 @@ void EngineApp::on_frame() {
         }
     }
 
-    // 3. Update Camera Aspect & Matrix
+    // 4. Update Camera Aspect & Matrix
     float w = sapp_widthf();
     float h = sapp_heightf();
     camera_.aspect = (h > 0.0f) ? (w / h) : 1.333333f;
     glm::mat4 vp = camera_.view_projection_matrix();
 
-    // 4. Begin render pass with color clear and depth clear
+    // 5. Render Pass 1: Offscreen Shadow Map Pass
+    render_shadow_pass();
+
+    // 6. Render Pass 2: Main Swapchain Pass with Daylight Clear Color
     sg_pass pass{};
     pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
     pass.action.colors[0].clear_value = {
@@ -529,6 +940,8 @@ void EngineApp::on_frame() {
         fs_params.light_color = glm::vec4(scene_.light.color, 1.0f);
         fs_params.ambient_color = glm::vec4(scene_.light.ambient, 1.0f);
         fs_params.eye_pos = glm::vec4(camera_.position, 1.0f);
+        fs_params.hemi_sky = glm::vec4(scene_.light.ambient_sky, 1.0f);
+        fs_params.hemi_ground = glm::vec4(scene_.light.ambient_ground, 1.0f);
 
         auto default_checker = scene_.default_checker_texture();
         if (default_checker) {
@@ -536,17 +949,13 @@ void EngineApp::on_frame() {
         }
         auto default_mat = scene_.default_material();
 
-        // 5. Draw all visible entities in Scene
+        // Draw all visible entities in Scene
         for (const auto& entity : scene_.entities()) {
-            if (!entity || !entity->visible) {
+            if (!entity || !entity->visible || !entity->mesh) {
                 continue;
             }
 
-            if (!entity->mesh) {
-                continue;
-            }
-
-            if (!entity->mesh || !entity->mesh->ensure_gpu_buffers()) {
+            if (!entity->mesh->ensure_gpu_buffers()) {
                 continue;
             }
 
@@ -563,20 +972,25 @@ void EngineApp::on_frame() {
                 continue;
             }
 
-            // Compute MVP and Normal matrices
+            // Compute MVP, Normal, and Light MVP matrices
             glm::mat4 model = entity->world_model_matrix();
             glm::mat4 normal_mat = entity->world_normal_matrix();
             glm::mat4 mvp = vp * model;
+            glm::mat4 l_mvp = light_vp_ * model;
 
-            VSParams vs_params{ mvp, model, normal_mat };
+            VSParams vs_params{ mvp, model, normal_mat, l_mvp };
             fs_params.material_color = mat->base_color;
             fs_params.material_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
 
             sg_bindings bind{};
             bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
             bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+            // Slot 0: Albedo Texture
             bind.views[0] = sg_view{ tex->view_id };
             bind.samplers[0] = sg_sampler{ tex->sampler_id };
+            // Slot 1: Shadow Texture
+            bind.views[1] = sg_view{ shadow_tex_view_id_ };
+            bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
             sg_apply_bindings(&bind);
 
             sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
@@ -585,16 +999,27 @@ void EngineApp::on_frame() {
         }
     }
 
+    // 7. Optional Debug Hitbox Rendering (F1 toggle)
+    if (show_debug_hitboxes_) {
+        render_debug_hitboxes(vp);
+    }
+
+    // 8. 2D HUD Rendering (Crosshair, FPS, Score, Hints)
+    if (show_hud_) {
+        render_hud(w, h, current_fps_);
+    }
+
     sg_end_pass();
     sg_commit();
 
-    // 6. Reset per-frame input transients
+    // 9. Reset per-frame input transients
     input_.post_frame();
 }
 
 void EngineApp::on_cleanup() {
     update_callback_ = nullptr;
     scene_.clear();
+    audio_.shutdown();
 
     if (pip_id_ != 0) {
         sg_destroy_pipeline(sg_pipeline{pip_id_});
@@ -603,6 +1028,64 @@ void EngineApp::on_cleanup() {
     if (shd_id_ != 0) {
         sg_destroy_shader(sg_shader{shd_id_});
         shd_id_ = 0;
+    }
+    if (shadow_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{shadow_pip_id_});
+        shadow_pip_id_ = 0;
+    }
+    if (shadow_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{shadow_shd_id_});
+        shadow_shd_id_ = 0;
+    }
+    if (shadow_color_view_id_ != 0) {
+        sg_destroy_view(sg_view{shadow_color_view_id_});
+        shadow_color_view_id_ = 0;
+    }
+    if (shadow_depth_view_id_ != 0) {
+        sg_destroy_view(sg_view{shadow_depth_view_id_});
+        shadow_depth_view_id_ = 0;
+    }
+    if (shadow_tex_view_id_ != 0) {
+        sg_destroy_view(sg_view{shadow_tex_view_id_});
+        shadow_tex_view_id_ = 0;
+    }
+    if (shadow_sampler_id_ != 0) {
+        sg_destroy_sampler(sg_sampler{shadow_sampler_id_});
+        shadow_sampler_id_ = 0;
+    }
+    if (shadow_color_img_id_ != 0) {
+        sg_destroy_image(sg_image{shadow_color_img_id_});
+        shadow_color_img_id_ = 0;
+    }
+    if (shadow_depth_img_id_ != 0) {
+        sg_destroy_image(sg_image{shadow_depth_img_id_});
+        shadow_depth_img_id_ = 0;
+    }
+
+    if (line_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{line_pip_id_});
+        line_pip_id_ = 0;
+    }
+    if (line_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{line_shd_id_});
+        line_shd_id_ = 0;
+    }
+    if (line_vbuf_id_ != 0) {
+        sg_destroy_buffer(sg_buffer{line_vbuf_id_});
+        line_vbuf_id_ = 0;
+    }
+
+    if (hud_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{hud_pip_id_});
+        hud_pip_id_ = 0;
+    }
+    if (hud_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{hud_shd_id_});
+        hud_shd_id_ = 0;
+    }
+    if (hud_vbuf_id_ != 0) {
+        sg_destroy_buffer(sg_buffer{hud_vbuf_id_});
+        hud_vbuf_id_ = 0;
     }
 
     sg_shutdown();
@@ -616,6 +1099,8 @@ void EngineApp::on_event(const void* raw_event) {
         case SAPP_EVENTTYPE_KEY_DOWN:
             if (ev->key_code == SAPP_KEYCODE_ESCAPE) {
                 sapp_request_quit();
+            } else if (ev->key_code == SAPP_KEYCODE_F1) {
+                toggle_debug_hitboxes();
             }
             input_.on_key_down(ev->key_code);
             break;

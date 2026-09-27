@@ -19,6 +19,7 @@
 #include "engine/model_loader.hpp"
 #include "engine/scene.hpp"
 #include "engine/input.hpp"
+#include "engine/audio.hpp"
 #include "engine/app.hpp"
 
 namespace nb = nanobind;
@@ -173,6 +174,14 @@ NB_MODULE(_engine_core, m) {
             return false;
         }, "point"_a)
         .def("intersects", &engine::AABB::intersects, "other"_a)
+        .def("scaled", &engine::AABB::scaled, "scale"_a)
+        .def("get_penetration", [](const engine::AABB& a, const engine::AABB& b) -> std::optional<glm::vec3> {
+            glm::vec3 mtv{0.0f};
+            if (a.get_penetration(b, mtv)) {
+                return mtv;
+            }
+            return std::nullopt;
+        }, "other"_a)
         .def("transformed", [](const engine::AABB& b, const engine::Transform& t) {
             return b.transformed(t.model_matrix());
         }, "transform"_a)
@@ -396,11 +405,31 @@ NB_MODULE(_engine_core, m) {
                     if (seq.size() >= 3) l.ambient = { seq[0], seq[1], seq[2] };
                 }
             }, nb::rv_policy::reference_internal)
+        .def_prop_rw("ambient_sky",
+            [](engine::DirectionalLight& l) -> glm::vec3& { return l.ambient_sky; },
+            [](engine::DirectionalLight& l, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) l.ambient_sky = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) l.ambient_sky = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("ambient_ground",
+            [](engine::DirectionalLight& l) -> glm::vec3& { return l.ambient_ground; },
+            [](engine::DirectionalLight& l, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) l.ambient_ground = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) l.ambient_ground = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
         .def_rw("intensity", &engine::DirectionalLight::intensity)
         .def_rw("shininess", &engine::DirectionalLight::shininess)
         .def("set_direction", &engine::DirectionalLight::set_direction, "x"_a, "y"_a, "z"_a)
         .def("set_color", &engine::DirectionalLight::set_color, "r"_a, "g"_a, "b"_a)
-        .def("set_ambient", &engine::DirectionalLight::set_ambient, "r"_a, "g"_a, "b"_a);
+        .def("set_ambient", &engine::DirectionalLight::set_ambient, "r"_a, "g"_a, "b"_a)
+        .def("set_hemispheric_ambient", &engine::DirectionalLight::set_hemispheric_ambient,
+             "sr"_a, "sg"_a, "sb"_a, "gr"_a, "gg"_a, "gb"_a);
 
     // -----------------------------------------------------------------------
     // Entity
@@ -424,6 +453,7 @@ NB_MODULE(_engine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_rw("has_collision", &engine::Entity::has_collision)
+        .def_rw("collision_scale", &engine::Entity::collision_scale)
         .def_prop_rw("parent",
             [](engine::Entity& e) -> std::shared_ptr<engine::Entity> { return e.parent; },
             [](engine::Entity& e, std::shared_ptr<engine::Entity> p) { e.parent = p; })
@@ -492,6 +522,22 @@ NB_MODULE(_engine_core, m) {
         .def("set_mouse_locked", &engine::InputManager::set_mouse_locked, "locked"_a);
 
     // -----------------------------------------------------------------------
+    // AudioManager
+    // -----------------------------------------------------------------------
+    nb::class_<engine::AudioManager>(m, "AudioManager")
+        .def("play_footstep", &engine::AudioManager::play_footstep)
+        .def("play_jump", &engine::AudioManager::play_jump)
+        .def("play_hit_3d", [](engine::AudioManager& a, const nb::object& pos) {
+            if (nb::isinstance<glm::vec3>(pos)) {
+                a.play_hit_3d(nb::cast<glm::vec3>(pos));
+            } else if (nb::isinstance<nb::tuple>(pos) || nb::isinstance<nb::list>(pos)) {
+                auto seq = nb::cast<std::vector<float>>(pos);
+                if (seq.size() >= 3) a.play_hit_3d({ seq[0], seq[1], seq[2] });
+            }
+        }, "world_pos"_a)
+        .def("play_sound_file", &engine::AudioManager::play_sound_file, "filepath"_a, "volume"_a = 1.0f);
+
+    // -----------------------------------------------------------------------
     // EngineApp
     // -----------------------------------------------------------------------
     nb::class_<engine::EngineApp>(m, "EngineApp")
@@ -511,6 +557,7 @@ NB_MODULE(_engine_core, m) {
         .def_prop_ro("scene", &engine::EngineApp::scene, nb::rv_policy::reference_internal)
         .def_prop_ro("camera", &engine::EngineApp::camera, nb::rv_policy::reference_internal)
         .def_prop_ro("input", &engine::EngineApp::input, nb::rv_policy::reference_internal)
+        .def_prop_ro("audio", &engine::EngineApp::audio, nb::rv_policy::reference_internal)
 
         // Texture convenience loaders
         .def("load_texture", [](engine::EngineApp&, const std::string& path) {
@@ -536,5 +583,15 @@ NB_MODULE(_engine_core, m) {
         .def("is_mouse_locked", &engine::EngineApp::is_mouse_locked)
         .def_prop_ro("width", &engine::EngineApp::width)
         .def_prop_ro("height", &engine::EngineApp::height)
-        .def_prop_ro("title", &engine::EngineApp::title);
+        .def_prop_ro("title", &engine::EngineApp::title)
+        .def("set_title", &engine::EngineApp::set_title, "title"_a)
+
+        // HUD and Debug options
+        .def("set_show_hud", &engine::EngineApp::set_show_hud, "enable"_a)
+        .def_prop_rw("show_hud", &engine::EngineApp::show_hud, &engine::EngineApp::set_show_hud)
+        .def("set_hud_score", &engine::EngineApp::set_hud_score, "score"_a)
+        .def_prop_rw("hud_score", &engine::EngineApp::hud_score, &engine::EngineApp::set_hud_score)
+        .def("set_debug_hitboxes", &engine::EngineApp::set_debug_hitboxes, "enable"_a)
+        .def("toggle_debug_hitboxes", &engine::EngineApp::toggle_debug_hitboxes)
+        .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes);
 }

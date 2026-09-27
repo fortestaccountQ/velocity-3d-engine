@@ -1,4 +1,4 @@
-"""First-person character controller with mouse look, gravity, jump, and AABB collision resolution."""
+"""First-person character controller with mouse look, gravity, jump, AABB collision, depenetration, and audio."""
 
 import math
 from typing import Optional, List
@@ -6,13 +6,14 @@ from engine import Key, Camera, InputManager, Scene, Entity, AABB, Vec3
 
 
 class FirstPersonController:
-    """First-Person Controller for walking, jumping, mouse-look, and AABB physics collisions."""
+    """First-Person Controller with sub-stepping, minimum translation vector depenetration, and spatial audio."""
 
     def __init__(
         self,
         camera: Camera,
         input_manager: InputManager,
         scene: Optional[Scene] = None,
+        audio: Optional[object] = None,
         move_speed: float = 5.0,
         mouse_sensitivity: float = 0.14,
         gravity: float = 16.0,
@@ -24,6 +25,7 @@ class FirstPersonController:
         self.camera = camera
         self.input = input_manager
         self.scene = scene
+        self.audio = audio
 
         self.move_speed = move_speed
         self.mouse_sensitivity = mouse_sensitivity
@@ -36,6 +38,7 @@ class FirstPersonController:
         self.velocity_y = 0.0
         self.is_grounded = True
         self.enabled = True
+        self.step_timer = 0.0
 
         # Custom obstacle AABBs that player cannot walk through
         self.custom_colliders: List[AABB] = []
@@ -48,14 +51,14 @@ class FirstPersonController:
         """Calculate player full bounding box for vertical/ground tests."""
         r = self.player_radius
         min_p = Vec3(px - r, py - self.player_height, pz - r)
-        max_p = Vec3(px + r, py + 0.1, pz + r)
+        max_p = Vec3(px + r, py + 0.15, pz + r)
         return AABB(min_p, max_p)
 
     def get_player_horizontal_aabb(self, px: float, py: float, pz: float) -> AABB:
         """Calculate player horizontal collision AABB, elevated by step_height so feet don't collide with the floor/platform."""
         r = self.player_radius
         min_p = Vec3(px - r, py - self.player_height + self.step_height, pz - r)
-        max_p = Vec3(px + r, py + 0.1, pz + r)
+        max_p = Vec3(px + r, py + 0.15, pz + r)
         return AABB(min_p, max_p)
 
     def _check_collision(self, test_box: AABB, ignore_entities: Optional[List[Entity]] = None) -> Optional[AABB]:
@@ -95,7 +98,6 @@ class FirstPersonController:
             mdx = self.input.mouse_dx
             mdy = self.input.mouse_dy
             if abs(mdx) > 0.001 or abs(mdy) > 0.001:
-                # delta_yaw, delta_pitch
                 self.camera.rotate(mdx * self.mouse_sensitivity, -mdy * self.mouse_sensitivity)
 
         # -------------------------------------------------------------------
@@ -128,10 +130,10 @@ class FirstPersonController:
             move_z += rz
 
         m_len = math.hypot(move_x, move_z)
+        is_sprinting = self.input.is_key_down(Key.LEFT_SHIFT)
         if m_len > 1e-5:
             speed = self.move_speed * dt
-            # Optional sprint with Shift
-            if self.input.is_key_down(Key.LEFT_SHIFT):
+            if is_sprinting:
                 speed *= 1.6
             dx = (move_x / m_len) * speed
             dz = (move_z / m_len) * speed
@@ -140,17 +142,32 @@ class FirstPersonController:
             dz = 0.0
 
         # -------------------------------------------------------------------
-        # 3. Jump & Vertical Gravity
+        # 3. Footstep Audio Rhythm
+        # -------------------------------------------------------------------
+        if m_len > 1e-5 and self.is_grounded:
+            step_interval = 0.28 if is_sprinting else 0.40
+            self.step_timer += dt
+            if self.step_timer >= step_interval:
+                self.step_timer = 0.0
+                if self.audio and hasattr(self.audio, "play_footstep"):
+                    self.audio.play_footstep()
+        else:
+            self.step_timer = 0.25
+
+        # -------------------------------------------------------------------
+        # 4. Jump & Vertical Gravity
         # -------------------------------------------------------------------
         if self.input.is_key_pressed(Key.SPACE) and self.is_grounded:
             self.velocity_y = self.jump_speed
             self.is_grounded = False
+            if self.audio and hasattr(self.audio, "play_jump"):
+                self.audio.play_jump()
 
         self.velocity_y -= self.gravity * dt
         dy = self.velocity_y * dt
 
         # -------------------------------------------------------------------
-        # 4. AABB Collision & Sliding (Independent Axis Testing)
+        # 5. AABB Collision & Sliding (Sub-stepping + Depenetration)
         # -------------------------------------------------------------------
         curr_pos = self.camera.position
         px, py, pz = curr_pos.x, curr_pos.y, curr_pos.z
@@ -181,19 +198,56 @@ class FirstPersonController:
 
         py = new_py
 
-        # [Axis X: Horizontal sliding]
-        if abs(dx) > 1e-6:
-            new_px = px + dx
-            box_x = self.get_player_horizontal_aabb(new_px, py, pz)
-            if self._check_collision(box_x) is None:
-                px = new_px
+        # [Sub-stepping for Horizontal Movement]
+        dist_xz = math.hypot(dx, dz)
+        max_substep = self.player_radius * 0.45
+        substeps = max(1, math.ceil(dist_xz / max_substep))
+        step_dx = dx / substeps
+        step_dz = dz / substeps
 
-        # [Axis Z: Horizontal sliding]
-        if abs(dz) > 1e-6:
-            new_pz = pz + dz
-            box_z = self.get_player_horizontal_aabb(px, py, new_pz)
-            if self._check_collision(box_z) is None:
-                pz = new_pz
+        for _ in range(substeps):
+            # [Axis X: Horizontal sliding]
+            if abs(step_dx) > 1e-6:
+                new_px = px + step_dx
+                box_x = self.get_player_horizontal_aabb(new_px, py, pz)
+                if self._check_collision(box_x) is None:
+                    px = new_px
+
+            # [Axis Z: Horizontal sliding]
+            if abs(step_dz) > 1e-6:
+                new_pz = pz + step_dz
+                box_z = self.get_player_horizontal_aabb(px, py, new_pz)
+                if self._check_collision(box_z) is None:
+                    pz = new_pz
+
+        # [Depenetration: Minimum Translation Vector Check]
+        current_box = self.get_player_aabb(px, py, pz)
+        for custom_box in self.custom_colliders:
+            if custom_box.is_valid():
+                mtv = current_box.get_penetration(custom_box)
+                if mtv is not None:
+                    px += mtv.x
+                    py += mtv.y
+                    pz += mtv.z
+                    current_box = self.get_player_aabb(px, py, pz)
+
+        if self.scene:
+            for entity in self.scene.entities:
+                if not entity.visible or not entity.has_collision or entity.mesh is None:
+                    continue
+                if "Plane" in entity.name or "floor" in entity.name.lower():
+                    continue
+                wbox = entity.world_aabb()
+                if wbox.is_valid():
+                    mtv = current_box.get_penetration(wbox)
+                    if mtv is not None:
+                        px += mtv.x
+                        py += mtv.y
+                        pz += mtv.z
+                        if mtv.y > 0.001:
+                            self.is_grounded = True
+                            self.velocity_y = 0.0
+                        current_box = self.get_player_aabb(px, py, pz)
 
         # Apply resolved position to camera
         self.camera.set_position(px, py, pz)

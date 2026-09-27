@@ -38,12 +38,17 @@ public:
     }
 
     bool has_collision{true};
+    float collision_scale{1.0f};
 
     AABB world_aabb() const {
         if (!mesh || !mesh->local_aabb.is_valid()) {
             return AABB{};
         }
-        return mesh->local_aabb.transformed(world_model_matrix());
+        AABB box = mesh->local_aabb.transformed(world_model_matrix());
+        if (collision_scale != 1.0f && box.is_valid()) {
+            box = box.scaled(collision_scale);
+        }
+        return box;
     }
 
     void set_color(float r, float g, float b, float a = 1.0f) {

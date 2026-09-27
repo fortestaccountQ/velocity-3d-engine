@@ -73,6 +73,7 @@ else()
 endif()
 
 set(CGLTF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf")
+set(MINIAUDIO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio")
 
 # ---------------------------------------------------------------------------
 # Core Engine Static Library
@@ -84,6 +85,7 @@ add_library(engine_core STATIC
     core/src/scene.cpp
     core/src/model_loader.cpp
     core/src/input.cpp
+    core/src/audio.cpp
     core/src/app.cpp
 )
 
@@ -92,6 +94,7 @@ target_include_directories(engine_core PUBLIC
     ${SOKOL_INCLUDE_DIR}
     ${STB_INCLUDE_DIR}
     ${CGLTF_INCLUDE_DIR}
+    ${MINIAUDIO_INCLUDE_DIR}
 )
 
 target_link_libraries(engine_core PUBLIC glm::glm)

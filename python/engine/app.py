@@ -114,3 +114,39 @@ class App:
     def is_mouse_locked(self) -> bool:
         """True if the mouse cursor is currently locked/hidden."""
         return self._core.is_mouse_locked()
+
+    @property
+    def audio(self) -> Any:
+        """AudioManager for 3D spatial and procedural audio."""
+        return self._core.audio
+
+    @property
+    def show_hud(self) -> bool:
+        return self._core.show_hud
+
+    @show_hud.setter
+    def show_hud(self, value: bool) -> None:
+        self._core.show_hud = bool(value)
+
+    @property
+    def hud_score(self) -> int:
+        return self._core.hud_score
+
+    @hud_score.setter
+    def hud_score(self, value: int) -> None:
+        self._core.hud_score = int(value)
+
+    @property
+    def debug_hitboxes(self) -> bool:
+        return self._core.debug_hitboxes
+
+    @debug_hitboxes.setter
+    def debug_hitboxes(self, value: bool) -> None:
+        self._core.debug_hitboxes = bool(value)
+
+    def toggle_debug_hitboxes(self) -> None:
+        self._core.toggle_debug_hitboxes()
+
+    def set_title(self, title: str) -> None:
+        self._core.set_title(str(title))
+

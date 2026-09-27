@@ -62,6 +62,42 @@ struct AABB {
         return true;
     }
 
+    AABB scaled(float scale) const {
+        if (!is_valid()) return *this;
+        glm::vec3 c = center();
+        glm::vec3 e = extents() * scale;
+        return AABB(c - e, c + e);
+    }
+
+    bool get_penetration(const AABB& other, glm::vec3& mtv_out) const {
+        if (!intersects(other)) return false;
+
+        float dx1 = max_point.x - other.min_point.x;
+        float dx2 = other.max_point.x - min_point.x;
+        float push_x = (dx1 < dx2) ? -dx1 : dx2;
+
+        float dy1 = max_point.y - other.min_point.y;
+        float dy2 = other.max_point.y - min_point.y;
+        float push_y = (dy1 < dy2) ? -dy1 : dy2;
+
+        float dz1 = max_point.z - other.min_point.z;
+        float dz2 = other.max_point.z - min_point.z;
+        float push_z = (dz1 < dz2) ? -dz1 : dz2;
+
+        float ax = std::abs(push_x);
+        float ay = std::abs(push_y);
+        float az = std::abs(push_z);
+
+        if (ax <= ay && ax <= az) {
+            mtv_out = glm::vec3(push_x, 0.0f, 0.0f);
+        } else if (ay <= ax && ay <= az) {
+            mtv_out = glm::vec3(0.0f, push_y, 0.0f);
+        } else {
+            mtv_out = glm::vec3(0.0f, 0.0f, push_z);
+        }
+        return true;
+    }
+
     AABB transformed(const glm::mat4& matrix) const {
         if (!is_valid()) return *this;
 
