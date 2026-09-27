@@ -424,6 +424,9 @@ NB_MODULE(_engine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_rw("has_collision", &engine::Entity::has_collision)
+        .def_prop_rw("parent",
+            [](engine::Entity& e) -> std::shared_ptr<engine::Entity> { return e.parent; },
+            [](engine::Entity& e, std::shared_ptr<engine::Entity> p) { e.parent = p; })
         .def("world_aabb", &engine::Entity::world_aabb)
         .def("set_color", &engine::Entity::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f);
 

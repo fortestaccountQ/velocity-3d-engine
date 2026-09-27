@@ -188,21 +188,23 @@ def main():
             hit = app.scene.raycast(ray, max_distance=25.0)
 
             if hit.hit and hit.entity:
-                score += 10
-                hit_name = hit.entity.name
-                print(
-                    f"🎯 [Raycast HIT!] Object: '{hit_name}' | "
-                    f"Dist: {hit.distance:.2f}m | Point: ({hit.point.x:.1f}, {hit.point.y:.1f}, {hit.point.z:.1f}) | Score: {score}"
-                )
-
-                # Visual feedback: flash color and bounce model / object
                 target = hit.entity
-                while target.parent and target.parent.parent:
+                while getattr(target, "parent", None) is not None:
                     target = target.parent
-                trigger_bounce(target, jump_vel=4.5)
 
-                if hit.entity.material:
-                    hit.entity.set_color(1.4, 1.4, 0.5, 1.0)
+                is_static = any(k in target.name.lower() for k in ("wall", "floor", "plane"))
+                if not is_static:
+                    score += 10
+                    hit_name = hit.entity.name
+                    print(
+                        f"🎯 [Raycast HIT!] Object: '{hit_name}' | "
+                        f"Dist: {hit.distance:.2f}m | Point: ({hit.point.x:.1f}, {hit.point.y:.1f}, {hit.point.z:.1f}) | Score: {score}"
+                    )
+                    trigger_bounce(target, jump_vel=4.5)
+                    if hit.entity.material:
+                        hit.entity.set_color(1.4, 1.4, 0.5, 1.0)
+                else:
+                    print(f"🧱 [Hit Structure] Object: '{hit.entity.name}' | Dist: {hit.distance:.2f}m")
         last_lmb_down = lmb_down
 
         # Animate bouncing objects

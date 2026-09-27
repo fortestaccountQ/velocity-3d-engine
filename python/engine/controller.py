@@ -19,6 +19,7 @@ class FirstPersonController:
         jump_speed: float = 6.0,
         player_height: float = 1.7,
         player_radius: float = 0.35,
+        step_height: float = 0.20,
     ):
         self.camera = camera
         self.input = input_manager
@@ -30,6 +31,7 @@ class FirstPersonController:
         self.jump_speed = jump_speed
         self.player_height = player_height
         self.player_radius = player_radius
+        self.step_height = step_height
 
         self.velocity_y = 0.0
         self.is_grounded = True
@@ -43,10 +45,16 @@ class FirstPersonController:
         self.custom_colliders.append(aabb)
 
     def get_player_aabb(self, px: float, py: float, pz: float) -> AABB:
-        """Calculate player bounding box for a given eye position (px, py, pz)."""
+        """Calculate player full bounding box for vertical/ground tests."""
         r = self.player_radius
-        # Eye is at py, feet at py - player_height
         min_p = Vec3(px - r, py - self.player_height, pz - r)
+        max_p = Vec3(px + r, py + 0.1, pz + r)
+        return AABB(min_p, max_p)
+
+    def get_player_horizontal_aabb(self, px: float, py: float, pz: float) -> AABB:
+        """Calculate player horizontal collision AABB, elevated by step_height so feet don't collide with the floor/platform."""
+        r = self.player_radius
+        min_p = Vec3(px - r, py - self.player_height + self.step_height, pz - r)
         max_p = Vec3(px + r, py + 0.1, pz + r)
         return AABB(min_p, max_p)
 
@@ -154,8 +162,8 @@ class FirstPersonController:
 
         if hit_y is not None:
             if self.velocity_y < 0:
-                # Landed on top of obstacle
-                new_py = hit_y.max_point.y + self.player_height
+                # Landed on top of obstacle (add small epsilon so feet sit cleanly above surface)
+                new_py = hit_y.max_point.y + self.player_height + 0.002
                 self.velocity_y = 0.0
                 self.is_grounded = True
             elif self.velocity_y > 0:
@@ -176,14 +184,14 @@ class FirstPersonController:
         # [Axis X: Horizontal sliding]
         if abs(dx) > 1e-6:
             new_px = px + dx
-            box_x = self.get_player_aabb(new_px, py, pz)
+            box_x = self.get_player_horizontal_aabb(new_px, py, pz)
             if self._check_collision(box_x) is None:
                 px = new_px
 
         # [Axis Z: Horizontal sliding]
         if abs(dz) > 1e-6:
             new_pz = pz + dz
-            box_z = self.get_player_aabb(px, py, new_pz)
+            box_z = self.get_player_horizontal_aabb(px, py, new_pz)
             if self._check_collision(box_z) is None:
                 pz = new_pz
 
