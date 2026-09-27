@@ -432,6 +432,10 @@ void EngineApp::init_pipeline_and_shaders() {
     shd_desc.label = "pbr-lite-shader";
     sg_shader shd = sg_make_shader(&shd_desc);
     shd_id_ = shd.id;
+    sg_resource_state shd_state = sg_query_shader_state(shd);
+    if (shd_state != SG_RESOURCESTATE_VALID) {
+        std::cerr << "[Sokol GFX ERROR] Shader creation failed, state: " << static_cast<int>(shd_state) << std::endl;
+    }
 
     // Pipeline with Depth Test
     sg_pipeline_desc pip_desc{};
@@ -448,6 +452,10 @@ void EngineApp::init_pipeline_and_shaders() {
     pip_desc.label = "pbr-lite-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     pip_id_ = pip.id;
+    sg_resource_state pip_state = sg_query_pipeline_state(pip);
+    if (pip_state != SG_RESOURCESTATE_VALID) {
+        std::cerr << "[Sokol GFX ERROR] Pipeline creation failed, state: " << static_cast<int>(pip_state) << std::endl;
+    }
 }
 
 void EngineApp::on_init() {
@@ -514,6 +522,9 @@ void EngineApp::on_frame() {
         fs_params.eye_pos = glm::vec4(camera_.position, 1.0f);
 
         auto default_checker = scene_.default_checker_texture();
+        if (default_checker) {
+            default_checker->ensure_gpu_resources();
+        }
         auto default_mat = scene_.default_material();
 
         // 5. Draw all visible entities in Scene
@@ -526,13 +537,22 @@ void EngineApp::on_frame() {
                 entity->mesh = scene_.default_cube_mesh();
             }
 
-            if (!entity->mesh || entity->mesh->vbuf_id == 0 || entity->mesh->ibuf_id == 0) {
+            if (!entity->mesh || !entity->mesh->ensure_gpu_buffers()) {
                 continue;
             }
 
             // Material resolution
             auto mat = entity->material ? entity->material : default_mat;
-            auto tex = (mat->albedo_map && mat->albedo_map->is_valid()) ? mat->albedo_map : default_checker;
+            auto tex = (mat && mat->albedo_map) ? mat->albedo_map : default_checker;
+            if (tex) {
+                tex->ensure_gpu_resources();
+            }
+            if (!tex || !tex->is_valid()) {
+                tex = default_checker;
+            }
+            if (!tex || !tex->is_valid()) {
+                continue;
+            }
 
             // Compute MVP and Normal matrices
             glm::mat4 model = entity->transform.model_matrix();

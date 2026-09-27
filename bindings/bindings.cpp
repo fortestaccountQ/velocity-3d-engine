@@ -113,6 +113,17 @@ NB_MODULE(_engine_core, m) {
         });
 
     // -----------------------------------------------------------------------
+    // Mesh
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Mesh>(m, "Mesh")
+        .def(nb::init<>())
+        .def_ro("vbuf_id", &engine::Mesh::vbuf_id)
+        .def_ro("ibuf_id", &engine::Mesh::ibuf_id)
+        .def_ro("num_indices", &engine::Mesh::num_indices)
+        .def_static("create_cube", &engine::Mesh::create_cube)
+        .def_static("create_plane", &engine::Mesh::create_plane, "size"_a = 10.0f, "uv_tiling"_a = 5.0f);
+
+    // -----------------------------------------------------------------------
     // Texture
     // -----------------------------------------------------------------------
     nb::class_<engine::Texture>(m, "Texture")
@@ -296,6 +307,7 @@ NB_MODULE(_engine_core, m) {
         .def_rw("name", &engine::Entity::name)
         .def_rw("visible", &engine::Entity::visible)
         .def_rw("transform", &engine::Entity::transform)
+        .def_rw("mesh", &engine::Entity::mesh)
         .def_rw("material", &engine::Entity::material)
         .def_prop_rw("color",
             [](engine::Entity& e) -> glm::vec4& { return e.color; },

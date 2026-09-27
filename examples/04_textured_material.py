@@ -37,9 +37,9 @@ def main():
         clear_color=[0.05, 0.05, 0.08, 1.0],
     )
 
-    # 1. Setup Camera
-    app.camera.position = (0.0, 3.2, 7.5)
-    app.camera.target = (0.0, 0.6, 0.0)
+    # 1. Setup Camera (Framing all 3 cubes & textured floor)
+    app.camera.position = (0.0, 3.5, 9.5)
+    app.camera.target = (0.0, 0.4, 0.0)
 
     # 2. Setup Lighting (Initial light direction)
     app.scene.light.color = (1.0, 0.98, 0.92)

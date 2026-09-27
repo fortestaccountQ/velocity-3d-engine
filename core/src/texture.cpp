@@ -15,17 +15,64 @@ Texture::~Texture() {
 
 void Texture::destroy() {
     if (view_id != 0) {
-        sg_destroy_view(sg_view{view_id});
+        if (sg_isvalid()) {
+            sg_destroy_view(sg_view{view_id});
+        }
         view_id = 0;
     }
     if (sampler_id != 0) {
-        sg_destroy_sampler(sg_sampler{sampler_id});
+        if (sg_isvalid()) {
+            sg_destroy_sampler(sg_sampler{sampler_id});
+        }
         sampler_id = 0;
     }
     if (image_id != 0) {
-        sg_destroy_image(sg_image{image_id});
+        if (sg_isvalid()) {
+            sg_destroy_image(sg_image{image_id});
+        }
         image_id = 0;
     }
+}
+
+bool Texture::ensure_gpu_resources() {
+    if (view_id != 0 && sampler_id != 0 && image_id != 0) {
+        return true;
+    }
+    if (!sg_isvalid()) {
+        return false;
+    }
+    if (cpu_pixels.empty() || width <= 0 || height <= 0) {
+        return false;
+    }
+
+    // 1. Create GPU Image
+    sg_image_desc img_desc{};
+    img_desc.width = width;
+    img_desc.height = height;
+    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.data.mip_levels[0] = { cpu_pixels.data(), static_cast<size_t>(width * height * 4) };
+    img_desc.label = "texture-rgba-image";
+    sg_image img = sg_make_image(&img_desc);
+    image_id = img.id;
+
+    // 2. Create GPU Sampler (linear filtering + repeat)
+    sg_sampler_desc smp_desc{};
+    smp_desc.min_filter = SG_FILTER_LINEAR;
+    smp_desc.mag_filter = SG_FILTER_LINEAR;
+    smp_desc.wrap_u = SG_WRAP_REPEAT;
+    smp_desc.wrap_v = SG_WRAP_REPEAT;
+    smp_desc.label = "texture-rgba-sampler";
+    sg_sampler smp = sg_make_sampler(&smp_desc);
+    sampler_id = smp.id;
+
+    // 3. Create GPU Texture View
+    sg_view_desc view_desc{};
+    view_desc.texture.image = img;
+    view_desc.label = "texture-rgba-view";
+    sg_view view = sg_make_view(&view_desc);
+    view_id = view.id;
+
+    return is_valid();
 }
 
 std::shared_ptr<Texture> Texture::create_from_rgba(int width, int height, const uint8_t* pixels) {
@@ -37,34 +84,9 @@ std::shared_ptr<Texture> Texture::create_from_rgba(int width, int height, const 
     tex->width = width;
     tex->height = height;
     tex->channels = 4;
+    tex->cpu_pixels.assign(pixels, pixels + (width * height * 4));
 
-    // 1. Create GPU Image
-    sg_image_desc img_desc{};
-    img_desc.width = width;
-    img_desc.height = height;
-    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    img_desc.data.mip_levels[0] = { pixels, static_cast<size_t>(width * height * 4) };
-    img_desc.label = "texture-rgba-image";
-    sg_image img = sg_make_image(&img_desc);
-    tex->image_id = img.id;
-
-    // 2. Create GPU Sampler (linear filtering + repeat)
-    sg_sampler_desc smp_desc{};
-    smp_desc.min_filter = SG_FILTER_LINEAR;
-    smp_desc.mag_filter = SG_FILTER_LINEAR;
-    smp_desc.wrap_u = SG_WRAP_REPEAT;
-    smp_desc.wrap_v = SG_WRAP_REPEAT;
-    smp_desc.label = "texture-rgba-sampler";
-    sg_sampler smp = sg_make_sampler(&smp_desc);
-    tex->sampler_id = smp.id;
-
-    // 3. Create GPU Texture View
-    sg_view_desc view_desc{};
-    view_desc.texture.image = img;
-    view_desc.label = "texture-rgba-view";
-    sg_view view = sg_make_view(&view_desc);
-    tex->view_id = view.id;
-
+    tex->ensure_gpu_resources();
     return tex;
 }
 

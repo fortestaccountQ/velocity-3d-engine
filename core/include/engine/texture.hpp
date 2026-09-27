@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <cstdint>
+#include <vector>
 
 namespace engine {
 
@@ -15,8 +16,14 @@ public:
     int height{0};
     int channels{0};
 
+    std::vector<uint8_t> cpu_pixels;
+
     Texture() = default;
     ~Texture();
+
+    bool ensure_gpu_resources();
+    void destroy();
+    bool is_valid() const { return image_id != 0 && view_id != 0 && sampler_id != 0; }
 
     static std::shared_ptr<Texture> load_from_file(const std::string& filepath);
     static std::shared_ptr<Texture> create_from_rgba(int width, int height, const uint8_t* pixels);
@@ -28,9 +35,6 @@ public:
         uint32_t color2 = 0xFF2A2A38
     );
     static std::shared_ptr<Texture> create_solid_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
-
-    void destroy();
-    bool is_valid() const { return image_id != 0 && view_id != 0; }
 };
 
 } // namespace engine
