@@ -20,26 +20,28 @@
 │   │   ├── texture.hpp       # Класс Texture (загрузка PNG/JPG/BMP через stb_image, GPU-текстуры, checkerboard)
 │   │   ├── material.hpp      # Класс Material (albedo map, base color, roughness, metallic, uv_scale)
 │   │   ├── mesh.hpp          # Класс Mesh и структура Vertex (position, normal, uv, color)
+│   │   ├── physics.hpp       # Физические структуры AABB, Ray, RaycastHit
 │   │   ├── model.hpp         # Класс Model (контейнер иерархии glTF с root_entity и дочерними мешами)
 │   │   ├── model_loader.hpp  # Класс ModelLoader (парсинг glTF/GLB через cgltf и текстур через stb_image)
 │   │   ├── entity.hpp        # Класс Entity / Node (Transform, Parent, local_matrix, world matrices, Mesh, Material)
-│   │   ├── scene.hpp         # Контейнер Scene для сущностей, текстур, загрузки моделей и освещения
+│   │   ├── scene.hpp         # Контейнер Scene для сущностей, текстур, загрузки моделей, освещения и raycast
 │   │   ├── input.hpp         # InputManager и перечисление клавиш Key
-│   │   └── app.hpp           # Класс EngineApp и окно
+│   │   └── app.hpp           # Класс EngineApp, окно и захват курсора мыши
 │   └── src/
 │       ├── texture.cpp       # Управление текстурами GPU (sg_image, sg_sampler, sg_view, stb_image)
 │       ├── mesh.cpp          # Создание буферов геометрии (куб с UV, плоскость/пол Plane)
 │       ├── model_loader.cpp  # Реализация загрузки glTF 2.0 / GLB (cgltf + stb_image memory buffer)
-│       ├── scene.cpp         # Управление сущностями, материалами и вызов load_model
-│       ├── input.cpp         # Менеджер клавиатуры и мыши
+│       ├── scene.cpp         # Управление сущностями, материалами, load_model и raycast
+│       ├── input.cpp         # Менеджер клавиатуры, мыши и блокировка курсора
 │       ├── app.cpp           # Шейдеры PBR-lite, конвейер sokol_gfx, цикл сцены и обработка ввода
 │       └── sokol_impl.cpp    # Трансляционный юнит реализаций Sokol
 ├── bindings/                 # Связующий слой Nanobind
 │   └── bindings.cpp          # Экспорт C++ классов в Python-модуль _engine_core
 ├── python/                   # Высокоуровневый пакет Python
 │   └── engine/
-│       ├── __init__.py       # Экспорт фасада App, Texture, Material, Camera, Scene, Entity, Model, Mesh
-│       ├── app.py            # Фасад App со свойствами scene, camera, input, load_texture
+│       ├── __init__.py       # Экспорт фасада App, Texture, Material, Camera, Scene, Entity, Model, Mesh, AABB, Ray, FirstPersonController
+│       ├── app.py            # Фасад App со свойствами scene, camera, input, load_texture, set_mouse_locked
+│       ├── controller.py     # Игровой контроллер от первого лица (FPS Controller, AABB коллизии, прыжок)
 │       └── py.typed          # Маркер типизации PEP 561
 ├── third_party/              # Внешние зависимости
 │   ├── sokol/                # sokol_app.h, sokol_gfx.h, sokol_glue.h, sokol_log.h
@@ -50,12 +52,15 @@
 │   ├── duck.glb              # Модель утки (12.6k индексов, встроенная текстура 512x512)
 │   ├── box_textured.glb      # Текстурированный куб с UV разверткой
 │   └── avocado.glb           # Детализированная модель авокадо с PBR-сканом
-└── examples/                 # Примеры и тесты
-    ├── 01_window.py          # Milestone 1: Базовое окно с заливкой фона (#1a1a24)
-    ├── 02_rotating_cube.py   # Milestone 2: 3D вращающийся куб с Z-буфером и on_update(dt)
-    ├── 03_scene_lighting.py  # Milestone 3: Граф сцены, множественные сущности, Blinn-Phong и ввод
-    ├── 04_textured_material.py # Milestone 4: Текстуры, материалы PBR Metallic-Roughness, пол и 3 куба
-    └── 05_load_model.py      # Milestone 5: Загрузка glTF 2.0 / GLB с иерархией, текстурами и анимацией
+├── examples/                 # Примеры и тесты
+│   ├── 01_window.py          # Milestone 1: Базовое окно с заливкой фона (#1a1a24)
+│   ├── 02_rotating_cube.py   # Milestone 2: 3D вращающийся куб с Z-буфером и on_update(dt)
+│   ├── 03_scene_lighting.py  # Milestone 3: Граф сцены, множественные сущности, Blinn-Phong и ввод
+│   ├── 04_textured_material.py # Milestone 4: Текстуры, материалы PBR Metallic-Roughness, пол и 3 куба
+│   ├── 05_load_model.py      # Milestone 5: Загрузка glTF 2.0 / GLB с иерархией, текстурами и анимацией
+│   └── 06_playable_demo.py   # Milestone 6: Интерактивная 3D-игра от первого лица с коллизиями и Raycast
+├── game_main.py              # Автономная точка входа для сборки в бинарный дистрибутив
+└── package_game.py           # Скрипт сборки автономного .exe дистрибутива через PyInstaller
 
 ---
 
@@ -89,16 +94,60 @@
 
 ---
 
+## Архитектура Milestone 6 (First-Person Controller, AABB Physics & Standalone Packaging)
+
+1. **Захват мыши и свободный обзор (Mouse Capture & FPS Camera):**
+   - Управление указателем мыши на уровне Sokol: `sapp_lock_mouse(true)` и `sapp_show_mouse(false)`.
+   - Векторное вращение камеры Pitch (ограничение от -89° до +89°) и Yaw по смещениям мыши `mouse_dx` / `mouse_dy`.
+   - Экспорт в Python: `app.set_mouse_locked(True)`, переключение курсора по клавише `TAB`.
+
+2. **C++ Физический движок (AABB Collisions & Raycast):**
+   - Структура `AABB`: расчет локального объема меша по вершинам (`Mesh::calculate_aabb()`), трансформация в мировой объем с учетом масштаба и поворота (`Entity::world_aabb()`).
+   - Тестирование пересечений объемов методом разделяющих осей (`AABB::intersects()`).
+   - Математика луча `Ray`: быстрый тест пересечения луча с AABB (`Ray::intersect_aabb()`).
+   - Функция сцены `Scene::raycast(ray, max_distance)`: находит ближайший интерактивный объект и точную точку соударения `point`.
+
+3. **Игровой контроллер игрока (`FirstPersonController`):**
+   - Перемещение на `W/A/S/D` относительно горизонтальной проекции взгляда камеры.
+   - Вертикальная гравитация и прыжок по `Space`.
+   - Раздельное поосевое разрешение коллизий (позволяет скользить вдоль стен и стоять на препятствиях/полу).
+
+4. **Автономная сборка в исполняемый дистрибутив (.exe):**
+   - Скрипт `package_game.py` на базе PyInstaller упаковывает Python runtime, скомпилированный `.pyd` модуль движка, графические шейдеры и папку `assets/` в автономный каталог `dist/MyEngineGame/`.
+   - Готовый исполняемый файл `dist/MyEngineGame/MyEngineGame.exe` запускается в Windows без установленного Python и сторонних библиотек.
+
+---
+
 ## Сборка и установка
 
 ```bash
 # Установка в текущее venv окружение в режиме редактирования:
 pip install -e . --no-build-isolation
+
+# Сборка автономного исполняемого файла игры (.exe):
+python package_game.py
 ```
 
 ---
 
-## Запуск примеров
+## Запуск примеров и игры
+
+### Интерактивная 3D-игра от первого лица (Milestone 6)
+```bash
+# Запуск через Python:
+python examples/06_playable_demo.py
+
+# Или запуск собранного автономного бинарника:
+.\dist\MyEngineGame\MyEngineGame.exe
+```
+**Управление:**
+- **Мышь:** Свободный круговой обзор (курсор заблокирован).
+- **W / A / S / D:** Перемещение игрока с проверкой коллизий со стенами и объектами.
+- **Space:** Прыжок с физической гравитацией.
+- **Left Shift:** Спринт (ускорение бега).
+- **ЛКМ (Клик):** Raycast-взаимодействие с объектами сцены (подпрыгивание утки/коробки/авокадо и подсветка).
+- **TAB:** Переключение захвата мыши.
+- **ESC:** Выход из игры.
 
 ### Загрузка 3D-моделей glTF 2.0 / GLB (Milestone 5)
 ```bash

@@ -40,6 +40,9 @@ public:
     float mouse_dx() const { return mouse_dx_; }
     float mouse_dy() const { return mouse_dy_; }
 
+    bool is_mouse_locked() const;
+    void set_mouse_locked(bool locked);
+
     void on_key_down(int keycode);
     void on_key_up(int keycode);
     void on_mouse_move(float x, float y, float dx, float dy);

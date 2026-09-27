@@ -336,6 +336,15 @@ void EngineApp::set_update_callback(UpdateCallback callback) {
     update_callback_ = std::move(callback);
 }
 
+void EngineApp::set_mouse_locked(bool locked) {
+    sapp_lock_mouse(locked);
+    sapp_show_mouse(!locked);
+}
+
+bool EngineApp::is_mouse_locked() const {
+    return sapp_mouse_locked();
+}
+
 void EngineApp::init_pipeline_and_shaders() {
     sg_shader_desc shd_desc{};
 #if defined(SOKOL_D3D11)

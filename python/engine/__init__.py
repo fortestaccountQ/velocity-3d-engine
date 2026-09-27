@@ -17,11 +17,16 @@ try:
         Model,
         Scene,
         InputManager,
+        AABB,
+        Ray,
+        RaycastHit,
     )
 except ImportError:
     pass
 
-__version__ = "0.5.0"
+from .controller import FirstPersonController
+
+__version__ = "0.6.0"
 __all__ = [
     "App",
     "Key",
@@ -37,4 +42,8 @@ __all__ = [
     "Model",
     "Scene",
     "InputManager",
+    "AABB",
+    "Ray",
+    "RaycastHit",
+    "FirstPersonController",
 ]

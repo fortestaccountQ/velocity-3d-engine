@@ -2,6 +2,8 @@
 build/
 _skbuild/
 dist/
+build_installer/
+*.spec
 *.egg-info/
 
 # Compiled binary extensions

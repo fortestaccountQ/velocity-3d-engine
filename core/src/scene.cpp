@@ -38,6 +38,7 @@ std::shared_ptr<Entity> Scene::create_entity(const std::string& name) {
 
 std::shared_ptr<Entity> Scene::create_cube(const glm::vec4& color) {
     auto entity = create_entity("Cube_" + std::to_string(next_id_));
+    entity->mesh = default_cube_mesh();
     entity->color = color;
     entity->material = std::make_shared<Material>(default_checker_texture(), 0.5f, 0.0f);
     entity->material->base_color = color;
@@ -77,6 +78,34 @@ void Scene::clear() {
         default_checker_texture_ = nullptr;
     }
     default_material_ = nullptr;
+}
+
+RaycastHit Scene::raycast(const Ray& ray, float max_distance) const {
+    RaycastHit closest_hit;
+    closest_hit.distance = max_distance;
+
+    for (const auto& entity : entities_) {
+        if (!entity || !entity->visible || !entity->has_collision || !entity->mesh) {
+            continue;
+        }
+
+        AABB aabb = entity->world_aabb();
+        if (!aabb.is_valid()) {
+            continue;
+        }
+
+        float t = 0.0f;
+        if (ray.intersect_aabb(aabb, t)) {
+            if (t >= 0.0f && t < closest_hit.distance) {
+                closest_hit.hit = true;
+                closest_hit.distance = t;
+                closest_hit.point = ray.point_at(t);
+                closest_hit.entity = entity;
+            }
+        }
+    }
+
+    return closest_hit;
 }
 
 } // namespace engine

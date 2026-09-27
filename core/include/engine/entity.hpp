@@ -37,6 +37,15 @@ public:
         return glm::mat4(glm::transpose(glm::inverse(m3)));
     }
 
+    bool has_collision{true};
+
+    AABB world_aabb() const {
+        if (!mesh || !mesh->local_aabb.is_valid()) {
+            return AABB{};
+        }
+        return mesh->local_aabb.transformed(world_model_matrix());
+    }
+
     void set_color(float r, float g, float b, float a = 1.0f) {
         color = { r, g, b, a };
         if (material) {

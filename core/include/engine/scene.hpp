@@ -25,6 +25,8 @@ public:
     void remove_entity(std::shared_ptr<Entity> entity);
     void clear();
 
+    RaycastHit raycast(const Ray& ray, float max_distance = 1000.0f) const;
+
     const std::vector<std::shared_ptr<Entity>>& entities() const { return entities_; }
     std::shared_ptr<Mesh> default_cube_mesh();
     std::shared_ptr<Texture> default_checker_texture();

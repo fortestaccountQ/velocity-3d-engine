@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "engine/physics.hpp"
+
 namespace engine {
 
 struct Vertex {
@@ -25,6 +27,15 @@ public:
 
     std::vector<Vertex> cpu_vertices;
     std::vector<uint16_t> cpu_indices;
+
+    AABB local_aabb;
+
+    void calculate_aabb() {
+        local_aabb = AABB{};
+        for (const auto& v : cpu_vertices) {
+            local_aabb.expand(v.position);
+        }
+    }
 
     bool ensure_gpu_buffers();
     void destroy();

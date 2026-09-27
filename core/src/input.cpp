@@ -1,6 +1,16 @@
 #include "engine/input.hpp"
+#include "sokol_app.h"
 
 namespace engine {
+
+bool InputManager::is_mouse_locked() const {
+    return sapp_mouse_locked();
+}
+
+void InputManager::set_mouse_locked(bool locked) {
+    sapp_lock_mouse(locked);
+    sapp_show_mouse(!locked);
+}
 
 InputManager::InputManager() {
     keys_down_.fill(false);

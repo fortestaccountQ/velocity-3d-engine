@@ -31,6 +31,16 @@ public:
     }
 
     bool is_visible() const { return root_entity->visible; }
+
+    AABB world_aabb() const {
+        AABB box;
+        for (const auto& m : meshes) {
+            if (m && m->visible) {
+                box.expand(m->world_aabb());
+            }
+        }
+        return box;
+    }
 };
 
 } // namespace engine

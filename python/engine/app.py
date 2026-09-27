@@ -106,3 +106,11 @@ class App:
 
     def get_clear_color(self) -> list[float]:
         return list(self._core.get_clear_color())
+
+    def set_mouse_locked(self, locked: bool) -> None:
+        """Lock or release mouse cursor (hides and locks cursor to window center)."""
+        self._core.set_mouse_locked(bool(locked))
+
+    def is_mouse_locked(self) -> bool:
+        """True if the mouse cursor is currently locked/hidden."""
+        return self._core.is_mouse_locked()

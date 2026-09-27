@@ -104,6 +104,7 @@ std::shared_ptr<Mesh> Mesh::create_cube() {
     };
 
     mesh->num_indices = 36;
+    mesh->calculate_aabb();
     mesh->ensure_gpu_buffers();
     return mesh;
 }
@@ -126,6 +127,7 @@ std::shared_ptr<Mesh> Mesh::create_plane(float size, float uv_tiling) {
     };
 
     mesh->num_indices = 6;
+    mesh->calculate_aabb();
     mesh->ensure_gpu_buffers();
     return mesh;
 }

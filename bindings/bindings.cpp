@@ -11,6 +11,7 @@
 #include "engine/camera.hpp"
 #include "engine/light.hpp"
 #include "engine/mesh.hpp"
+#include "engine/physics.hpp"
 #include "engine/texture.hpp"
 #include "engine/material.hpp"
 #include "engine/entity.hpp"
@@ -99,6 +100,11 @@ NB_MODULE(_engine_core, m) {
         .def_rw("x", &glm::vec3::x)
         .def_rw("y", &glm::vec3::y)
         .def_rw("z", &glm::vec3::z)
+        .def("__len__", [](const glm::vec3&) { return 3; })
+        .def("__getitem__", [](const glm::vec3& v, size_t i) -> float {
+            if (i >= 3) throw nb::index_error();
+            return v[static_cast<glm::length_t>(i)];
+        })
         .def("__repr__", [](const glm::vec3& v) {
             return "Vec3(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ")";
         });
@@ -110,8 +116,97 @@ NB_MODULE(_engine_core, m) {
         .def_rw("y", &glm::vec4::y)
         .def_rw("z", &glm::vec4::z)
         .def_rw("w", &glm::vec4::w)
+        .def("__len__", [](const glm::vec4&) { return 4; })
+        .def("__getitem__", [](const glm::vec4& v, size_t i) -> float {
+            if (i >= 4) throw nb::index_error();
+            return v[static_cast<glm::length_t>(i)];
+        })
         .def("__repr__", [](const glm::vec4& v) {
             return "Vec4(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ", " + std::to_string(v.w) + ")";
+        });
+
+    // -----------------------------------------------------------------------
+    // Physics: AABB, Ray, RaycastHit
+    // -----------------------------------------------------------------------
+    nb::class_<engine::AABB>(m, "AABB")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, const glm::vec3&>(), "min_point"_a, "max_point"_a)
+        .def_prop_rw("min_point",
+            [](engine::AABB& b) -> glm::vec3& { return b.min_point; },
+            [](engine::AABB& b, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) b.min_point = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) b.min_point = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("max_point",
+            [](engine::AABB& b) -> glm::vec3& { return b.max_point; },
+            [](engine::AABB& b, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) b.max_point = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) b.max_point = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def("is_valid", &engine::AABB::is_valid)
+        .def("center", &engine::AABB::center)
+        .def("size", &engine::AABB::size)
+        .def("extents", &engine::AABB::extents)
+        .def("expand", [](engine::AABB& b, const nb::object& obj) {
+            if (nb::isinstance<glm::vec3>(obj)) {
+                b.expand(nb::cast<glm::vec3>(obj));
+            } else if (nb::isinstance<engine::AABB>(obj)) {
+                b.expand(nb::cast<engine::AABB>(obj));
+            } else if (nb::isinstance<nb::tuple>(obj) || nb::isinstance<nb::list>(obj)) {
+                auto seq = nb::cast<std::vector<float>>(obj);
+                if (seq.size() >= 3) b.expand({ seq[0], seq[1], seq[2] });
+            }
+        }, "other"_a)
+        .def("contains", [](const engine::AABB& b, const nb::object& obj) -> bool {
+            if (nb::isinstance<glm::vec3>(obj)) {
+                return b.contains(nb::cast<glm::vec3>(obj));
+            } else if (nb::isinstance<nb::tuple>(obj) || nb::isinstance<nb::list>(obj)) {
+                auto seq = nb::cast<std::vector<float>>(obj);
+                if (seq.size() >= 3) return b.contains({ seq[0], seq[1], seq[2] });
+            }
+            return false;
+        }, "point"_a)
+        .def("intersects", &engine::AABB::intersects, "other"_a)
+        .def("transformed", [](const engine::AABB& b, const engine::Transform& t) {
+            return b.transformed(t.model_matrix());
+        }, "transform"_a)
+        .def("__repr__", [](const engine::AABB& b) {
+            return "AABB(min=(" + std::to_string(b.min_point.x) + ", " + std::to_string(b.min_point.y) + ", " + std::to_string(b.min_point.z) +
+                   "), max=(" + std::to_string(b.max_point.x) + ", " + std::to_string(b.max_point.y) + ", " + std::to_string(b.max_point.z) + "))";
+        });
+
+    nb::class_<engine::Ray>(m, "Ray")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, const glm::vec3&>(), "origin"_a, "direction"_a)
+        .def_rw("origin", &engine::Ray::origin)
+        .def_rw("direction", &engine::Ray::direction)
+        .def("point_at", &engine::Ray::point_at, "t"_a)
+        .def("intersect_aabb", [](const engine::Ray& r, const engine::AABB& b) -> nb::tuple {
+            float t = 0.0f;
+            bool hit = r.intersect_aabb(b, t);
+            return nb::make_tuple(hit, t);
+        }, "aabb"_a)
+        .def("__repr__", [](const engine::Ray& r) {
+            return "Ray(origin=(" + std::to_string(r.origin.x) + ", " + std::to_string(r.origin.y) + ", " + std::to_string(r.origin.z) +
+                   "), dir=(" + std::to_string(r.direction.x) + ", " + std::to_string(r.direction.y) + ", " + std::to_string(r.direction.z) + "))";
+        });
+
+    nb::class_<engine::RaycastHit>(m, "RaycastHit")
+        .def(nb::init<>())
+        .def_ro("hit", &engine::RaycastHit::hit)
+        .def_ro("distance", &engine::RaycastHit::distance)
+        .def_ro("point", &engine::RaycastHit::point)
+        .def_ro("entity", &engine::RaycastHit::entity)
+        .def("__repr__", [](const engine::RaycastHit& h) {
+            if (!h.hit) return std::string("RaycastHit(miss)");
+            return "RaycastHit(dist=" + std::to_string(h.distance) +
+                   ", point=(" + std::to_string(h.point.x) + ", " + std::to_string(h.point.y) + ", " + std::to_string(h.point.z) + "))";
         });
 
     // -----------------------------------------------------------------------
@@ -122,6 +217,8 @@ NB_MODULE(_engine_core, m) {
         .def_ro("vbuf_id", &engine::Mesh::vbuf_id)
         .def_ro("ibuf_id", &engine::Mesh::ibuf_id)
         .def_ro("num_indices", &engine::Mesh::num_indices)
+        .def_ro("local_aabb", &engine::Mesh::local_aabb)
+        .def("calculate_aabb", &engine::Mesh::calculate_aabb)
         .def_static("create_cube", &engine::Mesh::create_cube)
         .def_static("create_plane", &engine::Mesh::create_plane, "size"_a = 10.0f, "uv_tiling"_a = 5.0f);
 
@@ -252,8 +349,12 @@ NB_MODULE(_engine_core, m) {
         .def_rw("fov", &engine::Camera::fov)
         .def_rw("near_plane", &engine::Camera::near_plane)
         .def_rw("far_plane", &engine::Camera::far_plane)
+        .def_rw("yaw", &engine::Camera::yaw)
+        .def_rw("pitch", &engine::Camera::pitch)
         .def("set_position", &engine::Camera::set_position, "x"_a, "y"_a, "z"_a)
         .def("set_target", &engine::Camera::set_target, "x"_a, "y"_a, "z"_a)
+        .def("rotate", &engine::Camera::rotate, "delta_yaw"_a, "delta_pitch"_a)
+        .def("set_yaw_pitch", &engine::Camera::set_yaw_pitch, "yaw"_a, "pitch"_a)
         .def("move_forward", &engine::Camera::move_forward, "distance"_a)
         .def("move_right", &engine::Camera::move_right, "distance"_a)
         .def("move_up", &engine::Camera::move_up, "distance"_a)
@@ -322,6 +423,8 @@ NB_MODULE(_engine_core, m) {
                     else if (seq.size() == 3) e.color = { seq[0], seq[1], seq[2], 1.0f };
                 }
             }, nb::rv_policy::reference_internal)
+        .def_rw("has_collision", &engine::Entity::has_collision)
+        .def("world_aabb", &engine::Entity::world_aabb)
         .def("set_color", &engine::Entity::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f);
 
     // -----------------------------------------------------------------------
@@ -347,6 +450,7 @@ NB_MODULE(_engine_core, m) {
         .def("create_entity", &engine::Scene::create_entity, "name"_a = "Entity")
         .def("add_entity", &engine::Scene::add_entity, "entity"_a)
         .def("remove_entity", &engine::Scene::remove_entity, "entity"_a)
+        .def("raycast", &engine::Scene::raycast, "ray"_a, "max_distance"_a = 1000.0f)
         .def("clear", &engine::Scene::clear)
         .def_prop_ro("entities", &engine::Scene::entities);
 
@@ -366,7 +470,8 @@ NB_MODULE(_engine_core, m) {
         .def("set_visible", &engine::Model::set_visible, "visible"_a)
         .def_prop_rw("visible",
             &engine::Model::is_visible,
-            &engine::Model::set_visible);
+            &engine::Model::set_visible)
+        .def("world_aabb", &engine::Model::world_aabb);
 
     // -----------------------------------------------------------------------
     // InputManager
@@ -379,7 +484,9 @@ NB_MODULE(_engine_core, m) {
         .def_prop_ro("mouse_x", &engine::InputManager::mouse_x)
         .def_prop_ro("mouse_y", &engine::InputManager::mouse_y)
         .def_prop_ro("mouse_dx", &engine::InputManager::mouse_dx)
-        .def_prop_ro("mouse_dy", &engine::InputManager::mouse_dy);
+        .def_prop_ro("mouse_dy", &engine::InputManager::mouse_dy)
+        .def("is_mouse_locked", &engine::InputManager::is_mouse_locked)
+        .def("set_mouse_locked", &engine::InputManager::set_mouse_locked, "locked"_a);
 
     // -----------------------------------------------------------------------
     // EngineApp
@@ -422,6 +529,8 @@ NB_MODULE(_engine_core, m) {
         // Color & Window
         .def("set_clear_color", &engine::EngineApp::set_clear_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
         .def("get_clear_color", &engine::EngineApp::get_clear_color)
+        .def("set_mouse_locked", &engine::EngineApp::set_mouse_locked, "locked"_a)
+        .def("is_mouse_locked", &engine::EngineApp::is_mouse_locked)
         .def_prop_ro("width", &engine::EngineApp::width)
         .def_prop_ro("height", &engine::EngineApp::height)
         .def_prop_ro("title", &engine::EngineApp::title);

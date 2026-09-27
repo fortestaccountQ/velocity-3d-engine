@@ -204,6 +204,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                     mesh->num_indices = static_cast<int>(pos_acc->count);
                 }
 
+                mesh->calculate_aabb();
                 mesh->ensure_gpu_buffers();
 
                 std::shared_ptr<Entity> prim_entity = node_entity;

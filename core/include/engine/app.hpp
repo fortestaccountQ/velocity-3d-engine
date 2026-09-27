@@ -50,6 +50,10 @@ public:
     Camera& camera() { return camera_; }
     InputManager& input() { return input_; }
 
+    // Mouse lock & visibility
+    void set_mouse_locked(bool locked);
+    bool is_mouse_locked() const;
+
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
