@@ -176,13 +176,14 @@ def main():
 
     last_lmb_down = False
     last_tab_down = False
+    last_f1_down = False
     score = 0
     frame_count = 0
 
     # 6. Game Loop Update
     @app.on_update
     def update(dt: float):
-        nonlocal last_lmb_down, last_tab_down, score, frame_count
+        nonlocal last_lmb_down, last_tab_down, last_f1_down, score, frame_count
         frame_count += 1
         if frame_count == 1 and "--test" not in sys.argv:
             app.set_mouse_locked(True)
@@ -196,9 +197,11 @@ def main():
         last_tab_down = tab_down
 
         # Toggle Hitbox Wireframe with F1
-        if app.input.is_key_pressed(Key.F1):
+        f1_down = app.input.is_key_down(Key.F1)
+        if f1_down and not last_f1_down:
             app.show_debug_hitboxes = not app.show_debug_hitboxes
             print(f"[Debug] Show Hitboxes: {app.show_debug_hitboxes}")
+        last_f1_down = f1_down
 
         # Update Player Controller (with sub-stepping, depenetration & footstep sound)
         controller.update(dt)

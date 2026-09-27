@@ -1104,8 +1104,6 @@ void EngineApp::on_event(const void* raw_event) {
         case SAPP_EVENTTYPE_KEY_DOWN:
             if (ev->key_code == SAPP_KEYCODE_ESCAPE) {
                 sapp_request_quit();
-            } else if (ev->key_code == SAPP_KEYCODE_F1) {
-                toggle_debug_hitboxes();
             }
             input_.on_key_down(ev->key_code);
             break;
