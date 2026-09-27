@@ -1,0 +1,29 @@
+# Build directories
+build/
+_skbuild/
+dist/
+*.egg-info/
+
+# Compiled binary extensions
+*.pyd
+*.so
+*.dll
+*.dylib
+*.lib
+*.exp
+*.obj
+*.o
+*.pdb
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE files
+.vscode/
+.vs/
+*.sln
+*.vcxproj*
+*.user
