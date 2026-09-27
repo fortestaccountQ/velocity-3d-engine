@@ -499,6 +499,15 @@ NB_MODULE(_engine_core, m) {
             [](engine::Entity& e) -> std::shared_ptr<engine::Entity> { return e.parent; },
             [](engine::Entity& e, std::shared_ptr<engine::Entity> p) { e.parent = p; })
         .def("world_aabb", &engine::Entity::world_aabb)
+        .def("local_collision_box", &engine::Entity::local_collision_box)
+        .def("world_obb_corners", [](const engine::Entity& e) {
+            auto arr = e.world_obb_corners();
+            nb::list res;
+            for (const auto& pt : arr) {
+                res.append(pt);
+            }
+            return res;
+        })
         .def("set_color", &engine::Entity::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f);
 
     // -----------------------------------------------------------------------

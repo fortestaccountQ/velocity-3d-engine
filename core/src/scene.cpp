@@ -89,13 +89,20 @@ RaycastHit Scene::raycast(const Ray& ray, float max_distance) const {
             continue;
         }
 
-        AABB aabb = entity->world_aabb();
-        if (!aabb.is_valid()) {
+        AABB lbox = entity->local_collision_box();
+        if (!lbox.is_valid()) {
             continue;
         }
 
+        glm::mat4 model = entity->world_model_matrix();
+        glm::mat4 inv_model = glm::inverse(model);
+
+        glm::vec3 orig_local = glm::vec3(inv_model * glm::vec4(ray.origin, 1.0f));
+        glm::vec3 dir_local = glm::vec3(inv_model * glm::vec4(ray.direction, 0.0f));
+
+        Ray local_ray{ orig_local, dir_local };
         float t = 0.0f;
-        if (ray.intersect_aabb(aabb, t)) {
+        if (local_ray.intersect_aabb(lbox, t)) {
             if (t >= 0.0f && t < closest_hit.distance) {
                 closest_hit.hit = true;
                 closest_hit.distance = t;

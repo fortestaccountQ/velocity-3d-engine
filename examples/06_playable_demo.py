@@ -140,7 +140,7 @@ def main():
     box.name = "BoxModel"
     box.transform.scale = (1.1, 1.1, 1.1)
     box.transform.position = (-4.5, 0.55, -3.5)
-    box.set_collision_scale(0.85)
+    box.set_collision_scale(1.0)
 
     # Model 3: Avocado
     avocado = app.scene.load_model(str(assets_dir / "avocado.glb"))
@@ -150,8 +150,13 @@ def main():
     avocado.set_collision_scale(0.75)
 
     # 5. Setup Camera & First-Person Controller with Audio Integration
-    app.camera.set_position(0.0, 1.7, -8.0)
-    app.camera.set_target(0.0, 1.7, 0.0)
+    if "--snap-box" in sys.argv:
+        app.camera.set_position(-3.2, 1.2, -5.5)
+        app.camera.set_target(-4.5, 0.55, -3.5)
+        box.transform.rotation.y = 35.0
+    else:
+        app.camera.set_position(0.0, 1.7, -8.0)
+        app.camera.set_target(0.0, 1.7, 0.0)
 
     controller = FirstPersonController(
         camera=app.camera,
@@ -272,7 +277,12 @@ def main():
                 print("[Screenshot] Capturing game screen via direct computer-use...", flush=True)
                 sys.path.append("C:/Users/Admin/.gemini/config/skills/computer-use/scripts")
                 from computer import get_windows, capture_rect
-                png_name = "milestone8_hitboxes_f1.png" if "--debug-hitboxes" in sys.argv else "milestone8_visual_polish.png"
+                if "--snap-box" in sys.argv:
+                    png_name = "milestone8_box_obb.png"
+                elif "--debug-hitboxes" in sys.argv:
+                    png_name = "milestone8_hitboxes_f1.png"
+                else:
+                    png_name = "milestone8_visual_polish.png"
                 out_png = f"C:/Users/Admin/.gemini/antigravity-cli/brain/652d8d55-b5ed-48f3-a093-40b0b4448338/{png_name}"
                 target = None
                 for w in get_windows():

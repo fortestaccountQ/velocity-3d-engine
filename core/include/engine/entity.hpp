@@ -5,6 +5,7 @@
 #include "engine/material.hpp"
 #include <string>
 #include <memory>
+#include <array>
 
 namespace engine {
 
@@ -42,19 +43,49 @@ public:
     glm::vec3 collision_padding{0.0f};
     bool cast_shadows{true};
 
-    AABB world_aabb() const {
+    AABB local_collision_box() const {
         if (!mesh || !mesh->local_aabb.is_valid()) {
             return AABB{};
         }
-        AABB box = mesh->local_aabb.transformed(world_model_matrix());
-        if (collision_scale != 1.0f && box.is_valid()) {
+        AABB box = mesh->local_aabb;
+        if (collision_scale != 1.0f) {
             box = box.scaled(collision_scale);
         }
-        if (box.is_valid() && (collision_padding.x != 0.0f || collision_padding.y != 0.0f || collision_padding.z != 0.0f)) {
+        if (collision_padding.x != 0.0f || collision_padding.y != 0.0f || collision_padding.z != 0.0f) {
             box.min_point += collision_padding;
             box.max_point -= collision_padding;
         }
         return box;
+    }
+
+    std::array<glm::vec3, 8> world_obb_corners() const {
+        AABB lbox = local_collision_box();
+        std::array<glm::vec3, 8> corners{};
+        if (!lbox.is_valid()) return corners;
+
+        glm::vec3 min = lbox.min_point;
+        glm::vec3 max = lbox.max_point;
+
+        glm::vec3 lc[8] = {
+            { min.x, min.y, min.z }, { max.x, min.y, min.z },
+            { max.x, max.y, min.z }, { min.x, max.y, min.z },
+            { min.x, min.y, max.z }, { max.x, min.y, max.z },
+            { max.x, max.y, max.z }, { min.x, max.y, max.z }
+        };
+
+        glm::mat4 model = world_model_matrix();
+        for (int i = 0; i < 8; ++i) {
+            corners[i] = glm::vec3(model * glm::vec4(lc[i], 1.0f));
+        }
+        return corners;
+    }
+
+    AABB world_aabb() const {
+        AABB lbox = local_collision_box();
+        if (!lbox.is_valid()) {
+            return AABB{};
+        }
+        return lbox.transformed(world_model_matrix());
     }
 
     void set_color(float r, float g, float b, float a = 1.0f) {

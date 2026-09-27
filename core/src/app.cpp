@@ -734,19 +734,10 @@ void EngineApp::render_debug_hitboxes(const glm::mat4& vp) {
     glm::vec4 green{ 0.15f, 0.95f, 0.25f, 1.0f };
 
     for (const auto& entity : scene_.entities()) {
-        if (!entity || !entity->visible || !entity->has_collision) continue;
-        AABB box = entity->world_aabb();
-        if (!box.is_valid()) continue;
+        if (!entity || !entity->visible || !entity->has_collision || !entity->mesh) continue;
+        if (!entity->local_collision_box().is_valid()) continue;
 
-        glm::vec3 min = box.min_point;
-        glm::vec3 max = box.max_point;
-
-        glm::vec3 c[8] = {
-            { min.x, min.y, min.z }, { max.x, min.y, min.z },
-            { max.x, max.y, min.z }, { min.x, max.y, min.z },
-            { min.x, min.y, max.z }, { max.x, min.y, max.z },
-            { max.x, max.y, max.z }, { min.x, max.y, max.z }
-        };
+        auto c = entity->world_obb_corners();
 
         static const int edges[12][2] = {
             {0,1}, {1,2}, {2,3}, {3,0},
@@ -850,17 +841,44 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     add_rect(verts, cx - 1.0f, cy - 1.0f, cx + 1.0f, cy + 1.0f, cross_color);
 
     // 2. Top-Left HUD Info Card (FPS & Score)
-    add_rect(verts, 12.0f, 12.0f, 260.0f, 44.0f, { 0.06f, 0.10f, 0.16f, 0.72f });
-    add_rect(verts, 12.0f, 12.0f, 260.0f, 14.0f, { 0.25f, 0.65f, 0.95f, 0.90f }); // Top accent line
-
     char fps_score_buf[64];
-    std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
-    add_string(verts, fps_score_buf, 20.0f, 22.0f, 2.0f, { 1.0f, 0.92f, 0.45f, 1.0f });
+    int top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+    float t_scale = 1.8f;
+    float t_char_w = 8.0f * t_scale;
+    float t_width = top_len * t_char_w;
+    float t_pad_x = 16.0f;
+    float t_pad_y = 9.0f;
+    float top_x0 = 16.0f;
+    float top_y0 = 16.0f;
+    float top_x1 = top_x0 + t_width + t_pad_x * 2.0f;
+    float top_y1 = top_y0 + 8.0f * t_scale + t_pad_y * 2.0f;
+
+    // Dark semi-transparent slate card
+    add_rect(verts, top_x0, top_y0, top_x1, top_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
+    // Neon cyan top accent line spanning exact card width
+    add_rect(verts, top_x0, top_y0, top_x1, top_y0 + 3.0f, { 0.25f, 0.65f, 0.95f, 0.95f });
+    // Text inside card
+    add_string(verts, fps_score_buf, top_x0 + t_pad_x, top_y0 + t_pad_y + 2.0f, t_scale, { 1.0f, 0.92f, 0.45f, 1.0f });
 
     // 3. Bottom Controls Hint Card
-    add_rect(verts, 12.0f, screen_h - 32.0f, 490.0f, screen_h - 10.0f, { 0.06f, 0.10f, 0.16f, 0.65f });
     const char* hint = "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
-    add_string(verts, hint, 20.0f, screen_h - 26.0f, 1.5f, { 0.88f, 0.92f, 0.98f, 0.90f });
+    float b_scale = 1.35f;
+    float b_char_w = 8.0f * b_scale;
+    float b_width = std::strlen(hint) * b_char_w;
+    float b_pad_x = 16.0f;
+    float b_pad_y = 8.0f;
+    float b_h = 8.0f * b_scale + b_pad_y * 2.0f;
+    float b_x0 = 16.0f;
+    float b_y0 = screen_h - b_h - 16.0f;
+    float b_x1 = b_x0 + b_width + b_pad_x * 2.0f;
+    float b_y1 = b_y0 + b_h;
+
+    // Background plate
+    add_rect(verts, b_x0, b_y0, b_x1, b_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
+    // Subtle border/accent
+    add_rect(verts, b_x0, b_y0, b_x1, b_y0 + 2.0f, { 0.35f, 0.50f, 0.70f, 0.85f });
+    // Text inside card
+    add_string(verts, hint, b_x0 + b_pad_x, b_y0 + b_pad_y + 1.0f, b_scale, { 0.90f, 0.93f, 0.98f, 0.95f });
 
     if (verts.empty()) return;
 
