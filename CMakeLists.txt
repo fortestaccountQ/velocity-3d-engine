@@ -72,6 +72,9 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(engine_core STATIC
     core/src/sokol_impl.cpp
+    core/src/mesh.cpp
+    core/src/scene.cpp
+    core/src/input.cpp
     core/src/app.cpp
 )
 
@@ -149,6 +152,7 @@ if (CMAKE_CONFIGURATION_TYPES)
         set_target_properties(_engine_core PROPERTIES
             LIBRARY_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${ENGINE_OUTPUT_DIR}"
             RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${ENGINE_OUTPUT_DIR}"
+            ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${ENGINE_OUTPUT_DIR}"
         )
     endforeach()
 endif()

@@ -5,73 +5,155 @@
 #include "sokol_glue.h"
 #include "sokol_log.h"
 
-#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
 namespace engine {
 
 // ---------------------------------------------------------------------------
-// Shaders for various platforms
+// Uniform Buffer Structs matching shader layouts
+// ---------------------------------------------------------------------------
+struct VSParams {
+    glm::mat4 mvp;
+    glm::mat4 model;
+    glm::mat4 normal_mat;
+};
+
+struct FSParams {
+    glm::vec4 light_dir;      // xyz = dir, w = intensity
+    glm::vec4 light_color;    // rgb = color, w = unused
+    glm::vec4 ambient_color;  // rgb = ambient, w = unused
+    glm::vec4 eye_pos;        // xyz = camera position, w = shininess
+    glm::vec4 entity_color;   // rgba
+};
+
+// ---------------------------------------------------------------------------
+// Shaders for various platforms with Blinn-Phong Lighting
 // ---------------------------------------------------------------------------
 #if defined(SOKOL_D3D11)
 static const char* hlsl_vs =
     "cbuffer vs_params : register(b0) {\n"
     "    float4x4 mvp;\n"
+    "    float4x4 model;\n"
+    "    float4x4 normal_mat;\n"
     "};\n"
     "struct vs_in {\n"
     "    float3 pos : POSITION;\n"
+    "    float3 normal : NORMAL;\n"
     "    float4 color : COLOR0;\n"
     "};\n"
     "struct vs_out {\n"
     "    float4 color : COLOR0;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float3 world_pos : TEXCOORD0;\n"
     "    float4 pos : SV_Position;\n"
     "};\n"
     "vs_out main(vs_in inp) {\n"
     "    vs_out outp;\n"
     "    outp.pos = mul(mvp, float4(inp.pos, 1.0));\n"
+    "    outp.world_pos = mul(model, float4(inp.pos, 1.0)).xyz;\n"
+    "    outp.normal = mul((float3x3)normal_mat, inp.normal);\n"
     "    outp.color = inp.color;\n"
     "    return outp;\n"
     "}\n";
 
 static const char* hlsl_fs =
-    "float4 main(float4 color : COLOR0) : SV_Target0 {\n"
-    "    return color;\n"
+    "cbuffer fs_params : register(b1) {\n"
+    "    float4 light_dir;\n"
+    "    float4 light_color;\n"
+    "    float4 ambient_color;\n"
+    "    float4 eye_pos;\n"
+    "    float4 entity_color;\n"
+    "};\n"
+    "struct ps_in {\n"
+    "    float4 color : COLOR0;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float3 world_pos : TEXCOORD0;\n"
+    "};\n"
+    "float4 main(ps_in inp) : SV_Target0 {\n"
+    "    float3 N = normalize(inp.normal);\n"
+    "    float3 L = normalize(-light_dir.xyz);\n"
+    "    float3 V = normalize(eye_pos.xyz - inp.world_pos);\n"
+    "    float3 H = normalize(L + V);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float3 diffuse = NdotL * light_color.rgb * light_dir.w;\n"
+    "    float3 specular = float3(0.0, 0.0, 0.0);\n"
+    "    if (NdotL > 0.0) {\n"
+    "        float NdotH = max(dot(N, H), 0.0);\n"
+    "        specular = pow(NdotH, eye_pos.w) * light_color.rgb * 0.45;\n"
+    "    }\n"
+    "    float3 base_color = inp.color.rgb * entity_color.rgb;\n"
+    "    float3 final_color = (ambient_color.rgb + diffuse) * base_color + specular;\n"
+    "    return float4(final_color, inp.color.a * entity_color.a);\n"
     "}\n";
 
 #elif defined(SOKOL_METAL)
 static const char* metal_src =
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
-    "struct params_t {\n"
+    "struct vs_params_t {\n"
     "    float4x4 mvp;\n"
+    "    float4x4 model;\n"
+    "    float4x4 normal_mat;\n"
+    "};\n"
+    "struct fs_params_t {\n"
+    "    float4 light_dir;\n"
+    "    float4 light_color;\n"
+    "    float4 ambient_color;\n"
+    "    float4 eye_pos;\n"
+    "    float4 entity_color;\n"
     "};\n"
     "struct vs_in {\n"
     "    float3 position [[attribute(0)]];\n"
-    "    float4 color0 [[attribute(1)]];\n"
+    "    float3 normal   [[attribute(1)]];\n"
+    "    float4 color0   [[attribute(2)]];\n"
     "};\n"
     "struct vs_out {\n"
     "    float4 pos [[position]];\n"
     "    float4 color;\n"
+    "    float3 normal;\n"
+    "    float3 world_pos;\n"
     "};\n"
-    "vertex vs_out vs_main(vs_in in [[stage_in]], constant params_t& params [[buffer(0)]]) {\n"
+    "vertex vs_out vs_main(vs_in in [[stage_in]], constant vs_params_t& params [[buffer(0)]]) {\n"
     "    vs_out out;\n"
     "    out.pos = params.mvp * float4(in.position, 1.0);\n"
+    "    out.world_pos = (params.model * float4(in.position, 1.0)).xyz;\n"
+    "    out.normal = float3x3(params.normal_mat[0].xyz, params.normal_mat[1].xyz, params.normal_mat[2].xyz) * in.normal;\n"
     "    out.color = in.color0;\n"
     "    return out;\n"
     "}\n"
-    "fragment float4 fs_main(vs_out in [[stage_in]]) {\n"
-    "    return in.color;\n"
+    "fragment float4 fs_main(vs_out in [[stage_in]], constant fs_params_t& params [[buffer(0)]]) {\n"
+    "    float3 N = normalize(in.normal);\n"
+    "    float3 L = normalize(-params.light_dir.xyz);\n"
+    "    float3 V = normalize(params.eye_pos.xyz - in.world_pos);\n"
+    "    float3 H = normalize(L + V);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float3 diffuse = NdotL * params.light_color.rgb * params.light_dir.w;\n"
+    "    float3 specular = float3(0.0);\n"
+    "    if (NdotL > 0.0) {\n"
+    "        float NdotH = max(dot(N, H), 0.0);\n"
+    "        specular = pow(NdotH, params.eye_pos.w) * params.light_color.rgb * 0.45;\n"
+    "    }\n"
+    "    float3 base_color = in.color.rgb * params.entity_color.rgb;\n"
+    "    float3 final_color = (params.ambient_color.rgb + diffuse) * base_color + specular;\n"
+    "    return float4(final_color, in.color.a * params.entity_color.a);\n"
     "}\n";
 
 #elif defined(SOKOL_GLES3)
 static const char* glsl_vs =
     "#version 300 es\n"
     "layout(location=0) in vec3 position;\n"
-    "layout(location=1) in vec4 color0;\n"
+    "layout(location=1) in vec3 normal;\n"
+    "layout(location=2) in vec4 color0;\n"
     "uniform mat4 mvp;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 normal_mat;\n"
     "out vec4 color;\n"
+    "out vec3 v_normal;\n"
+    "out vec3 v_world_pos;\n"
     "void main() {\n"
     "    gl_Position = mvp * vec4(position, 1.0);\n"
+    "    v_world_pos = (model * vec4(position, 1.0)).xyz;\n"
+    "    v_normal = mat3(normal_mat) * normal;\n"
     "    color = color0;\n"
     "}\n";
 
@@ -79,29 +161,76 @@ static const char* glsl_fs =
     "#version 300 es\n"
     "precision mediump float;\n"
     "in vec4 color;\n"
+    "in vec3 v_normal;\n"
+    "in vec3 v_world_pos;\n"
     "out vec4 frag_color;\n"
+    "uniform vec4 light_dir;\n"
+    "uniform vec4 light_color;\n"
+    "uniform vec4 ambient_color;\n"
+    "uniform vec4 eye_pos;\n"
+    "uniform vec4 entity_color;\n"
     "void main() {\n"
-    "    frag_color = color;\n"
+    "    vec3 N = normalize(v_normal);\n"
+    "    vec3 L = normalize(-light_dir.xyz);\n"
+    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
+    "    vec3 H = normalize(L + V);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    vec3 diffuse = NdotL * light_color.rgb * light_dir.w;\n"
+    "    vec3 specular = vec3(0.0);\n"
+    "    if (NdotL > 0.0) {\n"
+    "        float NdotH = max(dot(N, H), 0.0);\n"
+    "        specular = pow(NdotH, eye_pos.w) * light_color.rgb * 0.45;\n"
+    "    }\n"
+    "    vec3 base_color = color.rgb * entity_color.rgb;\n"
+    "    vec3 final_color = (ambient_color.rgb + diffuse) * base_color + specular;\n"
+    "    frag_color = vec4(final_color, color.a * entity_color.a);\n"
     "}\n";
 
 #else // Desktop GLCORE
 static const char* glsl_vs =
     "#version 330\n"
     "layout(location=0) in vec3 position;\n"
-    "layout(location=1) in vec4 color0;\n"
+    "layout(location=1) in vec3 normal;\n"
+    "layout(location=2) in vec4 color0;\n"
     "uniform mat4 mvp;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 normal_mat;\n"
     "out vec4 color;\n"
+    "out vec3 v_normal;\n"
+    "out vec3 v_world_pos;\n"
     "void main() {\n"
     "    gl_Position = mvp * vec4(position, 1.0);\n"
+    "    v_world_pos = (model * vec4(position, 1.0)).xyz;\n"
+    "    v_normal = mat3(normal_mat) * normal;\n"
     "    color = color0;\n"
     "}\n";
 
 static const char* glsl_fs =
     "#version 330\n"
     "in vec4 color;\n"
+    "in vec3 v_normal;\n"
+    "in vec3 v_world_pos;\n"
     "out vec4 frag_color;\n"
+    "uniform vec4 light_dir;\n"
+    "uniform vec4 light_color;\n"
+    "uniform vec4 ambient_color;\n"
+    "uniform vec4 eye_pos;\n"
+    "uniform vec4 entity_color;\n"
     "void main() {\n"
-    "    frag_color = color;\n"
+    "    vec3 N = normalize(v_normal);\n"
+    "    vec3 L = normalize(-light_dir.xyz);\n"
+    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
+    "    vec3 H = normalize(L + V);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    vec3 diffuse = NdotL * light_color.rgb * light_dir.w;\n"
+    "    vec3 specular = vec3(0.0);\n"
+    "    if (NdotL > 0.0) {\n"
+    "        float NdotH = max(dot(N, H), 0.0);\n"
+    "        specular = pow(NdotH, eye_pos.w) * light_color.rgb * 0.45;\n"
+    "    }\n"
+    "    vec3 base_color = color.rgb * entity_color.rgb;\n"
+    "    vec3 final_color = (ambient_color.rgb + diffuse) * base_color + specular;\n"
+    "    frag_color = vec4(final_color, color.a * entity_color.a);\n"
     "}\n";
 #endif
 
@@ -133,85 +262,7 @@ void EngineApp::set_update_callback(UpdateCallback callback) {
     update_callback_ = std::move(callback);
 }
 
-void EngineApp::set_rotation(float rx, float ry, float rz) {
-    rotation_ = glm::vec3(rx, ry, rz);
-}
-
-void EngineApp::set_position(float x, float y, float z) {
-    position_ = glm::vec3(x, y, z);
-}
-
-void EngineApp::set_scale(float sx, float sy, float sz) {
-    scale_ = glm::vec3(sx, sy, sz);
-}
-
-void EngineApp::init_mesh_and_pipeline() {
-    // 24 vertices for 6 faces with distinct colors
-    const Vertex vertices[24] = {
-        // Back face (Z = -1, red)
-        { -1.0f, -1.0f, -1.0f,   1.0f, 0.25f, 0.25f, 1.0f },
-        {  1.0f, -1.0f, -1.0f,   1.0f, 0.25f, 0.25f, 1.0f },
-        {  1.0f,  1.0f, -1.0f,   1.0f, 0.25f, 0.25f, 1.0f },
-        { -1.0f,  1.0f, -1.0f,   1.0f, 0.25f, 0.25f, 1.0f },
-
-        // Front face (Z = +1, green)
-        { -1.0f, -1.0f,  1.0f,   0.25f, 1.0f, 0.25f, 1.0f },
-        {  1.0f, -1.0f,  1.0f,   0.25f, 1.0f, 0.25f, 1.0f },
-        {  1.0f,  1.0f,  1.0f,   0.25f, 1.0f, 0.25f, 1.0f },
-        { -1.0f,  1.0f,  1.0f,   0.25f, 1.0f, 0.25f, 1.0f },
-
-        // Left face (X = -1, blue)
-        { -1.0f, -1.0f, -1.0f,   0.25f, 0.45f, 1.0f, 1.0f },
-        { -1.0f,  1.0f, -1.0f,   0.25f, 0.45f, 1.0f, 1.0f },
-        { -1.0f,  1.0f,  1.0f,   0.25f, 0.45f, 1.0f, 1.0f },
-        { -1.0f, -1.0f,  1.0f,   0.25f, 0.45f, 1.0f, 1.0f },
-
-        // Right face (X = +1, yellow)
-        {  1.0f, -1.0f, -1.0f,   1.0f, 0.9f, 0.2f, 1.0f },
-        {  1.0f,  1.0f, -1.0f,   1.0f, 0.9f, 0.2f, 1.0f },
-        {  1.0f,  1.0f,  1.0f,   1.0f, 0.9f, 0.2f, 1.0f },
-        {  1.0f, -1.0f,  1.0f,   1.0f, 0.9f, 0.2f, 1.0f },
-
-        // Bottom face (Y = -1, magenta)
-        { -1.0f, -1.0f, -1.0f,   0.9f, 0.2f, 0.9f, 1.0f },
-        { -1.0f, -1.0f,  1.0f,   0.9f, 0.2f, 0.9f, 1.0f },
-        {  1.0f, -1.0f,  1.0f,   0.9f, 0.2f, 0.9f, 1.0f },
-        {  1.0f, -1.0f, -1.0f,   0.9f, 0.2f, 0.9f, 1.0f },
-
-        // Top face (Y = +1, cyan)
-        { -1.0f,  1.0f, -1.0f,   0.2f, 0.9f, 0.9f, 1.0f },
-        { -1.0f,  1.0f,  1.0f,   0.2f, 0.9f, 0.9f, 1.0f },
-        {  1.0f,  1.0f,  1.0f,   0.2f, 0.9f, 0.9f, 1.0f },
-        {  1.0f,  1.0f, -1.0f,   0.2f, 0.9f, 0.9f, 1.0f },
-    };
-
-    // 36 indices (6 indices per face)
-    const uint16_t indices[36] = {
-        0,  1,  2,    0,  2,  3,
-        6,  5,  4,    7,  6,  4,
-        8,  9, 10,    8, 10, 11,
-       14, 13, 12,   15, 14, 12,
-       16, 17, 18,   16, 18, 19,
-       22, 21, 20,   23, 22, 20
-    };
-
-    // 1. Vertex buffer
-    sg_buffer_desc vbuf_desc{};
-    vbuf_desc.usage.vertex_buffer = true;
-    vbuf_desc.data = SG_RANGE(vertices);
-    vbuf_desc.label = "cube-vertices";
-    sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
-    vbuf_id_ = vbuf.id;
-
-    // 2. Index buffer
-    sg_buffer_desc ibuf_desc{};
-    ibuf_desc.usage.index_buffer = true;
-    ibuf_desc.data = SG_RANGE(indices);
-    ibuf_desc.label = "cube-indices";
-    sg_buffer ibuf = sg_make_buffer(&ibuf_desc);
-    ibuf_id_ = ibuf.id;
-
-    // 3. Shader creation
+void EngineApp::init_pipeline_and_shaders() {
     sg_shader_desc shd_desc{};
 #if defined(SOKOL_D3D11)
     shd_desc.vertex_func.source = hlsl_vs;
@@ -220,46 +271,72 @@ void EngineApp::init_mesh_and_pipeline() {
     shd_desc.fragment_func.source = hlsl_fs;
     shd_desc.fragment_func.entry = "main";
     shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
     shd_desc.attrs[0].hlsl_sem_name = "POSITION";
-    shd_desc.attrs[1].hlsl_sem_name = "COLOR";
-    shd_desc.attrs[1].hlsl_sem_index = 0;
+    shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    shd_desc.attrs[2].hlsl_sem_name = "COLOR";
+    shd_desc.attrs[2].hlsl_sem_index = 0;
+
     shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
-    shd_desc.uniform_blocks[0].size = sizeof(glm::mat4);
+    shd_desc.uniform_blocks[0].size = sizeof(VSParams);
     shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+
+    shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.uniform_blocks[1].size = sizeof(FSParams);
+    shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
+
 #elif defined(SOKOL_METAL)
     shd_desc.vertex_func.source = metal_src;
     shd_desc.vertex_func.entry = "vs_main";
     shd_desc.fragment_func.source = metal_src;
     shd_desc.fragment_func.entry = "fs_main";
+
     shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
-    shd_desc.uniform_blocks[0].size = sizeof(glm::mat4);
+    shd_desc.uniform_blocks[0].size = sizeof(VSParams);
     shd_desc.uniform_blocks[0].msl_buffer_n = 0;
-#else
+
+    shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.uniform_blocks[1].size = sizeof(FSParams);
+    shd_desc.uniform_blocks[1].msl_buffer_n = 1;
+
+#else // GLCORE / GLES3
     shd_desc.vertex_func.source = glsl_vs;
     shd_desc.fragment_func.source = glsl_fs;
+
     shd_desc.attrs[0].glsl_name = "position";
-    shd_desc.attrs[1].glsl_name = "color0";
+    shd_desc.attrs[1].glsl_name = "normal";
+    shd_desc.attrs[2].glsl_name = "color0";
+
     shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
-    shd_desc.uniform_blocks[0].size = sizeof(glm::mat4);
-    shd_desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_MAT4;
-    shd_desc.uniform_blocks[0].glsl_uniforms[0].array_count = 1;
-    shd_desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "mvp";
+    shd_desc.uniform_blocks[0].size = sizeof(VSParams);
+    shd_desc.uniform_blocks[0].glsl_uniforms[0] = { SG_UNIFORMTYPE_MAT4, 1, "mvp" };
+    shd_desc.uniform_blocks[0].glsl_uniforms[1] = { SG_UNIFORMTYPE_MAT4, 1, "model" };
+    shd_desc.uniform_blocks[0].glsl_uniforms[2] = { SG_UNIFORMTYPE_MAT4, 1, "normal_mat" };
+
+    shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.uniform_blocks[1].size = sizeof(FSParams);
+    shd_desc.uniform_blocks[1].glsl_uniforms[0] = { SG_UNIFORMTYPE_FLOAT4, 1, "light_dir" };
+    shd_desc.uniform_blocks[1].glsl_uniforms[1] = { SG_UNIFORMTYPE_FLOAT4, 1, "light_color" };
+    shd_desc.uniform_blocks[1].glsl_uniforms[2] = { SG_UNIFORMTYPE_FLOAT4, 1, "ambient_color" };
+    shd_desc.uniform_blocks[1].glsl_uniforms[3] = { SG_UNIFORMTYPE_FLOAT4, 1, "eye_pos" };
+    shd_desc.uniform_blocks[1].glsl_uniforms[4] = { SG_UNIFORMTYPE_FLOAT4, 1, "entity_color" };
 #endif
-    shd_desc.label = "cube-shader";
+    shd_desc.label = "scene-lighting-shader";
     sg_shader shd = sg_make_shader(&shd_desc);
     shd_id_ = shd.id;
 
-    // 4. Pipeline with depth test
+    // Pipeline with Depth Test
     sg_pipeline_desc pip_desc{};
     pip_desc.layout.buffers[0].stride = sizeof(Vertex);
-    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3; // pos
+    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3; // normal
+    pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT4; // color
     pip_desc.shader = shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
     pip_desc.cull_mode = SG_CULLMODE_NONE;
-    pip_desc.label = "cube-pipeline";
+    pip_desc.label = "scene-lighting-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     pip_id_ = pip.id;
 }
@@ -270,7 +347,7 @@ void EngineApp::on_init() {
     desc.logger.func = slog_func;
     sg_setup(&desc);
 
-    init_mesh_and_pipeline();
+    init_pipeline_and_shaders();
 }
 
 void EngineApp::on_frame() {
@@ -279,7 +356,7 @@ void EngineApp::on_frame() {
     double dt = 0.0;
     if (has_last_frame_) {
         dt = std::chrono::duration<double>(now - last_frame_time_).count();
-        if (dt > 0.1) dt = 0.1; // clamp during stalls
+        if (dt > 0.1) dt = 0.1;
     } else {
         has_last_frame_ = true;
         dt = 1.0 / 60.0;
@@ -295,26 +372,11 @@ void EngineApp::on_frame() {
         }
     }
 
-    // 3. Compute 3D MVP Matrix (GLM)
+    // 3. Update Camera Projection Aspect
     float w = sapp_widthf();
     float h = sapp_heightf();
-    float aspect = (h > 0.0f) ? (w / h) : 1.333333f;
-
-    glm::mat4 proj = glm::perspective(glm::radians(55.0f), aspect, 0.1f, 100.0f);
-    glm::mat4 view = glm::lookAt(
-        camera_pos_,
-        camera_target_,
-        camera_up_
-    );
-
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, position_);
-    model = glm::rotate(model, glm::radians(rotation_.x), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotation_.y), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotation_.z), glm::vec3(0.0f, 0.0f, 1.0f));
-    model = glm::scale(model, scale_);
-
-    glm::mat4 mvp = proj * view * model;
+    camera_.aspect = (h > 0.0f) ? (w / h) : 1.333333f;
+    glm::mat4 vp = camera_.view_projection_matrix();
 
     // 4. Begin render pass with color clear AND depth clear
     sg_pass pass{};
@@ -331,25 +393,61 @@ void EngineApp::on_frame() {
 
     sg_begin_pass(&pass);
 
-    // 5. Apply pipeline, bindings, uniforms and draw cube
-    sg_pipeline pip{pip_id_};
-    sg_apply_pipeline(pip);
+    if (pip_id_ != 0) {
+        sg_pipeline pip{pip_id_};
+        sg_apply_pipeline(pip);
 
-    sg_bindings bind{};
-    bind.vertex_buffers[0] = sg_buffer{vbuf_id_};
-    bind.index_buffer = sg_buffer{ibuf_id_};
-    sg_apply_bindings(&bind);
+        // Prepare lighting uniform
+        FSParams fs_params{};
+        fs_params.light_dir = glm::vec4(scene_.light.direction, scene_.light.intensity);
+        fs_params.light_color = glm::vec4(scene_.light.color, 1.0f);
+        fs_params.ambient_color = glm::vec4(scene_.light.ambient, 1.0f);
+        fs_params.eye_pos = glm::vec4(camera_.position, scene_.light.shininess);
 
-    sg_apply_uniforms(0, SG_RANGE_REF(mvp));
-    sg_draw(0, 36, 1);
+        // 5. Draw all visible entities in Scene
+        for (const auto& entity : scene_.entities()) {
+            if (!entity || !entity->visible) {
+                continue;
+            }
+
+            // Ensure mesh is present (fallback to cube mesh)
+            if (!entity->mesh) {
+                entity->mesh = scene_.default_cube_mesh();
+            }
+
+            if (!entity->mesh || entity->mesh->vbuf_id == 0 || entity->mesh->ibuf_id == 0) {
+                continue;
+            }
+
+            // Compute MVP and Normal matrices for this entity
+            glm::mat4 model = entity->transform.model_matrix();
+            glm::mat4 normal_mat = entity->transform.normal_matrix();
+            glm::mat4 mvp = vp * model;
+
+            VSParams vs_params{ mvp, model, normal_mat };
+            fs_params.entity_color = entity->color;
+
+            sg_bindings bind{};
+            bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
+            bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+            sg_apply_bindings(&bind);
+
+            sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
+            sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
+            sg_draw(0, entity->mesh->num_indices, 1);
+        }
+    }
 
     sg_end_pass();
     sg_commit();
+
+    // 6. Reset per-frame input transients (deltas, pressed/released)
+    input_.post_frame();
 }
 
 void EngineApp::on_cleanup() {
-    // Release Python callback to break cyclic references
     update_callback_ = nullptr;
+    scene_.clear();
 
     if (pip_id_ != 0) {
         sg_destroy_pipeline(sg_pipeline{pip_id_});
@@ -359,14 +457,6 @@ void EngineApp::on_cleanup() {
         sg_destroy_shader(sg_shader{shd_id_});
         shd_id_ = 0;
     }
-    if (vbuf_id_ != 0) {
-        sg_destroy_buffer(sg_buffer{vbuf_id_});
-        vbuf_id_ = 0;
-    }
-    if (ibuf_id_ != 0) {
-        sg_destroy_buffer(sg_buffer{ibuf_id_});
-        ibuf_id_ = 0;
-    }
 
     sg_shutdown();
 }
@@ -375,10 +465,32 @@ void EngineApp::on_event(const void* raw_event) {
     if (!raw_event) return;
     const auto* ev = static_cast<const sapp_event*>(raw_event);
 
-    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        if (ev->key_code == SAPP_KEYCODE_ESCAPE) {
-            sapp_request_quit();
-        }
+    switch (ev->type) {
+        case SAPP_EVENTTYPE_KEY_DOWN:
+            if (ev->key_code == SAPP_KEYCODE_ESCAPE) {
+                sapp_request_quit();
+            }
+            input_.on_key_down(ev->key_code);
+            break;
+
+        case SAPP_EVENTTYPE_KEY_UP:
+            input_.on_key_up(ev->key_code);
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_MOVE:
+            input_.on_mouse_move(ev->mouse_x, ev->mouse_y, ev->mouse_dx, ev->mouse_dy);
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_DOWN:
+            input_.on_mouse_down(ev->mouse_button);
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_UP:
+            input_.on_mouse_up(ev->mouse_button);
+            break;
+
+        default:
+            break;
     }
 }
 

@@ -14,113 +14,84 @@
 ├── .gitignore                # Исключения временных и бинарных файлов
 ├── core/                     # Исходный код C++20 ядра
 │   ├── include/engine/
-│   │   └── app.hpp           # Класс EngineApp, структуры Vertex, WindowConfig, математика GLM
+│   │   ├── transform.hpp     # Класс Transform (position, rotation, scale, model_matrix, normal_matrix)
+│   │   ├── camera.hpp        # Класс Camera (View, Projection, ViewProjection, управление положением)
+│   │   ├── light.hpp         # Структура DirectionalLight (direction, color, ambient, intensity, shininess)
+│   │   ├── mesh.hpp          # Класс Mesh и структура Vertex (position, normal, color)
+│   │   ├── entity.hpp        # Класс Entity / Node (Transform, Mesh, Color, Visibility)
+│   │   ├── scene.hpp         # Контейнер Scene для сущностей и освещения
+│   │   ├── input.hpp         # InputManager и перечисление клавиш Key
+│   │   └── app.hpp           # Класс EngineApp и окно
 │   └── src/
-│       ├── app.cpp           # 3D пайплайн, шейдеры, Z-буфер, расчет MVP и цикл событий
+│       ├── mesh.cpp          # Создание буферов геометрии (куб с нормалями)
+│       ├── scene.cpp         # Управление сущностями и ленивая привязка мешей
+│       ├── input.cpp         # Менеджер клавиатуры и мыши
+│       ├── app.cpp           # Шейдеры освещения Blinn-Phong, цикл сцены и обработка ввода
 │       └── sokol_impl.cpp    # Трансляционный юнит реализаций Sokol
 ├── bindings/                 # Связующий слой Nanobind
-│   └── bindings.cpp          # Экспорт C++ класса в Python-модуль _engine_core
+│   └── bindings.cpp          # Экспорт C++ классов в Python-модуль _engine_core
 ├── python/                   # Высокоуровневый пакет Python
 │   └── engine/
-│       ├── __init__.py       # Экспорт фасада engine.App
-│       ├── app.py            # Фасад App, декоратор @app.on_update, фасад TransformFacade
+│       ├── __init__.py       # Экспорт фасада App, Key, Transform, Camera, Scene, Entity и т.д.
+│       ├── app.py            # Фасад App со свойствами scene, camera, input
 │       └── py.typed          # Маркер типизации PEP 561
 ├── third_party/              # Внешние зависимости
 │   ├── sokol/                # sokol_app.h, sokol_gfx.h, sokol_glue.h, sokol_log.h
 │   └── glm/                  # Заголовочная библиотека OpenGL Mathematics
 └── examples/                 # Примеры и тесты
-    ├── 01_window.py          # Milestone 1: Базовое окно с заливкой фона темно-синим цветом (#1a1a24)
-    └── 02_rotating_cube.py   # Milestone 2: 3D вращающийся куб с Z-буфером и Python-колбэком on_update(dt)
+    ├── 01_window.py          # Milestone 1: Базовое окно с заливкой фона (#1a1a24)
+    ├── 02_rotating_cube.py   # Milestone 2: 3D вращающийся куб с Z-буфером и on_update(dt)
+    └── 03_scene_lighting.py  # Milestone 3: Граф сцены, множественные сущности, Blinn-Phong и ввод
 ```
 
 ---
 
-## Возможности Milestone 2
+## Архитектура Milestone 3
 
-1. **Математическая библиотека GLM (C++20):**
-   - Вычисление матриц проекции (`glm::perspective`), вида (`glm::lookAt`) и модели (`glm::translate`, `glm::rotate`, `glm::scale`) для формирования матрицы MVP на каждом кадре.
-   - Автоматическая адаптация aspect ratio при изменении размеров окна.
+1. **Граф сцены и сущности (`Scene`, `Entity`, `Transform`):**
+   - Вынос геометрии и материалов в отдельные объекты `Entity`.
+   - `Transform`: независимые координаты `position`, углы поворота `rotation` (в градусах), масштаб `scale`, матрицы `model_matrix()` и `normal_matrix()`.
+   - Сцена `Scene`: обход сущностей с динамической отрисовкой `sg_draw` под собственной матрицей MVP.
+   - Метод `app.scene.create_cube(color=(r, g, b, a))` для быстрого спавна примитивов.
 
-2. **Графический 3D-конвейер Sokol GFX:**
-   - Кроссплатформенная шейдерная программа (HLSL для Direct3D 11, GLSL 330 для OpenGL Core, GLSL 300 es для WebGL2/GLES3, MSL для Metal).
-   - Включение аппаратного буфера глубины (Z-буфер):
-     - `depth.compare = SG_COMPAREFUNC_LESS_EQUAL`
-     - `depth.write_enabled = true`
-     - Очистка `pass.action.depth.load_action = SG_LOADACTION_CLEAR` со значением `1.0f`.
-   - VBO и EBO для 3D-куба: 24 вершины с уникальными цветами граней и 36 индексов.
+2. **Освещение Blinn-Phong и нормали вершин:**
+   - 24 вершины куба дополнены нормалями для каждой из 6 граней.
+   - Нормали трансформируются через матрицу нормалей $\left(M^{-1}\right)^T$ (`normal_matrix`), сохраняя ортогональность при неравномерном масштабировании.
+   - Шейдер реализует модель Blinn-Phong:
+     - Направленный источник света `DirectionalLight` (вектор направления, интенсивность, диффузный цвет).
+     - Фоновая составляющая `ambient` для предотвращения абсолютно черных теней.
+     - Зеркальные блики (Specular) по вектору полупути $H = \text{normalize}(L + V)$.
 
-3. **Двусторонний мост кадров (Python Callbacks & GIL):**
-   - Расчет дельты времени (`dt`) с субмиллисекундной точностью через `std::chrono::steady_clock`.
-   - Безопасный захват Python GIL (`nanobind::gil_scoped_acquire`) при вызове Python-функции из кадрового цикла C++.
-   - Удобный декоратор `@app.on_update` и метод `app.set_update_callback(fn)`.
-   - Автоматическая очистка ссылок в блоке `finally` для предотвращения циклических утечек памяти.
+3. **Камера (`Camera`):**
+   - Управление положением `position`, точкой направления `target`, вектором `up`.
+   - Методы навигации: `move_forward(dist)`, `move_right(dist)`, `move_up(dist)`.
+   - Автоматический расчет матриц View и Perspective Projection.
 
-4. **Управление трансформациями из Python:**
-   - Прямой доступ к свойствам вращения: `app.rotation_x`, `app.rotation_y`, `app.rotation_z`.
-   - Прямой доступ к координатам: `app.position_x`, `app.position_y`, `app.position_z`.
-   - Фасад `app.transform` с методами `set_rotation()`, `set_position()`, `set_scale()`.
+4. **Система ввода (`InputManager` & `Key`):**
+   - Перехват событий клавиатуры и мыши через `sokol_app`.
+   - Методы `is_key_down(Key.W)`, `is_key_pressed(Key.SPACE)`, `is_key_released(...)`.
+   - Отслеживание положения курсора `mouse_x`, `mouse_y` и относительного смещения `mouse_dx`, `mouse_dy`.
 
 ---
 
 ## Сборка и установка
 
-### 1. Требования
-- Python 3.10+
-- CMake 3.24+
-- Компилятор C++20: MSVC (Visual Studio 2022 / Build Tools) на Windows, GCC 11+ / Clang 13+ на Linux, Xcode/AppleClang на macOS.
-- Пакеты Python: `pip install nanobind scikit-build-core ninja cmake`
-
-### 2. Сборка через pip (Рекомендуемый способ)
 ```bash
-# Установка в текущее окружение (в режиме редактирования)
+# Установка в текущее venv окружение в режиме редактирования:
 pip install -e . --no-build-isolation
-
-# Или обычная установка:
-pip install . --no-build-isolation
-```
-
-### 3. Прямая сборка через CMake
-#### Windows (MSVC):
-```cmd
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
-
-#### Linux:
-```bash
-sudo apt-get install libx11-dev libxi-dev libxcursor-dev libgl1-mesa-dev
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
 ```
 
 ---
 
 ## Запуск примеров
 
-### Milestone 1: Базовое окно
+### 1. Интерактивная сцена с освещением и управлением (Milestone 3)
 ```bash
-python examples/01_window.py
+python examples/03_scene_lighting.py
 ```
-
-### Milestone 2: 3D вращающийся куб с Z-буфером
-```bash
-python examples/02_rotating_cube.py
-```
-
-Код скрипта:
-```python
-import engine
-
-app = engine.App(title="3D Rotating Cube", width=800, height=600)
-
-
-@app.on_update
-def update(dt: float):
-  # Непрерывное вращение куба по осям X и Y
-  app.rotation_x += 45.0 * dt
-  app.rotation_y += 60.0 * dt
-
-
-app.run()
-```
-Куб непрерывно вращается, грани корректно перекрывают друг друга благодаря аппаратному Z-буферу, а частота кадров и дельта времени обрабатываются в Python без задержек. Для выхода нажмите клавишу **ESC** или закройте окно.
+**Управление:**
+- `W / S`: Перемещение камеры вперед / назад
+- `A / D`: Перемещение камеры влево / вправо
+- `Стрелки ВВЕРХ / ВНИЗ`: Перемещение красного куба по вертикали
+- `Стрелки ВЛЕВО / ВПРАВО`: Перемещение красного куба по горизонтали
+- `ESC`: Выход из приложения

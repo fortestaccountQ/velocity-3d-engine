@@ -1,6 +1,32 @@
-"""Modular 3D Engine package with C++20 core, Sokol GFX, and Nanobind bindings."""
+"""Modular 3D Engine package with C++20 core, Sokol GFX, GLM, and Nanobind."""
 
 from .app import App
 
-__version__ = "0.1.0"
-__all__ = ["App"]
+try:
+    from ._engine_core import (
+        Key,
+        Vec3,
+        Vec4,
+        Transform,
+        Camera,
+        DirectionalLight,
+        Entity,
+        Scene,
+        InputManager,
+    )
+except ImportError:
+    pass
+
+__version__ = "0.2.0"
+__all__ = [
+    "App",
+    "Key",
+    "Vec3",
+    "Vec4",
+    "Transform",
+    "Camera",
+    "DirectionalLight",
+    "Entity",
+    "Scene",
+    "InputManager",
+]
