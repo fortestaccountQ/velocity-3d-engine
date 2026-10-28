@@ -74,6 +74,8 @@ from .tween import (
 from .camera_utils import screen_to_ray, patch_camera
 from .orbit_controller import OrbitController, FollowCamera
 from .ui import UIOverlay
+from .fog import Fog, FogExp2
+from .group import Group
 from .scene_factory import (
     SceneFactory,
     create_box,
@@ -160,7 +162,10 @@ __all__ = [
     # UI & Raycasting
     "UIOverlay",
     "screen_to_ray",
-    # Scene Factory
+    # Scene Factory & Hierarchy
+    "Group",
+    "Fog",
+    "FogExp2",
     "SceneFactory",
     "create_box",
     "create_sphere",
