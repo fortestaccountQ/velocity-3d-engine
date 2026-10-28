@@ -24,7 +24,7 @@ class App:
         height: int = 720,
         mode: Optional[Any] = None,
         clear_color: Optional[Union[Sequence[float], str, Color]] = None,
-        target_fps: int = 60,
+        target_fps: int = 0,
         show_crosshair: bool = True,
     ) -> None:
         """Create and configure a new engine window application."""
@@ -44,7 +44,7 @@ class App:
         self._fog: Optional[Any] = None
 
         # Frame limiter & crosshair config
-        if target_fps != 60:
+        if target_fps != 0:
             self._core.target_fps = int(target_fps)
         if not show_crosshair:
             self._core.show_crosshair = bool(show_crosshair)

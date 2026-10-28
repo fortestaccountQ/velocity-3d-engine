@@ -528,7 +528,7 @@ class TestAppIntegration(unittest.TestCase):
 
     def test_app_target_fps_and_crosshair(self) -> None:
         app = App()
-        self.assertEqual(app.target_fps, 60)
+        self.assertEqual(app.target_fps, 0)
         self.assertTrue(app.show_crosshair)
 
         app.target_fps = 144

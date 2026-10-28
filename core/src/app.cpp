@@ -240,9 +240,7 @@ static const char* hlsl_fs =
     "}\n"
     "float sample_shadow(float4 lpos, float3 N, float3 L) {\n"
     "    float NdotL = dot(N, L);\n"
-    "    if (NdotL <= 0.0) {\n"
-    "        return 0.0;\n"
-    "    }\n"
+    "    if (NdotL <= 0.0) return 0.0;\n"
     "    float3 proj = lpos.xyz / lpos.w;\n"
     "    float2 uv = float2(proj.x * 0.5 + 0.5, -proj.y * 0.5 + 0.5);\n"
     "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {\n"
@@ -250,19 +248,16 @@ static const char* hlsl_fs =
     "    }\n"
     "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
     "    float current_depth = proj.z - depth_bias;\n"
-    "    float shadow = 0.0;\n"
-    "    float texel = 1.0 / 2048.0;\n"
-    "    [unroll]\n"
-    "    for (int x = -1; x <= 1; ++x) {\n"
-    "        [unroll]\n"
-    "        for (int y = -1; y <= 1; ++y) {\n"
-    "            float d = tex_shadow.Sample(smp_shadow, uv + float2(x, y) * texel).r;\n"
-    "            shadow += (current_depth <= d) ? 1.0 : 0.0;\n"
-    "        }\n"
-    "    }\n"
+    "    float texel = 1.0 / 1024.0;\n"
+    "    // 4-tap optimized PCF\n"
+    "    float s0 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s1 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s2 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s3 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
     "    float2 border = min(uv, 1.0 - uv);\n"
     "    float edge_fade = saturate(min(border.x, border.y) * 15.0);\n"
-    "    return lerp(1.0, shadow / 9.0, edge_fade);\n"
+    "    return lerp(1.0, shadow, edge_fade);\n"
     "}\n"
     "float4 main(ps_in inp) : SV_Target0 {\n"
     "    float2 uv = inp.uv * material_params.zw;\n"
@@ -961,8 +956,8 @@ void EngineApp::on_frame() {
         auto now = std::chrono::steady_clock::now();
         if (now < target_time) {
             auto sleep_dur = target_time - now;
-            if (sleep_dur > std::chrono::milliseconds(2)) {
-                std::this_thread::sleep_for(sleep_dur - std::chrono::milliseconds(1));
+            if (sleep_dur > std::chrono::milliseconds(3)) {
+                std::this_thread::sleep_for(sleep_dur - std::chrono::milliseconds(2));
             }
             while (std::chrono::steady_clock::now() < target_time) {
                 std::this_thread::yield();
@@ -1048,6 +1043,10 @@ void EngineApp::on_frame() {
         }
         auto default_mat = scene_.default_material();
 
+        glm::vec4 last_mat_color{-999.0f};
+        glm::vec4 last_mat_params{-999.0f};
+        bool fs_applied = false;
+
         // Draw all visible entities in Scene
         for (const auto& entity : scene_.entities()) {
             if (!entity || !entity->visible || !entity->mesh) {
@@ -1078,8 +1077,6 @@ void EngineApp::on_frame() {
             glm::mat4 l_mvp = light_vp_ * model;
 
             VSParams vs_params{ mvp, model, normal_mat, l_mvp };
-            fs_params.material_color = mat->base_color;
-            fs_params.material_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
 
             sg_bindings bind{};
             bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
@@ -1093,7 +1090,18 @@ void EngineApp::on_frame() {
             sg_apply_bindings(&bind);
 
             sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
-            sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
+
+            glm::vec4 cur_mat_color = mat->base_color;
+            glm::vec4 cur_mat_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
+            if (!fs_applied || cur_mat_color != last_mat_color || cur_mat_params != last_mat_params) {
+                fs_params.material_color = cur_mat_color;
+                fs_params.material_params = cur_mat_params;
+                sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
+                last_mat_color = cur_mat_color;
+                last_mat_params = cur_mat_params;
+                fs_applied = true;
+            }
+
             sg_draw(0, entity->mesh->num_indices, 1);
         }
     }
@@ -1275,6 +1283,8 @@ void EngineApp::run() {
     desc.window_title = config_.title.c_str();
     desc.logger.func = slog_func;
     desc.icon.sokol_default = true;
+    desc.disable_vsync = true;
+    desc.swap_interval = 0;
 
     running_ = true;
     sapp_run(&desc);

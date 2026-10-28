@@ -149,7 +149,7 @@ private:
     uint32_t shd_id_{0};
 
     // Shadow Mapping resources
-    static constexpr int SHADOW_MAP_SIZE = 2048;
+    static constexpr int SHADOW_MAP_SIZE = 1024;
     uint32_t shadow_color_img_id_{0};
     uint32_t shadow_depth_img_id_{0};
     uint32_t shadow_color_view_id_{0};
@@ -173,7 +173,7 @@ private:
     bool show_crosshair_{true};
     bool show_debug_hitboxes_{false};
     int hud_score_{0};
-    int target_fps_{60};
+    int target_fps_{0};
 
     // Fog and Tone Mapping settings
     bool fog_enabled_{false};
