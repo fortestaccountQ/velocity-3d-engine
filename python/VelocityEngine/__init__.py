@@ -89,7 +89,7 @@ from .scene_factory import (
     patch_scene,
 )
 from .material import Material, gold, metal, plastic, rubber
-from .controller import FirstPersonController
+from .controller import FirstPersonController, FlyCameraController, FreeCameraController
 from .app import App
 
 # Automatically apply Pythonic patches to native core classes
@@ -127,6 +127,8 @@ __all__ = [
     "RaycastHit",
     # Controllers
     "FirstPersonController",
+    "FlyCameraController",
+    "FreeCameraController",
     "OrbitController",
     "FollowCamera",
     # Pythonic Color

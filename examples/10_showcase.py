@@ -24,7 +24,7 @@ if str(python_pkg_dir) not in sys.path:
 import VelocityEngine as ve
 from VelocityEngine import (
     App,
-    OrbitController,
+    FlyCameraController,
     Fog,
     FogExp2,
     Color,
@@ -48,12 +48,14 @@ def main():
     print(" 🌌 VelocityEngine: Full Capabilities Showcase")
     print("=" * 78)
     print("Controls:")
-    print("  [LMB Drag]     : Orbit camera around scene")
-    print("  [Scroll Wheel] : Smooth zoom in / out")
-    print("  [LMB Click]    : Raycast click on 3D objects (triggers bouncy tweens & audio)")
+    print("  [LMB Click]    : Lock cursor & activate Free-Fly Spectator Camera")
+    print("  [WASD]         : Fly forward/backward (Zoom in/out) & strafe left/right")
+    print("  [Space]        : Fly straight up")
+    print("  [Shift]        : Fly straight down")
+    print("  [ESC / TAB]    : Unlock / free mouse cursor")
+    print("  [Click Entity] : Raycast click on 3D objects (triggers bouncy tweens & audio)")
     print("  [F]            : Cycle Atmospheric Fog (Off -> Linear Fog -> Exp2 Fog)")
     print("  [T]            : Toggle ACES Filmic Tone Mapping (On / Off)")
-    print("  [ESC]          : Exit application")
     print("=" * 78)
 
     # 1. Initialize Application Window
@@ -64,15 +66,18 @@ def main():
         clear_color=Color.from_hex("#161822"),
     )
 
-    # 2. Camera Setup (OrbitController with smooth damping)
-    orbit = OrbitController(
-        target=(0.0, 1.2, 0.0),
-        distance=9.5,
-        min_distance=2.0,
-        max_distance=30.0,
-        damping=0.08,
+    # 2. Camera Setup (FlyCameraController: Free-Fly / Spectator 3D Camera)
+    fly_cam = FlyCameraController(
+        camera=app.camera,
+        input_manager=app.input,
+        app=app,
+        move_speed=7.5,
+        mouse_sensitivity=0.12,
+        auto_lock_on_click=True,
     )
-    app.camera = orbit
+    fly_cam.set_position(0.0, 2.5, 9.0)
+    fly_cam.look_at(0.0, 1.2, 0.0)
+    app.camera = fly_cam
 
     # 3. Sunlight & Environment Grid
     app.scene.set_sun(direction=(-1.0, -2.5, -1.2), color=WARM_WHITE, intensity=1.5)
@@ -197,7 +202,7 @@ def main():
         app.ui.draw_text(f"[F] Fog Mode: {stats['fog_name']}", (24, 52), size=14, color=WHITE)
         app.ui.draw_text(f"[T] ACES Filmic Tone Mapping: {'ENABLED' if stats['tone_mapping'] else 'DISABLED'}", (24, 74), size=14, color=WHITE)
         app.ui.draw_text(f"Raycast Clicks: {stats['clicks']} | Last: {stats['last_clicked']}", (24, 96), size=14, color=YELLOW)
-        app.ui.draw_text("[LMB Drag] Orbit Cam | [Scroll] Zoom | [Click] Animate Shape", (24, app.height - 36), size=14, color=WARM_WHITE)
+        app.ui.draw_text("[Click] Lock Cursor | [WASD] Move/Zoom | [Space] Up | [Shift] Down | [ESC] Free Cursor", (24, app.height - 36), size=14, color=WARM_WHITE)
 
     # 10. Automated Test Mode (Exit after 60 frames if --test flag passed)
     if "--test" in sys.argv:

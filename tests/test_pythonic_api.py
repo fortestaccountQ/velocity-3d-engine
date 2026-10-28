@@ -28,6 +28,8 @@ from VelocityEngine import (
     TweenManager,
     OrbitController,
     FollowCamera,
+    FlyCameraController,
+    FreeCameraController,
     UIOverlay,
     SceneFactory,
     create_box,
@@ -63,11 +65,26 @@ class MockInputManager:
         self.mouse_dy = 0.0
         self.mouse_buttons = [False] * 8
         self.mouse_wheel = 0.0
+        self.keys_down: set = set()
+        self.keys_pressed: set = set()
+        self._mouse_locked: bool = False
 
     def is_mouse_down(self, button: int) -> bool:
         if 0 <= button < len(self.mouse_buttons):
             return self.mouse_buttons[button]
         return False
+
+    def is_key_down(self, key: Any) -> bool:
+        return key in self.keys_down
+
+    def is_key_pressed(self, key: Any) -> bool:
+        return key in self.keys_pressed
+
+    def is_mouse_locked(self) -> bool:
+        return self._mouse_locked
+
+    def set_mouse_locked(self, locked: bool) -> None:
+        self._mouse_locked = bool(locked)
 
 
 class TestColor(unittest.TestCase):
@@ -379,6 +396,160 @@ class TestOrbitController(unittest.TestCase):
         self.assertIsNotNone(cam.position)
 
 
+class TestFlyCameraController(unittest.TestCase):
+    """Unit tests for the FlyCameraController (Free-Fly / Spectator 3D Camera)."""
+
+    def test_fly_camera_initialization_and_alias(self) -> None:
+        self.assertIs(FreeCameraController, FlyCameraController)
+        cam = ve.Camera()
+        fly = FlyCameraController(camera=cam, move_speed=10.0, mouse_sensitivity=0.15)
+        self.assertAlmostEqual(fly.move_speed, 10.0)
+        self.assertAlmostEqual(fly.mouse_sensitivity, 0.15)
+        self.assertTrue(fly.auto_lock_on_click)
+        self.assertFalse(fly.is_mouse_locked())
+
+    def test_fly_camera_set_position_and_look_at(self) -> None:
+        cam = ve.Camera()
+        fly = FlyCameraController(camera=cam)
+        fly.set_position(0.0, 2.5, 9.0)
+        fly.look_at(0.0, 1.2, 0.0)
+
+        # Position
+        self.assertAlmostEqual(fly.position.x, 0.0)
+        self.assertAlmostEqual(fly.position.y, 2.5)
+        self.assertAlmostEqual(fly.position.z, 9.0)
+
+        # Yaw and Pitch
+        self.assertAlmostEqual(fly.yaw, -90.0, delta=0.5)
+        self.assertAlmostEqual(fly.pitch, -8.219, delta=0.5)
+
+        # Forward and Right vectors
+        fwd = fly.forward()
+        self.assertAlmostEqual(fwd.x, 0.0, delta=0.01)
+        self.assertTrue(fwd.y < 0.0)
+        self.assertTrue(fwd.z < -0.9)
+
+        r = fly.right()
+        self.assertAlmostEqual(r.x, 1.0, delta=0.01)
+        self.assertAlmostEqual(r.y, 0.0, delta=0.01)
+        self.assertAlmostEqual(r.z, 0.0, delta=0.01)
+
+        # Camera sync
+        self.assertAlmostEqual(cam.position.x, 0.0)
+        self.assertAlmostEqual(cam.position.y, 2.5)
+        self.assertAlmostEqual(cam.position.z, 9.0)
+
+    def test_fly_camera_mouse_look_and_clamping(self) -> None:
+        cam = ve.Camera()
+        mock_input = MockInputManager()
+        fly = FlyCameraController(camera=cam, input_manager=mock_input, mouse_sensitivity=0.2)
+        fly.set_mouse_locked(True)
+
+        # Mouse look: mouse_dx = 15, mouse_dy = 10
+        mock_input.mouse_dx = 15.0
+        mock_input.mouse_dy = 10.0
+        fly.update(cam, mock_input, 1.0 / 60.0)
+
+        # yaw = -90 + 15 * 0.2 = -87.0
+        self.assertAlmostEqual(fly.yaw, -87.0, delta=0.01)
+        # pitch = 0 - 10 * 0.2 = -2.0
+        self.assertAlmostEqual(fly.pitch, -2.0, delta=0.01)
+
+        # Extreme look up to test clamping at 89.0
+        mock_input.mouse_dx = 0.0
+        mock_input.mouse_dy = -1000.0
+        fly.update(cam, mock_input, 1.0 / 60.0)
+        self.assertAlmostEqual(fly.pitch, 89.0, delta=0.01)
+
+        # Extreme look down to test clamping at -89.0
+        mock_input.mouse_dy = 2000.0
+        fly.update(cam, mock_input, 1.0 / 60.0)
+        self.assertAlmostEqual(fly.pitch, -89.0, delta=0.01)
+
+    def test_fly_camera_wasd_and_flight_movement(self) -> None:
+        cam = ve.Camera()
+        mock_input = MockInputManager()
+        fly = FlyCameraController(camera=cam, input_manager=mock_input, move_speed=12.0)
+        fly.set_mouse_locked(True)
+        fly.set_position(0.0, 5.0, 0.0)
+        fly.set_yaw_pitch(-90.0, 0.0)  # Looking towards -Z, right is +X
+
+        dt = 0.1  # speed * dt = 1.2 units per step
+
+        # Test W: move forward (into -Z)
+        mock_input.keys_down = {ve.Key.W}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.z, -1.2, delta=0.01)
+
+        # Test S: move backward (towards +Z)
+        mock_input.keys_down = {ve.Key.S}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.z, 0.0, delta=0.01)
+
+        # Test D: strafe right (towards +X)
+        mock_input.keys_down = {ve.Key.D}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.x, 1.2, delta=0.01)
+
+        # Test A: strafe left (towards -X)
+        mock_input.keys_down = {ve.Key.A}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.x, 0.0, delta=0.01)
+
+        # Test Space: fly straight up (+Y)
+        mock_input.keys_down = {ve.Key.SPACE}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.y, 6.2, delta=0.01)
+
+        # Test LeftShift: fly straight down (-Y)
+        mock_input.keys_down = {ve.Key.LEFT_SHIFT}
+        fly.update(dt=dt, input_mgr=mock_input)
+        self.assertAlmostEqual(fly.position.y, 5.0, delta=0.01)
+
+    def test_fly_camera_mouse_lock_transitions(self) -> None:
+        cam = ve.Camera()
+        mock_input = MockInputManager()
+        fly = FlyCameraController(camera=cam, input_manager=mock_input, auto_lock_on_click=True)
+        self.assertFalse(fly.is_mouse_locked())
+
+        # 1. Click button 0 -> locks mouse
+        mock_input.mouse_buttons[0] = True
+        fly.update(dt=1.0 / 60.0, input_mgr=mock_input)
+        self.assertTrue(fly.is_mouse_locked())
+
+        # 2. ESC key -> unlocks mouse
+        mock_input.mouse_buttons[0] = False
+        mock_input.keys_down = {ve.Key.ESCAPE}
+        fly.update(dt=1.0 / 60.0, input_mgr=mock_input)
+        self.assertFalse(fly.is_mouse_locked())
+
+        # 3. TAB key -> toggles mouse lock (unlock -> lock)
+        mock_input.keys_down = set()
+        mock_input.keys_pressed = {ve.Key.TAB}
+        fly.update(dt=1.0 / 60.0, input_mgr=mock_input)
+        self.assertTrue(fly.is_mouse_locked())
+
+        # 4. TAB key -> toggles mouse lock (lock -> unlock)
+        mock_input.keys_pressed = {ve.Key.TAB}
+        fly.update(dt=1.0 / 60.0, input_mgr=mock_input)
+        self.assertFalse(fly.is_mouse_locked())
+
+    def test_fly_camera_screen_to_ray_and_app_integration(self) -> None:
+        app = App("FlyCamTest", width=1280, height=720)
+        fly = FlyCameraController(camera=app.camera, input_manager=app.input, app=app)
+        fly.set_position(0.0, 2.5, 9.0)
+        fly.look_at(0.0, 1.2, 0.0)
+        app.camera = fly
+
+        self.assertIs(app.camera, fly)
+        ray = fly.screen_to_ray(640, 360, 1280, 720)
+        self.assertIsNotNone(ray)
+        self.assertAlmostEqual(ray.origin.x, 0.0, delta=0.1)
+        self.assertAlmostEqual(ray.origin.y, 2.5, delta=0.1)
+        self.assertAlmostEqual(ray.origin.z, 9.0, delta=0.1)
+
+
+
 class TestUIOverlay(unittest.TestCase):
     """Unit tests for 2D UIOverlay commands."""
 
@@ -598,6 +769,22 @@ class TestContractConformance(unittest.TestCase):
         self.assertTrue(callable(getattr(sf, "create_cylinder", None)))
         self.assertTrue(callable(getattr(sf, "create_grid", None)))
         self.assertTrue(callable(getattr(sf, "set_sun", None)))
+
+
+    def test_fly_camera_controller_contract(self) -> None:
+        cam = ve.Camera()
+        fly = FlyCameraController(cam)
+        self.assertTrue(hasattr(fly, "move_speed"))
+        self.assertTrue(hasattr(fly, "mouse_sensitivity"))
+        self.assertTrue(hasattr(fly, "auto_lock_on_click"))
+        self.assertTrue(callable(getattr(fly, "set_position", None)))
+        self.assertTrue(callable(getattr(fly, "look_at", None)))
+        self.assertTrue(callable(getattr(fly, "is_mouse_locked", None)))
+        self.assertTrue(callable(getattr(fly, "set_mouse_locked", None)))
+        self.assertTrue(callable(getattr(fly, "update", None)))
+        # Verify update signatures
+        fly.update(0.016, None, 1280, 720)
+        fly.update(cam, None, 0.016, 1280, 720)
 
 
 if __name__ == "__main__":

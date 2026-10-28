@@ -29,7 +29,7 @@ class TweenContract(Protocol):
     def on_complete(self, callback: Callable[[], None]) -> TweenContract: ...
 
 # ---------------------------------------------------------------------------
-# OrbitController Protocol
+# OrbitController & FlyCameraController Protocols
 # ---------------------------------------------------------------------------
 class OrbitControllerContract(Protocol):
     target: Tuple[float, float, float]
@@ -39,6 +39,18 @@ class OrbitControllerContract(Protocol):
     damping: float
 
     def update(self, dt: float, input_mgr: Any, width: int, height: int) -> None: ...
+
+
+class FlyCameraControllerContract(Protocol):
+    move_speed: float
+    mouse_sensitivity: float
+    auto_lock_on_click: bool
+
+    def set_position(self, x: float, y: float, z: float) -> None: ...
+    def look_at(self, x: float, y: float, z: float) -> None: ...
+    def is_mouse_locked(self) -> bool: ...
+    def set_mouse_locked(self, locked: bool) -> None: ...
+    def update(self, *args: Any, **kwargs: Any) -> None: ...
 
 # ---------------------------------------------------------------------------
 # UI Overlay Protocol
