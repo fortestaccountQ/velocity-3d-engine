@@ -720,6 +720,9 @@ void EngineApp::on_init() {
     sg_desc desc{};
     desc.environment = sglue_environment();
     desc.logger.func = slog_func;
+    desc.buffer_pool_size = 8192;
+    desc.image_pool_size = 512;
+    desc.pipeline_pool_size = 256;
     sg_setup(&desc);
 
     init_pipeline_and_shaders();
