@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Sequence, Optional, Any, List
+from typing import Callable, Sequence, Optional, Any, List, Union
 
 try:
     from . import _VelocityEngine_core as _core
@@ -24,6 +24,8 @@ class App:
         height: int = 720,
         mode: Optional[Any] = None,
         clear_color: Optional[Union[Sequence[float], str, Color]] = None,
+        target_fps: int = 60,
+        show_crosshair: bool = True,
     ) -> None:
         """Create and configure a new engine window application."""
         self._core = _core.EngineApp(title, width, height)
@@ -40,6 +42,12 @@ class App:
         self._hover_callbacks: List[Callable] = []
         self._prev_mouse_down = [False] * 8
         self._fog: Optional[Any] = None
+
+        # Frame limiter & crosshair config
+        if target_fps != 60:
+            self._core.target_fps = int(target_fps)
+        if not show_crosshair:
+            self._core.show_crosshair = bool(show_crosshair)
 
         # Hook internal frame update callback
         self._core.set_update_callback(self._on_internal_frame)
@@ -312,12 +320,38 @@ class App:
         self._core.show_hud = bool(value)
 
     @property
+    def show_crosshair(self) -> bool:
+        """Whether the HUD center crosshair is visible."""
+        return self._core.show_crosshair
+
+    @show_crosshair.setter
+    def show_crosshair(self, value: bool) -> None:
+        self._core.show_crosshair = bool(value)
+
+    def set_show_crosshair(self, show: bool) -> None:
+        """Set whether the HUD center crosshair is visible."""
+        self._core.set_show_crosshair(bool(show))
+
+    @property
     def hud_score(self) -> int:
         return self._core.hud_score
 
     @hud_score.setter
     def hud_score(self, value: int) -> None:
         self._core.hud_score = int(value)
+
+    @property
+    def target_fps(self) -> int:
+        """Target frames per second limiter (0 for uncapped)."""
+        return self._core.target_fps
+
+    @target_fps.setter
+    def target_fps(self, value: int) -> None:
+        self._core.target_fps = int(value)
+
+    def set_target_fps(self, fps: int) -> None:
+        """Set target frames per second limiter (0 for uncapped)."""
+        self._core.set_target_fps(int(fps))
 
     @property
     def debug_hitboxes(self) -> bool:

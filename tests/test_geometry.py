@@ -194,3 +194,22 @@ def test_fog_and_tone_mapping_integration():
     assert app._core.tone_mapping is False
     app.tone_mapping = True
     assert app.tone_mapping is True
+
+
+def test_engine_target_fps_and_crosshair():
+    app = ve._core.EngineApp()
+    assert app.target_fps == 60
+    assert app.show_crosshair is True
+
+    app.set_target_fps(120)
+    assert app.target_fps == 120
+
+    app.target_fps = 0
+    assert app.target_fps == 0
+
+    app.set_show_crosshair(False)
+    assert app.show_crosshair is False
+
+    app.show_crosshair = True
+    assert app.show_crosshair is True
+

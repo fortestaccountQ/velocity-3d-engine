@@ -67,8 +67,14 @@ public:
     // HUD and Debug options
     void set_show_hud(bool enable) { show_hud_ = enable; }
     bool show_hud() const { return show_hud_; }
+    void set_show_crosshair(bool show) { show_crosshair_ = show; }
+    bool show_crosshair() const { return show_crosshair_; }
     void set_hud_score(int score) { hud_score_ = score; }
     int hud_score() const { return hud_score_; }
+
+    // Frame pacing / Target FPS limiter
+    void set_target_fps(int fps) { target_fps_ = fps; }
+    int target_fps() const { return target_fps_; }
 
     void set_debug_hitboxes(bool enable) { show_debug_hitboxes_ = enable; }
     void toggle_debug_hitboxes() { show_debug_hitboxes_ = !show_debug_hitboxes_; }
@@ -164,8 +170,10 @@ private:
     uint32_t hud_vbuf_id_{0};
 
     bool show_hud_{true};
+    bool show_crosshair_{true};
     bool show_debug_hitboxes_{false};
     int hud_score_{0};
+    int target_fps_{60};
 
     // Fog and Tone Mapping settings
     bool fog_enabled_{false};

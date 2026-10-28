@@ -10,6 +10,16 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <thread>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace engine {
 
@@ -191,7 +201,8 @@ static const char* hlsl_vs =
     "    outp.normal = mul((float3x3)normal_mat, inp.normal);\n"
     "    outp.uv = inp.uv;\n"
     "    outp.color = inp.color;\n"
-    "    outp.light_pos = mul(light_mvp, float4(inp.pos, 1.0));\n"
+    "    float3 normal_bias_offset = inp.normal * 0.04;\n"
+    "    outp.light_pos = mul(light_mvp, float4(inp.pos + normal_bias_offset, 1.0));\n"
     "    return outp;\n"
     "}\n";
 
@@ -237,8 +248,8 @@ static const char* hlsl_fs =
     "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {\n"
     "        return 1.0;\n"
     "    }\n"
-    "    float bias = max(0.005 * (1.0 - NdotL), 0.0015);\n"
-    "    float current_depth = proj.z - bias;\n"
+    "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
+    "    float current_depth = proj.z - depth_bias;\n"
     "    float shadow = 0.0;\n"
     "    float texel = 1.0 / 2048.0;\n"
     "    [unroll]\n"
@@ -249,7 +260,9 @@ static const char* hlsl_fs =
     "            shadow += (current_depth <= d) ? 1.0 : 0.0;\n"
     "        }\n"
     "    }\n"
-    "    return shadow / 9.0;\n"
+    "    float2 border = min(uv, 1.0 - uv);\n"
+    "    float edge_fade = saturate(min(border.x, border.y) * 15.0);\n"
+    "    return lerp(1.0, shadow / 9.0, edge_fade);\n"
     "}\n"
     "float4 main(ps_in inp) : SV_Target0 {\n"
     "    float2 uv = inp.uv * material_params.zw;\n"
@@ -331,8 +344,7 @@ static const char* hlsl_shadow_fs =
     "    float depth : TEXCOORD0;\n"
     "};\n"
     "float4 main(ps_shadow_in inp) : SV_Target0 {\n"
-    "    float d = clamp(inp.depth, 0.0, 1.0);\n"
-    "    return float4(d, d, d, 1.0);\n"
+    "    return float4(inp.depth, 0.0, 0.0, 1.0);\n"
     "}\n";
 
 // Line Shaders for Debug AABB wireframes
@@ -440,6 +452,9 @@ void EngineApp::set_update_callback(UpdateCallback callback) {
 void EngineApp::set_mouse_locked(bool locked) {
     sapp_lock_mouse(locked);
     sapp_show_mouse(!locked);
+#if defined(_WIN32)
+    ShowCursor(!locked ? TRUE : FALSE);
+#endif
 }
 
 bool EngineApp::is_mouse_locked() const {
@@ -452,7 +467,7 @@ void EngineApp::init_shadow_pipeline() {
     col_desc.usage.color_attachment = true;
     col_desc.width = SHADOW_MAP_SIZE;
     col_desc.height = SHADOW_MAP_SIZE;
-    col_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    col_desc.pixel_format = SG_PIXELFORMAT_R32F;
     col_desc.sample_count = 1;
     col_desc.label = "shadow-color-map";
     sg_image col_img = sg_make_image(&col_desc);
@@ -534,7 +549,7 @@ void EngineApp::init_shadow_pipeline() {
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
     pip_desc.cull_mode = SG_CULLMODE_FRONT;
-    pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_R32F;
     pip_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
     pip_desc.label = "shadow-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
@@ -725,7 +740,7 @@ void EngineApp::render_shadow_pass() {
     glm::vec3 center = glm::vec3(0.0f, 1.0f, 0.0f);
     glm::vec3 light_pos = center - sun_dir * 35.0f;
     glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 light_proj = glm::ortho(-22.0f, 22.0f, -22.0f, 22.0f, 5.0f, 70.0f);
+    glm::mat4 light_proj = glm::ortho(-32.0f, 32.0f, -32.0f, 32.0f, 2.0f, 85.0f);
     light_vp_ = light_proj * light_view;
 
     // 2. Begin Shadow Render Pass
@@ -856,25 +871,27 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     verts.reserve(4096);
 
     // 1. Center Crosshair
-    float cx = screen_w * 0.5f;
-    float cy = screen_h * 0.5f;
-    glm::vec4 cross_color{ 1.0f, 1.0f, 1.0f, 0.92f };
-    glm::vec4 cross_shadow{ 0.0f, 0.0f, 0.0f, 0.55f };
+    if (show_crosshair_) {
+        float cx = screen_w * 0.5f;
+        float cy = screen_h * 0.5f;
+        glm::vec4 cross_color{ 1.0f, 1.0f, 1.0f, 0.92f };
+        glm::vec4 cross_shadow{ 0.0f, 0.0f, 0.0f, 0.55f };
 
-    // Crosshair shadow / outline for high contrast
-    add_rect(verts, cx - 11.0f, cy - 2.0f, cx - 2.0f, cy + 2.0f, cross_shadow);
-    add_rect(verts, cx + 2.0f, cy - 2.0f, cx + 11.0f, cy + 2.0f, cross_shadow);
-    add_rect(verts, cx - 2.0f, cy - 11.0f, cx + 2.0f, cy - 2.0f, cross_shadow);
-    add_rect(verts, cx - 2.0f, cy + 2.0f, cx + 2.0f, cy + 11.0f, cross_shadow);
+        // Crosshair shadow / outline for high contrast
+        add_rect(verts, cx - 11.0f, cy - 2.0f, cx - 2.0f, cy + 2.0f, cross_shadow);
+        add_rect(verts, cx + 2.0f, cy - 2.0f, cx + 11.0f, cy + 2.0f, cross_shadow);
+        add_rect(verts, cx - 2.0f, cy - 11.0f, cx + 2.0f, cy - 2.0f, cross_shadow);
+        add_rect(verts, cx - 2.0f, cy + 2.0f, cx + 2.0f, cy + 11.0f, cross_shadow);
 
-    // Crosshair lines
-    add_rect(verts, cx - 10.0f, cy - 1.0f, cx - 3.0f, cy + 1.0f, cross_color);
-    add_rect(verts, cx + 3.0f, cy - 1.0f, cx + 10.0f, cy + 1.0f, cross_color);
-    add_rect(verts, cx - 1.0f, cy - 10.0f, cx + 1.0f, cy - 3.0f, cross_color);
-    add_rect(verts, cx - 1.0f, cy + 3.0f, cx + 1.0f, cy + 10.0f, cross_color);
+        // Crosshair lines
+        add_rect(verts, cx - 10.0f, cy - 1.0f, cx - 3.0f, cy + 1.0f, cross_color);
+        add_rect(verts, cx + 3.0f, cy - 1.0f, cx + 10.0f, cy + 1.0f, cross_color);
+        add_rect(verts, cx - 1.0f, cy - 10.0f, cx + 1.0f, cy - 3.0f, cross_color);
+        add_rect(verts, cx - 1.0f, cy + 3.0f, cx + 1.0f, cy + 10.0f, cross_color);
 
-    // Center dot
-    add_rect(verts, cx - 1.0f, cy - 1.0f, cx + 1.0f, cy + 1.0f, cross_color);
+        // Center dot
+        add_rect(verts, cx - 1.0f, cy - 1.0f, cx + 1.0f, cy + 1.0f, cross_color);
+    }
 
     // 2. Top-Left HUD Info Card (FPS & Score)
     char fps_score_buf[64];
@@ -937,6 +954,22 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
 }
 
 void EngineApp::on_frame() {
+    // 0. Frame pacing / Target FPS limiter
+    if (target_fps_ > 0 && has_last_frame_) {
+        double min_dt = 1.0 / static_cast<double>(target_fps_);
+        auto target_time = last_frame_time_ + std::chrono::duration<double>(min_dt);
+        auto now = std::chrono::steady_clock::now();
+        if (now < target_time) {
+            auto sleep_dur = target_time - now;
+            if (sleep_dur > std::chrono::milliseconds(2)) {
+                std::this_thread::sleep_for(sleep_dur - std::chrono::milliseconds(1));
+            }
+            while (std::chrono::steady_clock::now() < target_time) {
+                std::this_thread::yield();
+            }
+        }
+    }
+
     // 1. Calculate delta time (dt) & FPS
     auto now = std::chrono::steady_clock::now();
     double dt = 0.0;

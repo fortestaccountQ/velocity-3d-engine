@@ -526,6 +526,30 @@ class TestAppIntegration(unittest.TestCase):
         # Hover fires each frame
         self.assertEqual(len(hovered), 1)
 
+    def test_app_target_fps_and_crosshair(self) -> None:
+        app = App()
+        self.assertEqual(app.target_fps, 60)
+        self.assertTrue(app.show_crosshair)
+
+        app.target_fps = 144
+        self.assertEqual(app.target_fps, 144)
+        self.assertEqual(app._core.target_fps, 144)
+
+        app.set_target_fps(30)
+        self.assertEqual(app.target_fps, 30)
+
+        app.show_crosshair = False
+        self.assertFalse(app.show_crosshair)
+        self.assertFalse(app._core.show_crosshair)
+
+        app.set_show_crosshair(True)
+        self.assertTrue(app.show_crosshair)
+
+        # App initialization with custom parameters
+        app2 = App(target_fps=120, show_crosshair=False)
+        self.assertEqual(app2.target_fps, 120)
+        self.assertFalse(app2.show_crosshair)
+
 
 class TestContractConformance(unittest.TestCase):
     """Verify structural compliance with contracts/pythonic_api_contract.py protocols."""

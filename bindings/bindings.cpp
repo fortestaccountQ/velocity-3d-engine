@@ -813,11 +813,15 @@ NB_MODULE(_VelocityEngine_core, m) {
         // HUD and Debug options
         .def("set_show_hud", &engine::EngineApp::set_show_hud, "enable"_a)
         .def_prop_rw("show_hud", &engine::EngineApp::show_hud, &engine::EngineApp::set_show_hud)
+        .def("set_show_crosshair", &engine::EngineApp::set_show_crosshair, "show"_a)
+        .def_prop_rw("show_crosshair", &engine::EngineApp::show_crosshair, &engine::EngineApp::set_show_crosshair)
         .def("set_hud_score", &engine::EngineApp::set_hud_score, "score"_a)
         .def_prop_rw("hud_score", &engine::EngineApp::hud_score, &engine::EngineApp::set_hud_score)
         .def("set_debug_hitboxes", &engine::EngineApp::set_debug_hitboxes, "enable"_a)
         .def("toggle_debug_hitboxes", &engine::EngineApp::toggle_debug_hitboxes)
         .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes)
+        .def("set_target_fps", &engine::EngineApp::set_target_fps, "fps"_a)
+        .def_prop_rw("target_fps", &engine::EngineApp::target_fps, &engine::EngineApp::set_target_fps)
 
         // Fog & Tone Mapping
         .def("set_linear_fog", [](engine::EngineApp& app, const nb::object& color, float near_dist, float far_dist) {

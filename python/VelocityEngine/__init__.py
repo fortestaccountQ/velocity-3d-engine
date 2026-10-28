@@ -23,6 +23,7 @@ Scene = _core.Scene
 InputManager = _core.InputManager
 AudioManager = _core.AudioManager
 EditorManager = _core.EditorManager
+EngineApp = _core.EngineApp
 AABB = _core.AABB
 BoundingSphere = getattr(_core, "BoundingSphere", None)
 Cylinder = _core.Cylinder
@@ -101,6 +102,7 @@ __version__ = "0.2.0-beta"
 __all__ = [
     # Engine & App
     "App",
+    "EngineApp",
     "Mode",
     "Key",
     "Vec3",
