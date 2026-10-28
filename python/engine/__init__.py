@@ -1,36 +1,34 @@
-"""Modular 3D Engine package with C++20 core, Sokol GFX, GLM, Nanobind, and glTF 2.0 / GLB loading."""
+"""Engine compatibility shim redirecting to VelocityEngine."""
 
-from .app import App
+from VelocityEngine import (
+    App,
+    Mode,
+    Key,
+    Vec3,
+    Vec4,
+    Transform,
+    Camera,
+    DirectionalLight,
+    Mesh,
+    Texture,
+    Material,
+    Entity,
+    Model,
+    Scene,
+    InputManager,
+    AudioManager,
+    EditorManager,
+    AABB,
+    Cylinder,
+    Ray,
+    RaycastHit,
+    FirstPersonController,
+)
 
-try:
-    from ._engine_core import (
-        Key,
-        Vec3,
-        Vec4,
-        Transform,
-        Camera,
-        DirectionalLight,
-        Mesh,
-        Texture,
-        Material,
-        Entity,
-        Model,
-        Scene,
-        InputManager,
-        AudioManager,
-        AABB,
-        Cylinder,
-        Ray,
-        RaycastHit,
-    )
-except ImportError:
-    pass
-
-from .controller import FirstPersonController
-
-__version__ = "0.8.0"
+__version__ = "0.2.0-beta"
 __all__ = [
     "App",
+    "Mode",
     "Key",
     "Vec3",
     "Vec4",
@@ -45,6 +43,7 @@ __all__ = [
     "Scene",
     "InputManager",
     "AudioManager",
+    "EditorManager",
     "AABB",
     "Cylinder",
     "Ray",

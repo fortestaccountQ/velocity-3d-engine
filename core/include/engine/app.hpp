@@ -12,11 +12,12 @@
 #include "engine/scene.hpp"
 #include "engine/input.hpp"
 #include "engine/audio.hpp"
+#include "engine/editor.hpp"
 
 namespace engine {
 
 struct WindowConfig {
-    std::string title = "Engine 3D Core";
+    std::string title = "VelocityEngine v0.2-beta";
     int width = 800;
     int height = 600;
     // Daylight sky-blue #6ea0d0 (RGB [0.431, 0.627, 0.823])
@@ -57,6 +58,12 @@ public:
     void set_mouse_locked(bool locked);
     bool is_mouse_locked() const;
 
+    // Editor and Engine Mode
+    void set_mode(EngineMode mode);
+    EngineMode get_mode() const { return mode_; }
+    void toggle_mode() { set_mode(mode_ == EngineMode::GAME ? EngineMode::EDITOR : EngineMode::GAME); }
+    EditorManager& editor() { return editor_; }
+
     // HUD and Debug options
     void set_show_hud(bool enable) { show_hud_ = enable; }
     bool show_hud() const { return show_hud_; }
@@ -92,6 +99,8 @@ private:
     Camera camera_;
     InputManager input_;
     AudioManager audio_;
+    EditorManager editor_{*this};
+    EngineMode mode_{EngineMode::GAME};
 
     UpdateCallback update_callback_{nullptr};
     std::chrono::steady_clock::time_point last_frame_time_;

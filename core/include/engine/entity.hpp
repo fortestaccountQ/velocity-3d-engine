@@ -21,6 +21,7 @@ public:
     std::shared_ptr<Material> material{nullptr};
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
     bool visible{true};
+    std::string script_path{""};
 
     Entity(uint32_t id, const std::string& name = "Entity")
         : id(id), name(name) {}

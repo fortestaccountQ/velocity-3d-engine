@@ -216,13 +216,16 @@ static const char* hlsl_fs =
     "    float4 light_pos : TEXCOORD2;\n"
     "};\n"
     "float sample_shadow(float4 lpos, float3 N, float3 L) {\n"
+    "    float NdotL = dot(N, L);\n"
+    "    if (NdotL <= 0.0) {\n"
+    "        return 0.0;\n"
+    "    }\n"
     "    float3 proj = lpos.xyz / lpos.w;\n"
     "    float2 uv = float2(proj.x * 0.5 + 0.5, -proj.y * 0.5 + 0.5);\n"
     "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {\n"
     "        return 1.0;\n"
     "    }\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float bias = max(0.0035 * (1.0 - NdotL), 0.001);\n"
+    "    float bias = max(0.005 * (1.0 - NdotL), 0.0015);\n"
     "    float current_depth = proj.z - bias;\n"
     "    float shadow = 0.0;\n"
     "    float texel = 1.0 / 2048.0;\n"
@@ -498,7 +501,7 @@ void EngineApp::init_shadow_pipeline() {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
-    pip_desc.cull_mode = SG_CULLMODE_NONE;
+    pip_desc.cull_mode = SG_CULLMODE_FRONT;
     pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
     pip_desc.label = "shadow-pipeline";
@@ -677,6 +680,7 @@ void EngineApp::on_init() {
 
     init_pipeline_and_shaders();
     audio_.init();
+    editor_.init();
 }
 
 void EngineApp::render_shadow_pass() {
@@ -1022,14 +1026,19 @@ void EngineApp::on_frame() {
         }
     }
 
-    // 7. Optional Debug Hitbox Rendering (F1 toggle)
-    if (show_debug_hitboxes_) {
+    // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
+    if (show_debug_hitboxes_ || mode_ == EngineMode::EDITOR) {
         render_debug_hitboxes(vp);
     }
 
-    // 8. 2D HUD Rendering (Crosshair, FPS, Score, Hints)
-    if (show_hud_) {
+    // 8. 2D HUD Rendering (only in Game Mode)
+    if (show_hud_ && mode_ == EngineMode::GAME) {
         render_hud(w, h, current_fps_);
+    }
+
+    // 9. Visual Editor UI (Dear ImGui & ImGuizmo) - only in Editor Mode
+    if (mode_ == EngineMode::EDITOR) {
+        editor_.render(static_cast<float>(dt), w, h);
     }
 
     sg_end_pass();
@@ -1111,12 +1120,37 @@ void EngineApp::on_cleanup() {
         hud_vbuf_id_ = 0;
     }
 
+    editor_.shutdown();
     sg_shutdown();
+}
+
+void EngineApp::set_mode(EngineMode mode) {
+    mode_ = mode;
+    if (mode_ == EngineMode::GAME) {
+        set_mouse_locked(true);
+    } else {
+        set_mouse_locked(false);
+    }
 }
 
 void EngineApp::on_event(const void* raw_event) {
     if (!raw_event) return;
     const auto* ev = static_cast<const sapp_event*>(raw_event);
+
+    // 1. Hotkey toggle between Game and Editor mode (default F2)
+    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN && !ev->key_repeat) {
+        if (editor_.is_toggle_hotkey_enabled() && ev->key_code == static_cast<int>(editor_.toggle_hotkey())) {
+            toggle_mode();
+            return;
+        }
+    }
+
+    // 2. When in Editor mode, let Dear ImGui / ImGuizmo handle UI interaction
+    if (mode_ == EngineMode::EDITOR) {
+        if (editor_.handle_event(raw_event)) {
+            return;
+        }
+    }
 
     switch (ev->type) {
         case SAPP_EVENTTYPE_KEY_DOWN:

@@ -21,12 +21,21 @@
 #include "engine/input.hpp"
 #include "engine/audio.hpp"
 #include "engine/app.hpp"
+#include "engine/editor.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
 
-NB_MODULE(_engine_core, m) {
-    m.doc() = "Native C++20 3D Engine Core with Textures, Materials, and PBR-lite Pipeline";
+NB_MODULE(_VelocityEngine_core, m) {
+    m.doc() = "VelocityEngine Core: Native C++20 3D Engine with Sokol GFX, PBR Shading, and ImGui Editor";
+
+    // -----------------------------------------------------------------------
+    // Mode Enum
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::EngineMode>(m, "Mode")
+        .value("GAME", engine::EngineMode::GAME)
+        .value("EDITOR", engine::EngineMode::EDITOR)
+        .export_values();
 
     // -----------------------------------------------------------------------
     // Key Enum
@@ -486,6 +495,7 @@ NB_MODULE(_engine_core, m) {
         .def_rw("has_collision", &engine::Entity::has_collision)
         .def_rw("collision_scale", &engine::Entity::collision_scale)
         .def_rw("cast_shadows", &engine::Entity::cast_shadows)
+        .def_rw("script_path", &engine::Entity::script_path)
         .def_prop_rw("collision_padding",
             [](engine::Entity& e) -> glm::vec3& { return e.collision_padding; },
             [](engine::Entity& e, const nb::object& val) {
@@ -594,6 +604,21 @@ NB_MODULE(_engine_core, m) {
         .def("play_sound_file", &engine::AudioManager::play_sound_file, "filepath"_a, "volume"_a = 1.0f);
 
     // -----------------------------------------------------------------------
+    // EditorManager
+    // -----------------------------------------------------------------------
+    nb::class_<engine::EditorManager>(m, "EditorManager")
+        .def_rw("show_hierarchy", &engine::EditorManager::show_hierarchy)
+        .def_rw("show_inspector", &engine::EditorManager::show_inspector)
+        .def_rw("show_perf_overlay", &engine::EditorManager::show_perf_overlay)
+        .def_prop_rw("gizmo_operation", &engine::EditorManager::gizmo_operation, &engine::EditorManager::set_gizmo_operation)
+        .def("select_entity", &engine::EditorManager::select_entity, "entity"_a)
+        .def("set_selected_entity", &engine::EditorManager::select_entity, "entity"_a)
+        .def_prop_rw("selected_entity",
+            &engine::EditorManager::selected_entity,
+            &engine::EditorManager::select_entity)
+        .def("enable_toggle_hotkey", &engine::EditorManager::enable_toggle_hotkey, "enable"_a, "key"_a = engine::Key::F2);
+
+    // -----------------------------------------------------------------------
     // EngineApp
     // -----------------------------------------------------------------------
     nb::class_<engine::EngineApp>(m, "EngineApp")
@@ -601,7 +626,7 @@ NB_MODULE(_engine_core, m) {
         .def(nb::init<const std::string&, int, int>(),
              "title"_a, "width"_a, "height"_a)
         .def("init", &engine::EngineApp::init,
-             "title"_a = "Engine 3D Core",
+             "title"_a = "VelocityEngine v0.2-beta",
              "width"_a = 800,
              "height"_a = 600)
         .def("run", &engine::EngineApp::run,
@@ -614,6 +639,13 @@ NB_MODULE(_engine_core, m) {
         .def_prop_ro("camera", &engine::EngineApp::camera, nb::rv_policy::reference_internal)
         .def_prop_ro("input", &engine::EngineApp::input, nb::rv_policy::reference_internal)
         .def_prop_ro("audio", &engine::EngineApp::audio, nb::rv_policy::reference_internal)
+        .def_prop_ro("editor", &engine::EngineApp::editor, nb::rv_policy::reference_internal)
+
+        // Mode
+        .def_prop_rw("mode", &engine::EngineApp::get_mode, &engine::EngineApp::set_mode)
+        .def("get_mode", &engine::EngineApp::get_mode)
+        .def("set_mode", &engine::EngineApp::set_mode, "mode"_a)
+        .def("toggle_mode", &engine::EngineApp::toggle_mode)
 
         // Texture convenience loaders
         .def("load_texture", [](engine::EngineApp&, const std::string& path) {
@@ -651,3 +683,4 @@ NB_MODULE(_engine_core, m) {
         .def("toggle_debug_hitboxes", &engine::EngineApp::toggle_debug_hitboxes)
         .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes);
 }
+
