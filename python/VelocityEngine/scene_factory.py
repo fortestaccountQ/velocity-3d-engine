@@ -134,6 +134,7 @@ def create_grid(
     grid_mesh = _core.Mesh.create_plane(width=s, depth=s, subdivisions_x=subdiv, subdivisions_z=subdiv)
     entity = scene.create_entity("Grid")
     entity.mesh = grid_mesh
+    entity.transform.position = (0.0, -0.001, 0.0)
     entity.color = col
     entity.has_collision = False
     return entity

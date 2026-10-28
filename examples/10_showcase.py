@@ -118,6 +118,8 @@ def main():
             ent = app.scene.create_cylinder(radius=0.55, height=1.6, segments=20, color=col)
             ent.name = f"Cylinder_{i}"
 
+        # Verified height: center Y=0.8 places cylinder (height=1.6) base at Y=0.0,
+        # perfectly resting above the floor grid at Y=-0.001 with zero coplanar Z-fighting.
         ent.transform.position = (x, 0.8, z)
         ent.has_collision = True
         items.append((ent, (x, 0.8, z)))

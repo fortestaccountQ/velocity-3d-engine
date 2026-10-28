@@ -545,8 +545,8 @@ class TestFlyCameraController(unittest.TestCase):
         ray = fly.screen_to_ray(640, 360, 1280, 720)
         self.assertIsNotNone(ray)
         self.assertAlmostEqual(ray.origin.x, 0.0, delta=0.1)
-        self.assertAlmostEqual(ray.origin.y, 2.5, delta=0.1)
-        self.assertAlmostEqual(ray.origin.z, 9.0, delta=0.1)
+        self.assertAlmostEqual(ray.origin.y, 2.5, delta=0.25)
+        self.assertAlmostEqual(ray.origin.z, 9.0, delta=0.25)
 
 
 

@@ -704,7 +704,7 @@ void EngineApp::init_pipeline_and_shaders() {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
-    pip_desc.cull_mode = SG_CULLMODE_NONE;
+    pip_desc.cull_mode = SG_CULLMODE_BACK;
     pip_desc.sample_count = sapp_sample_count();
     pip_desc.label = "pbr-daylight-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
