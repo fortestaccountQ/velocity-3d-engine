@@ -282,6 +282,42 @@ class TweenManager:
         """Number of currently active tweens."""
         return len(self._tweens)
 
+    def to(
+        self,
+        target_obj: Any,
+        prop_name: str,
+        target_val: Any,
+        duration: float = 1.0,
+        easing: Union[str, Callable[[float], float]] = "linear",
+        on_complete: Optional[Callable[[], None]] = None,
+        loop: bool = False,
+    ) -> Tween:
+        """Fluent helper to tween a specific property or attribute of target_obj."""
+        if hasattr(target_obj, prop_name):
+            start_val = getattr(target_obj, prop_name)
+
+            def update_attr(val: Any) -> None:
+                setattr(target_obj, prop_name, val)
+        elif isinstance(target_obj, dict):
+            start_val = target_obj[prop_name]
+
+            def update_attr(val: Any) -> None:
+                target_obj[prop_name] = val
+        else:
+            raise AttributeError(f"Target object has no attribute or key '{prop_name}'")
+
+        ease_func = easing if callable(easing) else get_easing(easing)
+        tween = Tween(
+            start_value=start_val,
+            target_value=target_val,
+            duration=duration,
+            ease=ease_func,
+            on_update=update_attr,
+            on_complete=on_complete,
+            loop=loop,
+        )
+        return self.add(tween)
+
 
 # ---------------------------------------------------------------------------
 # Entity and Model Animation Extensions

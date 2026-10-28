@@ -26,6 +26,7 @@ def create_box(
     size: Union[float, Sequence[float]] = (1.0, 1.0, 1.0),
     position: Sequence[float] = (0.0, 0.0, 0.0),
     color: Any = WHITE,
+    **kwargs: Any,
 ) -> Any:
     """Create a 3D box entity at specified position with dimensions (width, height, depth)."""
     sx, sy, sz = _to_vec3_tuple(size)
@@ -33,11 +34,16 @@ def create_box(
     col = Color(color) if color is not None else WHITE
 
     box_mesh = _core.Mesh.create_box(sx, sy, sz)
-    entity = scene.create_entity("Box")
+    name = kwargs.get("name", "Box")
+    entity = scene.create_entity(name)
     entity.mesh = box_mesh
     entity.transform.set_position(px, py, pz)
     entity.color = col
-    entity.has_collision = True
+    entity.has_collision = kwargs.get("has_collision", True)
+    if "cast_shadows" in kwargs:
+        entity.cast_shadows = bool(kwargs["cast_shadows"])
+    if "material" in kwargs and kwargs["material"] is not None:
+        entity.material = kwargs["material"]
     return entity
 
 
@@ -47,6 +53,7 @@ def create_sphere(
     segments: int = 32,
     position: Sequence[float] = (0.0, 0.0, 0.0),
     color: Any = WHITE,
+    **kwargs: Any,
 ) -> Any:
     """Create a 3D sphere entity with specified radius and subdivision segments."""
     r = float(radius)
@@ -55,11 +62,16 @@ def create_sphere(
     col = Color(color) if color is not None else WHITE
 
     sphere_mesh = _core.Mesh.create_sphere(r, rings=seg, sectors=seg)
-    entity = scene.create_entity("Sphere")
+    name = kwargs.get("name", "Sphere")
+    entity = scene.create_entity(name)
     entity.mesh = sphere_mesh
     entity.transform.set_position(px, py, pz)
     entity.color = col
-    entity.has_collision = True
+    entity.has_collision = kwargs.get("has_collision", True)
+    if "cast_shadows" in kwargs:
+        entity.cast_shadows = bool(kwargs["cast_shadows"])
+    if "material" in kwargs and kwargs["material"] is not None:
+        entity.material = kwargs["material"]
     return entity
 
 
@@ -102,6 +114,7 @@ def create_cylinder(
     segments: int = 32,
     position: Sequence[float] = (0.0, 0.0, 0.0),
     color: Any = WHITE,
+    **kwargs: Any,
 ) -> Any:
     """Create a 3D cylinder entity with radius, height, and circumferential segments."""
     r = float(radius)
@@ -111,11 +124,16 @@ def create_cylinder(
     col = Color(color) if color is not None else WHITE
 
     cyl_mesh = _core.Mesh.create_cylinder(radius=r, height=h, segments=seg, capped=True)
-    entity = scene.create_entity("Cylinder")
+    name = kwargs.get("name", "Cylinder")
+    entity = scene.create_entity(name)
     entity.mesh = cyl_mesh
     entity.transform.set_position(px, py, pz)
     entity.color = col
-    entity.has_collision = True
+    entity.has_collision = kwargs.get("has_collision", True)
+    if "cast_shadows" in kwargs:
+        entity.cast_shadows = bool(kwargs["cast_shadows"])
+    if "material" in kwargs and kwargs["material"] is not None:
+        entity.material = kwargs["material"]
     return entity
 
 
@@ -217,10 +235,10 @@ class SceneFactory:
 
 def patch_scene() -> None:
     """Attach helper factory methods directly onto the native Scene class."""
-    _core.Scene.create_box = lambda self, size=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0), color=WHITE: create_box(self, size, position, color)
-    _core.Scene.create_sphere = lambda self, radius=1.0, segments=32, position=(0.0, 0.0, 0.0), color=WHITE: create_sphere(self, radius, segments, position, color)
+    _core.Scene.create_box = lambda self, size=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0), color=WHITE, **kwargs: create_box(self, size, position, color, **kwargs)
+    _core.Scene.create_sphere = lambda self, radius=1.0, segments=32, position=(0.0, 0.0, 0.0), color=WHITE, **kwargs: create_sphere(self, radius, segments, position, color, **kwargs)
     _core.Scene.create_plane_orig = _core.Scene.create_plane
     _core.Scene.create_plane = lambda self, width=20.0, height=None, subdivisions=10, position=(0.0, 0.0, 0.0), color=WHITE, **kwargs: create_plane(self, width, height, subdivisions, position, color, **kwargs)
-    _core.Scene.create_cylinder = lambda self, radius=0.5, height=2.0, segments=32, position=(0.0, 0.0, 0.0), color=WHITE: create_cylinder(self, radius, height, segments, position, color)
+    _core.Scene.create_cylinder = lambda self, radius=0.5, height=2.0, segments=32, position=(0.0, 0.0, 0.0), color=WHITE, **kwargs: create_cylinder(self, radius, height, segments, position, color, **kwargs)
     _core.Scene.create_grid = lambda self, size=50.0, step=1.0, color=GRAY: create_grid(self, size, step, color)
     _core.Scene.set_sun = lambda self, direction=(-1.0, -2.0, -1.0), color=WARM_WHITE, intensity=1.0: set_sun(self, direction, color, intensity)

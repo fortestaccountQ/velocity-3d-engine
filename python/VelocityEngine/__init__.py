@@ -92,10 +92,31 @@ from .material import Material, gold, metal, plastic, rubber
 from .controller import FirstPersonController, FlyCameraController, FreeCameraController
 from .app import App
 
+def patch_audio() -> None:
+    """Attach Pythonic helper methods directly onto the native AudioManager class."""
+    def play_sound(self: Any, name: str, *args: Any, **kwargs: Any) -> Any:
+        name_lower = str(name).lower()
+        if "jump" in name_lower:
+            return self.play_jump()
+        elif "footstep" in name_lower or "step" in name_lower:
+            return self.play_footstep()
+        elif "hit" in name_lower:
+            if args or kwargs:
+                return self.play_hit_3d(*args, **kwargs)
+            return self.play_hit_3d((0.0, 0.0, 0.0))
+        elif hasattr(self, "play_sound_file"):
+            return self.play_sound_file(name, *args, **kwargs)
+        return None
+
+    if not hasattr(_core.AudioManager, "play_sound"):
+        _core.AudioManager.play_sound = play_sound
+
+
 # Automatically apply Pythonic patches to native core classes
 patch_camera()
 patch_entity_and_model()
 patch_scene()
+patch_audio()
 
 __version__ = "0.2.0-beta"
 
