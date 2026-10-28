@@ -294,8 +294,8 @@ def test_car_hazard_squashed():
 
 
 def test_idle_timeout_death():
-    """Verify staying idle for > 8.0 seconds triggers EATEN game over."""
-    player = PlayerController(grid_x=0, grid_z=0)
+    """Verify staying idle for > idle_timeout seconds triggers EATEN game over."""
+    player = PlayerController(grid_x=0, grid_z=0, idle_timeout=8.0)
     assert player.idle_timer == 0.0
 
     # Advance 4.0 seconds - still alive

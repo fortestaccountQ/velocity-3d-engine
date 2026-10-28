@@ -29,7 +29,7 @@ from contracts.crossy_contracts import (
 # Gameplay Constants
 HOP_DURATION: float = 0.15     # Snappy hop time in seconds
 JUMP_HEIGHT: float = 0.65      # Peak height of parabolic jump arc
-IDLE_TIMEOUT: float = 8.0      # Idle seconds without forward progress before eagle strike
+IDLE_TIMEOUT: float = 45.0     # Idle seconds without forward progress before timeout
 BASE_SCALE: float = 0.65       # Standard duck visual scale (fits inside 1.0x1.0 grid)
 
 
@@ -43,10 +43,12 @@ class PlayerController(PlayerControllerContract):
         audio: Optional[Any] = None,
         grid_x: int = 0,
         grid_z: int = 0,
+        idle_timeout: Optional[float] = None,
     ) -> None:
         self.app = app
         self.scene = scene or (getattr(app, "scene", None) if app else None)
         self.audio = audio or (getattr(app, "audio", None) if app else None)
+        self.idle_timeout: float = float(idle_timeout if idle_timeout is not None else IDLE_TIMEOUT)
 
         # Grid Coordinates
         self.grid_x: int = int(grid_x)
@@ -243,9 +245,9 @@ class PlayerController(PlayerControllerContract):
         self.target_x = float(new_gx * GRID_STEP)
         self.target_z = float(new_gz * GRID_STEP)
 
-        # Forward movement resets idle countdown
-        if dz > 0:
-            self.idle_timer = 0.0
+        # Any player hop resets idle countdown and clears log carrier velocity
+        self.idle_timer = 0.0
+        self.carrier_vx = 0.0
 
         self._play_jump_sound()
         return True
@@ -290,9 +292,9 @@ class PlayerController(PlayerControllerContract):
                 self.scale_y = BASE_SCALE * shrink
                 self.scale_z = BASE_SCALE * shrink
             elif self.status == PlayerStatus.EATEN:
-                # Snatched by swooping eagle
-                self.y += 12.0 * dt
-                self.z += 9.0 * dt
+                # Comical arcade spin & shrink (clamped, duck never escapes into space)
+                self.y = min(1.2, self.y + 1.2 * dt)
+                self.rotation_y += 360.0 * dt
                 fade = max(0.0, 1.0 - self.death_timer * 1.5)
                 self.scale_x = BASE_SCALE * fade
                 self.scale_y = BASE_SCALE * fade
@@ -377,10 +379,10 @@ class PlayerController(PlayerControllerContract):
         else:
             self.carrier_vx = 0.0
 
-        # 4. Idle Timeout Countdown (> 8.0s without forward progress -> EATEN)
+        # 4. Idle Timeout Countdown (> idle_timeout seconds without action -> EATEN)
         if self.status == PlayerStatus.IDLE:
             self.idle_timer += dt
-            if self.idle_timer >= IDLE_TIMEOUT:
+            if self.idle_timer >= self.idle_timeout:
                 self.die(PlayerStatus.EATEN, "IDLE_TIMEOUT")
                 self._sync_transform()
                 return

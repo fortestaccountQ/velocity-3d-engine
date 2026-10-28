@@ -339,10 +339,14 @@ def main() -> None:
         color=Color.from_hex("#fffdf0"),
         intensity=1.45,
     )
+    app.set_show_crosshair(False)
+    py_ver = sys.version.split()[0]
+    app.set_hud_title(f"PYTHON {py_ver} (64-bit) | Sokol GFX D3D11")
+    app.set_hud_hint("[WASD / ARROWS] Hop   [R] Restart   [ESC] Exit")
 
     # 3. Instantiate Subsystems
     world = WorldGenerator(app.scene)
-    world.generate_ahead(0, lookahead=28)
+    world.generate_ahead(0, lookahead=20)
 
     player = PlayerController(app=app, scene=app.scene, audio=app.audio, grid_x=0, grid_z=0)
     iso_camera = IsometricCamera(camera=app.camera, app=app, damping=8.5)
@@ -392,8 +396,8 @@ def main() -> None:
 
         # Update World Streaming
         world.update(dt)
-        world.generate_ahead(player.grid_z, lookahead=28)
-        world.prune_behind(player.grid_z, keep_behind=8)
+        world.generate_ahead(player.grid_z, lookahead=20)
+        world.prune_behind(player.grid_z, keep_behind=6)
 
         # Update Player & Physics
         current_row = world.get_row(player.grid_z)
@@ -402,6 +406,7 @@ def main() -> None:
         # Update Camera & HUD
         iso_camera.update(dt, player)
         hud.render(dt, player)
+        app.set_hud_score(player.score)
 
         # Automated CI Test Flag (--test)
         if "--test" in sys.argv:

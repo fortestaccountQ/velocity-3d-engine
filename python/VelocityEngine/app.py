@@ -340,6 +340,34 @@ class App:
     def hud_score(self, value: int) -> None:
         self._core.hud_score = int(value)
 
+    def set_hud_score(self, score: int) -> None:
+        """Set HUD score value."""
+        self._core.hud_score = int(score)
+
+    @property
+    def hud_title(self) -> str:
+        return self._core.hud_title
+
+    @hud_title.setter
+    def hud_title(self, value: str) -> None:
+        self._core.hud_title = str(value)
+
+    def set_hud_title(self, title: str) -> None:
+        """Set HUD custom title tag."""
+        self._core.hud_title = str(title)
+
+    @property
+    def hud_hint(self) -> str:
+        return self._core.hud_hint
+
+    @hud_hint.setter
+    def hud_hint(self, value: str) -> None:
+        self._core.hud_hint = str(value)
+
+    def set_hud_hint(self, hint: str) -> None:
+        """Set HUD bottom hint string."""
+        self._core.hud_hint = str(hint)
+
     @property
     def target_fps(self) -> int:
         """Target frames per second limiter (0 for uncapped)."""

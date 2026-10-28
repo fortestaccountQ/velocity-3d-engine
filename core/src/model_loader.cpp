@@ -114,7 +114,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
         }
 
         if (!mat->albedo_map) {
-            mat->albedo_map = scene.default_checker_texture();
+            mat->albedo_map = scene.default_white_texture();
         }
 
         material_cache[gltf_mat] = mat;

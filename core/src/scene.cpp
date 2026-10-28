@@ -23,9 +23,16 @@ std::shared_ptr<Texture> Scene::default_checker_texture() {
     return default_checker_texture_;
 }
 
+std::shared_ptr<Texture> Scene::default_white_texture() {
+    if (!default_white_texture_) {
+        default_white_texture_ = Texture::create_solid_color(255, 255, 255, 255);
+    }
+    return default_white_texture_;
+}
+
 std::shared_ptr<Material> Scene::default_material() {
     if (!default_material_) {
-        default_material_ = std::make_shared<Material>(default_checker_texture(), 0.5f, 0.0f);
+        default_material_ = std::make_shared<Material>(default_white_texture(), 0.5f, 0.0f);
     }
     return default_material_;
 }
@@ -40,7 +47,7 @@ std::shared_ptr<Entity> Scene::create_cube(const glm::vec4& color) {
     auto entity = create_entity("Cube_" + std::to_string(next_id_));
     entity->mesh = default_cube_mesh();
     entity->color = color;
-    entity->material = std::make_shared<Material>(default_checker_texture(), 0.5f, 0.0f);
+    entity->material = std::make_shared<Material>(default_white_texture(), 0.5f, 0.0f);
     entity->material->base_color = color;
     return entity;
 }
@@ -49,7 +56,7 @@ std::shared_ptr<Entity> Scene::create_box(const glm::vec3& size, const glm::vec4
     auto entity = create_entity("Box_" + std::to_string(next_id_));
     entity->mesh = Mesh::create_box(size.x, size.y, size.z);
     entity->color = color;
-    entity->material = std::make_shared<Material>(default_checker_texture(), 0.5f, 0.0f);
+    entity->material = std::make_shared<Material>(default_white_texture(), 0.5f, 0.0f);
     entity->material->base_color = color;
     return entity;
 }
@@ -58,7 +65,7 @@ std::shared_ptr<Entity> Scene::create_sphere(float radius, int rings, int sector
     auto entity = create_entity("Sphere_" + std::to_string(next_id_));
     entity->mesh = Mesh::create_sphere(radius, rings, sectors);
     entity->color = color;
-    entity->material = std::make_shared<Material>(default_checker_texture(), 0.3f, 0.0f);
+    entity->material = std::make_shared<Material>(default_white_texture(), 0.3f, 0.0f);
     entity->material->base_color = color;
     return entity;
 }
@@ -67,7 +74,7 @@ std::shared_ptr<Entity> Scene::create_cylinder(float radius, float height, int s
     auto entity = create_entity("Cylinder_" + std::to_string(next_id_));
     entity->mesh = Mesh::create_cylinder(radius, height, segments, capped);
     entity->color = color;
-    entity->material = std::make_shared<Material>(default_checker_texture(), 0.5f, 0.0f);
+    entity->material = std::make_shared<Material>(default_white_texture(), 0.5f, 0.0f);
     entity->material->base_color = color;
     return entity;
 }
@@ -76,7 +83,7 @@ std::shared_ptr<Entity> Scene::create_plane(float size, float uv_tiling, std::sh
     auto entity = create_entity("Plane_" + std::to_string(next_id_));
     entity->mesh = Mesh::create_plane(size, size, 1, 1);
     if (!material) {
-        material = std::make_shared<Material>(default_checker_texture(), 0.8f, 0.0f);
+        material = std::make_shared<Material>(default_white_texture(), 0.8f, 0.0f);
         material->base_color = glm::vec4(0.85f, 0.85f, 0.90f, 1.0f);
         material->uv_scale = glm::vec2(uv_tiling, uv_tiling);
     }

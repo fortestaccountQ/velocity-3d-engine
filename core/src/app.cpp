@@ -737,7 +737,7 @@ void EngineApp::render_shadow_pass() {
 
     // 1. Calculate Light Projection and View
     glm::vec3 sun_dir = glm::normalize(scene_.light.direction);
-    glm::vec3 center = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 center = glm::vec3(camera_.target.x, 0.0f, camera_.target.z);
     glm::vec3 light_pos = center - sun_dir * 35.0f;
     glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 light_proj = glm::ortho(-32.0f, 32.0f, -32.0f, 32.0f, 2.0f, 85.0f);
@@ -894,8 +894,13 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     }
 
     // 2. Top-Left HUD Info Card (FPS & Score)
-    char fps_score_buf[64];
-    int top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+    char fps_score_buf[256];
+    int top_len = 0;
+    if (!hud_title_.empty()) {
+        top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "%s | FPS: %3.0f   SCORE: %d", hud_title_.c_str(), fps, hud_score_);
+    } else {
+        top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+    }
     float t_scale = 1.8f;
     float t_char_w = 8.0f * t_scale;
     float t_width = top_len * t_char_w;
@@ -914,7 +919,7 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     add_string(verts, fps_score_buf, top_x0 + t_pad_x, top_y0 + t_pad_y + 2.0f, t_scale, { 1.0f, 0.92f, 0.45f, 1.0f });
 
     // 3. Bottom Controls Hint Card
-    const char* hint = "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
+    const char* hint = !hud_hint_.empty() ? hud_hint_.c_str() : "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
     float b_scale = 1.35f;
     float b_char_w = 8.0f * b_scale;
     float b_width = std::strlen(hint) * b_char_w;
@@ -1042,9 +1047,9 @@ void EngineApp::on_frame() {
             fog_density_
         );
 
-        auto default_checker = scene_.default_checker_texture();
-        if (default_checker) {
-            default_checker->ensure_gpu_resources();
+        auto default_white = scene_.default_white_texture();
+        if (default_white) {
+            default_white->ensure_gpu_resources();
         }
         auto default_mat = scene_.default_material();
 
@@ -1064,12 +1069,12 @@ void EngineApp::on_frame() {
 
             // Material resolution
             auto mat = entity->material ? entity->material : default_mat;
-            auto tex = (mat && mat->albedo_map) ? mat->albedo_map : default_checker;
+            auto tex = (mat && mat->albedo_map) ? mat->albedo_map : default_white;
             if (tex) {
                 tex->ensure_gpu_resources();
             }
             if (!tex || !tex->is_valid()) {
-                tex = default_checker;
+                tex = default_white;
             }
             if (!tex || !tex->is_valid()) {
                 continue;

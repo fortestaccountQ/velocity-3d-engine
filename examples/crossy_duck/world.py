@@ -559,6 +559,7 @@ class StartRow(BaseRow):
                 size=(44.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
                 color=COLOR_START_ZONE,
+                cast_shadows=False,
                 has_collision=False,
                 name="StartGround",
             )
@@ -597,6 +598,7 @@ class GrassRow(BaseRow):
                 size=(44.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
                 color=ground_col,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"GrassGround_{z_index}",
             )
@@ -661,17 +663,19 @@ class RoadRow(BaseRow):
                 size=(44.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
                 color=COLOR_ROAD_ASPHALT,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"RoadAsphalt_{z_index}",
             )
             self.entities.append(asphalt)
 
-            # Dashed lane markers
-            for mx in range(-16, 17, 4):
+            # Dashed lane markers (elevated to 0.025 to prevent coplanar Z-fighting)
+            for mx in range(-12, 13, 4):
                 marker = scene.create_box(
-                    size=(1.4, 0.03, 0.12),
-                    position=(float(mx), 0.015, float(self.z_index)),
+                    size=(1.4, 0.04, 0.14),
+                    position=(float(mx), 0.025, float(self.z_index)),
                     color=COLOR_ROAD_MARKER,
+                    cast_shadows=False,
                     has_collision=False,
                     name=f"LaneMarker_{z_index}_{mx}",
                 )
@@ -750,6 +754,7 @@ class RiverRow(BaseRow):
                 size=(44.0, 0.35, 1.0),
                 position=(0.0, -0.22, float(self.z_index)),
                 color=COLOR_RIVER_WATER,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"RiverWater_{z_index}",
             )
@@ -824,34 +829,38 @@ class RailRow(BaseRow):
                 size=(44.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
                 color=COLOR_RAIL_GRAVEL,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"RailGravel_{z_index}",
             )
             self.entities.append(gravel)
 
-            # 2. Wooden sleepers (ties)
-            for tx in range(-18, 19, 2):
+            # 2. Wooden sleepers (ties) - step of 3 to save draw calls & prevent Z-fighting
+            for tx in range(-12, 13, 3):
                 tie = scene.create_box(
-                    size=(0.4, 0.04, 0.85),
-                    position=(float(tx), 0.02, float(self.z_index)),
+                    size=(0.4, 0.05, 0.85),
+                    position=(float(tx), 0.028, float(self.z_index)),
                     color=COLOR_RAIL_TIE,
+                    cast_shadows=False,
                     has_collision=False,
                     name=f"RailTie_{z_index}_{tx}",
                 )
                 self.entities.append(tie)
 
-            # 3. Metallic rails (2 parallel steel tracks)
+            # 3. Metallic rails (2 parallel steel tracks, slightly elevated above ties)
             r1 = scene.create_box(
                 size=(44.0, 0.06, 0.08),
-                position=(0.0, 0.05, float(self.z_index) - 0.22),
+                position=(0.0, 0.075, float(self.z_index) - 0.22),
                 color=COLOR_RAIL_STEEL,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"RailSteel1_{z_index}",
             )
             r2 = scene.create_box(
                 size=(44.0, 0.06, 0.08),
-                position=(0.0, 0.05, float(self.z_index) + 0.22),
+                position=(0.0, 0.075, float(self.z_index) + 0.22),
                 color=COLOR_RAIL_STEEL,
+                cast_shadows=False,
                 has_collision=False,
                 name=f"RailSteel2_{z_index}",
             )

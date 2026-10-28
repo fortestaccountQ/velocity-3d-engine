@@ -60,7 +60,8 @@ class IsometricCamera:
 
     def get_desired_target(self, px: float, py: float, pz: float) -> Tuple[float, float, float]:
         """Compute ideal camera look-at target in world space given player coords."""
-        return (px + self.target_offset_x, py + self.target_offset_y, pz + self.target_offset_z)
+        clamped_py = min(2.0, max(-0.5, py))
+        return (px + self.target_offset_x, clamped_py + self.target_offset_y, pz + self.target_offset_z)
 
     def snap_to(self, player: Any) -> None:
         """Immediately teleport camera to ideal follow pose without damping."""

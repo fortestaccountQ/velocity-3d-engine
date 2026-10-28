@@ -71,6 +71,10 @@ public:
     bool show_crosshair() const { return show_crosshair_; }
     void set_hud_score(int score) { hud_score_ = score; }
     int hud_score() const { return hud_score_; }
+    void set_hud_title(const std::string& title) { hud_title_ = title; }
+    std::string hud_title() const { return hud_title_; }
+    void set_hud_hint(const std::string& hint) { hud_hint_ = hint; }
+    std::string hud_hint() const { return hud_hint_; }
 
     // Frame pacing / Target FPS limiter
     void set_target_fps(int fps) { target_fps_ = fps; }
@@ -173,6 +177,8 @@ private:
     bool show_crosshair_{true};
     bool show_debug_hitboxes_{false};
     int hud_score_{0};
+    std::string hud_title_{""};
+    std::string hud_hint_{""};
     int target_fps_{0};
 
     // Fog and Tone Mapping settings

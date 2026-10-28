@@ -33,6 +33,7 @@ public:
     const std::vector<std::shared_ptr<Entity>>& entities() const { return entities_; }
     std::shared_ptr<Mesh> default_cube_mesh();
     std::shared_ptr<Texture> default_checker_texture();
+    std::shared_ptr<Texture> default_white_texture();
     std::shared_ptr<Material> default_material();
 
 private:
@@ -40,6 +41,7 @@ private:
     uint32_t next_id_{1};
     std::shared_ptr<Mesh> default_cube_mesh_{nullptr};
     std::shared_ptr<Texture> default_checker_texture_{nullptr};
+    std::shared_ptr<Texture> default_white_texture_{nullptr};
     std::shared_ptr<Material> default_material_{nullptr};
 };
 
