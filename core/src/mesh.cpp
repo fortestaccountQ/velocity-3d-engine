@@ -156,13 +156,13 @@ std::shared_ptr<Mesh> Mesh::create_sphere(float radius, int rings, int sectors) 
 
             if (r != 0) {
                 mesh->cpu_indices.push_back(i0);
-                mesh->cpu_indices.push_back(i2);
                 mesh->cpu_indices.push_back(i1);
+                mesh->cpu_indices.push_back(i2);
             }
             if (r != rings - 1) {
                 mesh->cpu_indices.push_back(i1);
-                mesh->cpu_indices.push_back(i2);
                 mesh->cpu_indices.push_back(i3);
+                mesh->cpu_indices.push_back(i2);
             }
         }
     }
@@ -203,15 +203,15 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
         uint16_t tr = static_cast<uint16_t>((s + 1) * 2);
         uint16_t br = static_cast<uint16_t>(tr + 1);
 
-        // Triangle 1: TL -> BL -> TR
+        // Triangle 1: TL -> TR -> BL
         mesh->cpu_indices.push_back(tl);
-        mesh->cpu_indices.push_back(bl);
         mesh->cpu_indices.push_back(tr);
+        mesh->cpu_indices.push_back(bl);
 
-        // Triangle 2: TR -> BL -> BR
+        // Triangle 2: TR -> BR -> BL
         mesh->cpu_indices.push_back(tr);
-        mesh->cpu_indices.push_back(bl);
         mesh->cpu_indices.push_back(br);
+        mesh->cpu_indices.push_back(bl);
     }
 
     if (capped) {
