@@ -122,6 +122,25 @@ struct AABB {
     }
 };
 
+struct BoundingSphere {
+    glm::vec3 center{0.0f};
+    float radius{0.0f};
+
+    BoundingSphere() = default;
+    BoundingSphere(const glm::vec3& c, float r) : center(c), radius(r) {}
+
+    static BoundingSphere from_aabb(const AABB& aabb) {
+        if (!aabb.is_valid()) return BoundingSphere();
+        glm::vec3 c = aabb.center();
+        float r = glm::length(aabb.extents());
+        return BoundingSphere(c, r);
+    }
+
+    bool is_valid() const {
+        return radius > 0.0f;
+    }
+};
+
 struct Cylinder {
     glm::vec3 base{0.0f}; // Bottom center of cylinder
     float radius{0.35f};
@@ -236,6 +255,27 @@ struct Ray {
 
     glm::vec3 point_at(float t) const {
         return origin + direction * t;
+    }
+
+    bool intersect_sphere(const BoundingSphere& sphere, float& t_out) const {
+        if (!sphere.is_valid()) return false;
+        glm::vec3 m = origin - sphere.center;
+        float b = glm::dot(m, direction);
+        float c = glm::dot(m, m) - sphere.radius * sphere.radius;
+
+        // If ray origin is outside sphere and pointing away from sphere, no hit
+        if (c > 0.0f && b > 0.0f) return false;
+
+        float discriminant = b * b - c;
+        if (discriminant < 0.0f) return false;
+
+        float sqrt_d = std::sqrt(discriminant);
+        float t = -b - sqrt_d;
+        if (t < 0.0f) t = -b + sqrt_d; // Ray origin inside sphere
+        if (t < 0.0f) return false;
+
+        t_out = t;
+        return true;
     }
 
     bool intersect_aabb(const AABB& aabb, float& t_out) const {

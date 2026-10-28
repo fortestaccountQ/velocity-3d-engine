@@ -74,6 +74,37 @@ public:
     void toggle_debug_hitboxes() { show_debug_hitboxes_ = !show_debug_hitboxes_; }
     bool is_debug_hitboxes() const { return show_debug_hitboxes_; }
 
+    // Fog and Tone Mapping
+    void set_linear_fog(const glm::vec3& color, float near_dist, float far_dist) {
+        fog_enabled_ = true;
+        fog_type_ = 1;
+        fog_color_ = color;
+        fog_near_ = near_dist;
+        fog_far_ = far_dist;
+    }
+
+    void set_exp2_fog(const glm::vec3& color, float density) {
+        fog_enabled_ = true;
+        fog_type_ = 2;
+        fog_color_ = color;
+        fog_density_ = density;
+    }
+
+    void clear_fog() {
+        fog_enabled_ = false;
+        fog_type_ = 0;
+    }
+
+    bool fog_enabled() const { return fog_enabled_; }
+    int fog_type() const { return fog_type_; }
+    glm::vec3 fog_color() const { return fog_color_; }
+    float fog_near() const { return fog_near_; }
+    float fog_far() const { return fog_far_; }
+    float fog_density() const { return fog_density_; }
+
+    void set_tone_mapping(bool enable) { tone_mapping_enabled_ = enable; }
+    bool tone_mapping_enabled() const { return tone_mapping_enabled_; }
+
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
@@ -135,6 +166,15 @@ private:
     bool show_hud_{true};
     bool show_debug_hitboxes_{false};
     int hud_score_{0};
+
+    // Fog and Tone Mapping settings
+    bool fog_enabled_{false};
+    int fog_type_{0}; // 0 = off, 1 = linear, 2 = exp2
+    glm::vec3 fog_color_{0.8f, 0.8f, 0.85f};
+    float fog_near_{1.0f};
+    float fog_far_{100.0f};
+    float fog_density_{0.01f};
+    bool tone_mapping_enabled_{true};
 };
 
 } // namespace engine

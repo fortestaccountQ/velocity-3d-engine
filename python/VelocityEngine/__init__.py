@@ -24,6 +24,7 @@ InputManager = _core.InputManager
 AudioManager = _core.AudioManager
 EditorManager = _core.EditorManager
 AABB = _core.AABB
+BoundingSphere = getattr(_core, "BoundingSphere", None)
 Cylinder = _core.Cylinder
 Ray = _core.Ray
 RaycastHit = _core.RaycastHit

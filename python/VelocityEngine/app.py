@@ -39,6 +39,7 @@ class App:
         self._click_callbacks: List[Callable] = []
         self._hover_callbacks: List[Callable] = []
         self._prev_mouse_down = [False] * 8
+        self._fog: Optional[Any] = None
 
         # Hook internal frame update callback
         self._core.set_update_callback(self._on_internal_frame)
@@ -336,3 +337,34 @@ class App:
 
     def toggle_debug_hitboxes(self) -> None:
         self._core.toggle_debug_hitboxes()
+
+    @property
+    def fog(self) -> Optional[Any]:
+        """Atmospheric depth fog (Fog or FogExp2)."""
+        return self._fog
+
+    @fog.setter
+    def fog(self, value: Optional[Any]) -> None:
+        self._fog = value
+        if value is None:
+            self._core.clear_fog()
+            return
+
+        from .color import as_color
+        from .fog import Fog, FogExp2
+
+        col = as_color(value.color)
+        c_tuple = (col.r, col.g, col.b)
+        if isinstance(value, FogExp2):
+            self._core.set_exp2_fog(c_tuple, float(value.density))
+        else:
+            self._core.set_linear_fog(c_tuple, float(getattr(value, "near", 1.0)), float(getattr(value, "far", 100.0)))
+
+    @property
+    def tone_mapping(self) -> bool:
+        """ACES Filmic Tone Mapping enable state."""
+        return self._core.tone_mapping
+
+    @tone_mapping.setter
+    def tone_mapping(self, value: bool) -> None:
+        self._core.tone_mapping = bool(value)

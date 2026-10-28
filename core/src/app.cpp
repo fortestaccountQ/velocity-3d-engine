@@ -32,6 +32,8 @@ struct FSParams {
     glm::vec4 material_params;  // x = roughness, y = metallic, zw = uv_scale
     glm::vec4 hemi_sky;         // rgb = sky ambient, w = 1.0
     glm::vec4 hemi_ground;      // rgb = ground ambient, w = 1.0
+    glm::vec4 fog_color;        // rgb = fog color, w = tone_mapping_enabled (1.0 or 0.0)
+    glm::vec4 fog_params;       // x = fog_type (0=off, 1=linear, 2=exp2), y = near, z = far, w = density
 };
 
 struct ShadowVSParams {
@@ -203,6 +205,8 @@ static const char* hlsl_fs =
     "    float4 material_params;\n" // x=roughness, y=metallic, zw=uv_scale
     "    float4 hemi_sky;\n"
     "    float4 hemi_ground;\n"
+    "    float4 fog_color;\n"       // rgb=fog color, w=tone_mapping_enabled (1.0 or 0.0)
+    "    float4 fog_params;\n"      // x=fog_type (0=off, 1=linear, 2=exp2), y=near, z=far, w=density
     "};\n"
     "Texture2D tex_albedo : register(t0);\n"
     "SamplerState smp_albedo : register(s0);\n"
@@ -215,6 +219,14 @@ static const char* hlsl_fs =
     "    float3 world_pos : TEXCOORD1;\n"
     "    float4 light_pos : TEXCOORD2;\n"
     "};\n"
+    "float3 apply_aces_filmic(float3 x) {\n"
+    "    float a = 2.51;\n"
+    "    float b = 0.03;\n"
+    "    float c = 2.43;\n"
+    "    float d = 0.59;\n"
+    "    float e = 0.14;\n"
+    "    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));\n"
+    "}\n"
     "float sample_shadow(float4 lpos, float3 N, float3 L) {\n"
     "    float NdotL = dot(N, L);\n"
     "    if (NdotL <= 0.0) {\n"
@@ -268,6 +280,26 @@ static const char* hlsl_fs =
     "    float3 ambient = ambient_light * albedo * (1.0 - 0.5 * metallic);\n"
     "    float shadow = sample_shadow(inp.light_pos, N, L);\n"
     "    float3 final_color = ambient + (diffuse + specular) * shadow;\n"
+    "    // Atmospheric Depth Fog\n"
+    "    float fog_type = fog_params.x;\n"
+    "    if (fog_type > 0.5) {\n"
+    "        float dist = length(inp.world_pos - eye_pos.xyz);\n"
+    "        float fog_factor = 1.0;\n"
+    "        if (fog_type < 1.5) {\n"
+    "            float near = fog_params.y;\n"
+    "            float far = fog_params.z;\n"
+    "            fog_factor = saturate((far - dist) / max(far - near, 0.0001));\n"
+    "        } else {\n"
+    "            float density = fog_params.w;\n"
+    "            float d = dist * density;\n"
+    "            fog_factor = saturate(exp(- d * d));\n"
+    "        }\n"
+    "        final_color = lerp(fog_color.rgb, final_color, fog_factor);\n"
+    "    }\n"
+    "    // ACES Filmic Tone Mapping\n"
+    "    if (fog_color.w > 0.5) {\n"
+    "        final_color = apply_aces_filmic(final_color);\n"
+    "    }\n"
     "    return float4(final_color, tex_sample.a * inp.color.a * material_color.a);\n"
     "}\n";
 
@@ -969,6 +1001,13 @@ void EngineApp::on_frame() {
         fs_params.eye_pos = glm::vec4(camera_.position, 1.0f);
         fs_params.hemi_sky = glm::vec4(scene_.light.ambient_sky, 1.0f);
         fs_params.hemi_ground = glm::vec4(scene_.light.ambient_ground, 1.0f);
+        fs_params.fog_color = glm::vec4(fog_color_, tone_mapping_enabled_ ? 1.0f : 0.0f);
+        fs_params.fog_params = glm::vec4(
+            fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
+            fog_near_,
+            fog_far_,
+            fog_density_
+        );
 
         auto default_checker = scene_.default_checker_texture();
         if (default_checker) {

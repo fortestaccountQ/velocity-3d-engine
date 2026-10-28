@@ -89,6 +89,11 @@ public:
         return lbox.transformed(world_model_matrix());
     }
 
+    BoundingSphere world_bounding_sphere() const {
+        AABB w_aabb = world_aabb();
+        return BoundingSphere::from_aabb(w_aabb);
+    }
+
     void set_color(float r, float g, float b, float a = 1.0f) {
         color = { r, g, b, a };
         if (material) {

@@ -110,3 +110,87 @@ def test_instanced_mesh():
     inst.set_instance_count(8)
     assert inst.instance_count() == 8
     inst.set_instance(0, (1, 1, 0, 1))
+
+
+def test_bounding_sphere_and_ray_intersection():
+    aabb = ve.AABB(ve.Vec3(-1, -1, -1), ve.Vec3(1, 1, 1))
+    sphere = ve.BoundingSphere.from_aabb(aabb)
+    assert sphere.is_valid()
+    assert abs(sphere.center.x) < 1e-5
+    assert abs(sphere.center.y) < 1e-5
+    assert abs(sphere.center.z) < 1e-5
+    # Radius of box with extents (1, 1, 1) is sqrt(3) ~= 1.732
+    assert abs(sphere.radius - math.sqrt(3.0)) < 1e-4
+
+    # Direct hit
+    ray_hit = ve.Ray(ve.Vec3(0, 0, 5), ve.Vec3(0, 0, -1))
+    hit, t = ray_hit.intersect_sphere(sphere)
+    assert hit
+    assert abs(t - (5.0 - sphere.radius)) < 1e-4
+
+    # Miss
+    ray_miss = ve.Ray(ve.Vec3(0, 5, 5), ve.Vec3(0, 0, -1))
+    hit_miss, _ = ray_miss.intersect_sphere(sphere)
+    assert not hit_miss
+
+    # Inside sphere
+    ray_inside = ve.Ray(ve.Vec3(0, 0, 0), ve.Vec3(0, 0, 1))
+    hit_in, t_in = ray_inside.intersect_sphere(sphere)
+    assert hit_in
+    assert abs(t_in - sphere.radius) < 1e-4
+
+
+def test_entity_world_bounding_sphere():
+    scene = ve.Scene()
+    ent = scene.create_box((2, 2, 2))
+    ent.transform.position = (5, 0, 0)
+
+    sphere = ent.world_bounding_sphere()
+    assert sphere.is_valid()
+    assert abs(sphere.center.x - 5.0) < 1e-4
+    assert abs(sphere.radius - math.sqrt(3.0)) < 1e-4
+
+    # Raycast pre-pass verification: ray through (5, 0, 10) pointing in -Z hits
+    ray = ve.Ray(ve.Vec3(5, 0, 10), ve.Vec3(0, 0, -1))
+    hit = scene.raycast(ray)
+    assert hit.hit
+    assert hit.entity.id == ent.id
+
+    # Ray missing the bounding sphere at X=10 doesn't hit
+    ray2 = ve.Ray(ve.Vec3(10, 0, 10), ve.Vec3(0, 0, -1))
+    hit2 = scene.raycast(ray2)
+    assert not hit2.hit
+
+
+def test_fog_and_tone_mapping_integration():
+    app = ve.App(title="FogTest", width=640, height=480)
+    
+    # 1. Linear Fog
+    fog_lin = ve.Fog(color="#223344", near=5.0, far=50.0)
+    app.fog = fog_lin
+    assert app.fog is fog_lin
+    assert app._core.fog_enabled
+    assert app._core.fog_type == 1  # 1 = Linear
+    assert abs(app._core.fog_near - 5.0) < 1e-4
+    assert abs(app._core.fog_far - 50.0) < 1e-4
+
+    # 2. Exp2 Fog
+    fog_exp = ve.FogExp2(color="#112233", density=0.035)
+    app.fog = fog_exp
+    assert app.fog is fog_exp
+    assert app._core.fog_enabled
+    assert app._core.fog_type == 2  # 2 = Exp2
+    assert abs(app._core.fog_density - 0.035) < 1e-4
+
+    # 3. Clear Fog
+    app.fog = None
+    assert app.fog is None
+    assert not app._core.fog_enabled
+
+    # 4. Tone Mapping
+    assert app.tone_mapping is True
+    app.tone_mapping = False
+    assert app.tone_mapping is False
+    assert app._core.tone_mapping is False
+    app.tone_mapping = True
+    assert app.tone_mapping is True

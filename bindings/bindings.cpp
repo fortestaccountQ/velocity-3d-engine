@@ -204,6 +204,19 @@ NB_MODULE(_VelocityEngine_core, m) {
                    "), max=(" + std::to_string(b.max_point.x) + ", " + std::to_string(b.max_point.y) + ", " + std::to_string(b.max_point.z) + "))";
         });
 
+    nb::class_<engine::BoundingSphere>(m, "BoundingSphere")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, float>(), "center"_a, "radius"_a)
+        .def_rw("center", &engine::BoundingSphere::center)
+        .def_rw("radius", &engine::BoundingSphere::radius)
+        .def("is_valid", &engine::BoundingSphere::is_valid)
+        .def_static("from_aabb", &engine::BoundingSphere::from_aabb, "aabb"_a)
+        .def("__repr__", [](const engine::BoundingSphere& s) {
+            return "BoundingSphere(center=(" + std::to_string(s.center.x) + ", " +
+                   std::to_string(s.center.y) + ", " + std::to_string(s.center.z) +
+                   "), radius=" + std::to_string(s.radius) + ")";
+        });
+
     nb::class_<engine::Cylinder>(m, "Cylinder")
         .def(nb::init<>())
         .def(nb::init<const glm::vec3&, float, float>(), "base"_a, "radius"_a = 0.35f, "height"_a = 1.8f)
@@ -241,6 +254,11 @@ NB_MODULE(_VelocityEngine_core, m) {
             bool hit = r.intersect_aabb(b, t);
             return nb::make_tuple(hit, t);
         }, "aabb"_a)
+        .def("intersect_sphere", [](const engine::Ray& r, const engine::BoundingSphere& s) -> nb::tuple {
+            float t = 0.0f;
+            bool hit = r.intersect_sphere(s, t);
+            return nb::make_tuple(hit, t);
+        }, "sphere"_a)
         .def("__repr__", [](const engine::Ray& r) {
             return "Ray(origin=(" + std::to_string(r.origin.x) + ", " + std::to_string(r.origin.y) + ", " + std::to_string(r.origin.z) +
                    "), dir=(" + std::to_string(r.direction.x) + ", " + std::to_string(r.direction.y) + ", " + std::to_string(r.direction.z) + "))";
@@ -589,6 +607,7 @@ NB_MODULE(_VelocityEngine_core, m) {
             [](engine::Entity& e) -> std::shared_ptr<engine::Entity> { return e.parent; },
             [](engine::Entity& e, std::shared_ptr<engine::Entity> p) { e.parent = p; })
         .def("world_aabb", &engine::Entity::world_aabb)
+        .def("world_bounding_sphere", &engine::Entity::world_bounding_sphere)
         .def("local_collision_box", &engine::Entity::local_collision_box)
         .def("world_obb_corners", [](const engine::Entity& e) {
             auto arr = e.world_obb_corners();
@@ -798,6 +817,35 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_prop_rw("hud_score", &engine::EngineApp::hud_score, &engine::EngineApp::set_hud_score)
         .def("set_debug_hitboxes", &engine::EngineApp::set_debug_hitboxes, "enable"_a)
         .def("toggle_debug_hitboxes", &engine::EngineApp::toggle_debug_hitboxes)
-        .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes);
+        .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes)
+
+        // Fog & Tone Mapping
+        .def("set_linear_fog", [](engine::EngineApp& app, const nb::object& color, float near_dist, float far_dist) {
+            glm::vec3 c{0.8f, 0.8f, 0.85f};
+            if (nb::isinstance<glm::vec3>(color)) c = nb::cast<glm::vec3>(color);
+            else if (nb::isinstance<nb::tuple>(color) || nb::isinstance<nb::list>(color)) {
+                auto s = nb::cast<std::vector<float>>(color);
+                if (s.size() >= 3) c = { s[0], s[1], s[2] };
+            }
+            app.set_linear_fog(c, near_dist, far_dist);
+        }, "color"_a, "near"_a = 1.0f, "far"_a = 100.0f)
+        .def("set_exp2_fog", [](engine::EngineApp& app, const nb::object& color, float density) {
+            glm::vec3 c{0.8f, 0.8f, 0.85f};
+            if (nb::isinstance<glm::vec3>(color)) c = nb::cast<glm::vec3>(color);
+            else if (nb::isinstance<nb::tuple>(color) || nb::isinstance<nb::list>(color)) {
+                auto s = nb::cast<std::vector<float>>(color);
+                if (s.size() >= 3) c = { s[0], s[1], s[2] };
+            }
+            app.set_exp2_fog(c, density);
+        }, "color"_a, "density"_a = 0.02f)
+        .def("clear_fog", &engine::EngineApp::clear_fog)
+        .def_prop_ro("fog_enabled", &engine::EngineApp::fog_enabled)
+        .def_prop_ro("fog_type", &engine::EngineApp::fog_type)
+        .def_prop_ro("fog_color", &engine::EngineApp::fog_color)
+        .def_prop_ro("fog_near", &engine::EngineApp::fog_near)
+        .def_prop_ro("fog_far", &engine::EngineApp::fog_far)
+        .def_prop_ro("fog_density", &engine::EngineApp::fog_density)
+        .def("set_tone_mapping", &engine::EngineApp::set_tone_mapping, "enable"_a)
+        .def_prop_rw("tone_mapping", &engine::EngineApp::tone_mapping_enabled, &engine::EngineApp::set_tone_mapping);
 }
 

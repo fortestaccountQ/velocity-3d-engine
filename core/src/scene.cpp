@@ -117,6 +117,18 @@ RaycastHit Scene::raycast(const Ray& ray, float max_distance) const {
             continue;
         }
 
+        // BoundingSphere pre-pass: fast rejection before matrix inversion and 6-plane AABB test
+        BoundingSphere bsphere = entity->world_bounding_sphere();
+        float t_sphere = 0.0f;
+        if (bsphere.is_valid()) {
+            if (!ray.intersect_sphere(bsphere, t_sphere)) {
+                continue; // Ray misses bounding sphere completely
+            }
+            if (t_sphere > closest_hit.distance) {
+                continue; // Nearest point on sphere is further than current closest hit
+            }
+        }
+
         AABB lbox = entity->local_collision_box();
         if (!lbox.is_valid()) {
             continue;
