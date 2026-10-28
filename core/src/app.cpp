@@ -543,6 +543,7 @@ void EngineApp::init_shadow_pipeline() {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
+    pip_desc.face_winding = SG_FACEWINDING_CCW;
     pip_desc.cull_mode = SG_CULLMODE_FRONT;
     pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_R32F;
     pip_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
@@ -704,6 +705,7 @@ void EngineApp::init_pipeline_and_shaders() {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     pip_desc.depth.write_enabled = true;
+    pip_desc.face_winding = SG_FACEWINDING_CCW;
     pip_desc.cull_mode = SG_CULLMODE_BACK;
     pip_desc.sample_count = sapp_sample_count();
     pip_desc.label = "pbr-daylight-pipeline";
