@@ -4,10 +4,19 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include "engine/physics.hpp"
 
 namespace engine {
 
-class Camera {
+class ICameraRaycast {
+public:
+    virtual ~ICameraRaycast() = default;
+
+    // Convert 2D viewport coordinates (pixel space) to a 3D ray in world space
+    virtual Ray screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const = 0;
+};
+
+class Camera : public ICameraRaycast {
 public:
     glm::vec3 position{0.0f, 2.0f, 6.0f};
     glm::vec3 target{0.0f, 0.0f, 0.0f};
@@ -94,6 +103,8 @@ public:
         position += up * distance;
         target += up * distance;
     }
+
+    Ray screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const override;
 };
 
 } // namespace engine

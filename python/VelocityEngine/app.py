@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Callable, Sequence, Optional, Any
+from typing import Callable, Sequence, Optional, Any, List
 
 try:
     from . import _VelocityEngine_core as _core
 except ImportError:
     import _VelocityEngine_core as _core
+
+from .color import Color, as_color
+from .tween import TweenManager
+from .ui import UIOverlay
 
 
 class App:
@@ -19,21 +23,115 @@ class App:
         width: int = 1280,
         height: int = 720,
         mode: Optional[Any] = None,
-        clear_color: Optional[Sequence[float]] = None,
+        clear_color: Optional[Union[Sequence[float], str, Color]] = None,
     ) -> None:
         """Create and configure a new engine window application."""
         self._core = _core.EngineApp(title, width, height)
         self._update_callback: Optional[Callable[[float], None]] = None
 
+        # Camera & Subsystem extensions
+        self._camera_controller: Optional[Any] = None
+        self._custom_camera: Optional[Any] = None
+        self._ui = UIOverlay(app=self)
+        self._tweens = TweenManager.default()
+
+        # Raycasting event listeners
+        self._click_callbacks: List[Callable] = []
+        self._hover_callbacks: List[Callable] = []
+        self._prev_mouse_down = [False] * 8
+
+        # Hook internal frame update callback
+        self._core.set_update_callback(self._on_internal_frame)
+
         if mode is not None:
             self.mode = mode
 
         if clear_color is not None:
-            r = float(clear_color[0])
-            g = float(clear_color[1])
-            b = float(clear_color[2])
-            a = float(clear_color[3]) if len(clear_color) > 3 else 1.0
-            self._core.set_clear_color(r, g, b, a)
+            col = as_color(clear_color)
+            self._core.set_clear_color(col.r, col.g, col.b, col.a)
+
+    def _on_internal_frame(self, dt: float) -> None:
+        """Internal frame callback driving tweens, active camera controllers, and raycasting."""
+        # 1. Update tweens
+        self._tweens.update(dt)
+
+        # 2. Update active camera controller
+        if self._camera_controller is not None:
+            ctrl = self._camera_controller
+            core_cam = self._custom_camera or self._core.camera
+            if hasattr(ctrl, "update"):
+                try:
+                    # Preferred: update(camera, input_mgr, dt, width, height)
+                    ctrl.update(core_cam, self.input, dt, self.width, self.height)
+                except TypeError:
+                    try:
+                        # Contract fallback: update(dt, input_mgr, width, height)
+                        ctrl.update(dt, self.input, self.width, self.height)
+                    except TypeError:
+                        try:
+                            ctrl.update(dt)
+                        except Exception:
+                            pass
+
+        # 3. Process event-driven screen raycasting
+        self._process_raycast_events()
+
+        # 4. User update callback
+        if self._update_callback is not None:
+            self._update_callback(dt)
+
+    def _process_raycast_events(self) -> None:
+        """Raycast against scene under mouse cursor and dispatch hover/click events."""
+        if not self._click_callbacks and not self._hover_callbacks:
+            return
+
+        core_cam = self._custom_camera or self._core.camera
+        if not hasattr(core_cam, "screen_to_ray"):
+            from .camera_utils import patch_camera
+            patch_camera()
+
+        mx = self.input.mouse_x
+        my = self.input.mouse_y
+        w = max(1, self.width)
+        h = max(1, self.height)
+
+        ray = None
+        hit = None
+
+        def get_hit():
+            nonlocal ray, hit
+            if hit is None:
+                ray = core_cam.screen_to_ray(mx, my, w, h)
+                hit = self.scene.raycast(ray)
+            return hit
+
+        # Hover callbacks
+        if self._hover_callbacks:
+            ht = get_hit()
+            for cb in self._hover_callbacks:
+                try:
+                    cb(ht)
+                except TypeError:
+                    try:
+                        cb(ht.entity if ht.hit else None)
+                    except Exception:
+                        pass
+
+        # Click callbacks (detect transition from up to down on mouse button 0)
+        is_down = self.input.is_mouse_down(0)
+        was_down = self._prev_mouse_down[0]
+        self._prev_mouse_down[0] = is_down
+
+        if is_down and not was_down:
+            ht = get_hit()
+            for cb in self._click_callbacks:
+                try:
+                    cb(ht)
+                except TypeError:
+                    try:
+                        cb(ht.entity if ht.hit else None)
+                    except Exception:
+                        pass
 
     def init(self, title: str = "VelocityEngine v0.2-beta", width: int = 1280, height: int = 720) -> None:
         """Reinitialize window configuration parameters."""
@@ -45,9 +143,44 @@ class App:
         return self._core.scene
 
     @property
-    def camera(self) -> _core.Camera:
-        """Active scene camera."""
+    def camera(self) -> Any:
+        """Active scene camera or active camera controller."""
+        if self._camera_controller is not None:
+            return self._camera_controller
+        if self._custom_camera is not None:
+            return self._custom_camera
         return self._core.camera
+
+    @camera.setter
+    def camera(self, value: Any) -> None:
+        if isinstance(value, _core.Camera):
+            self._custom_camera = value
+            self._camera_controller = None
+        elif hasattr(value, "update"):
+            self._camera_controller = value
+            if hasattr(value, "camera") and getattr(value, "camera") is None:
+                value.camera = self._core.camera
+        else:
+            self._camera_controller = value
+
+    @property
+    def camera_controller(self) -> Optional[Any]:
+        """Active camera navigation controller (e.g. OrbitController, FollowCamera)."""
+        return self._camera_controller
+
+    @camera_controller.setter
+    def camera_controller(self, value: Optional[Any]) -> None:
+        self.camera = value
+
+    @property
+    def ui(self) -> UIOverlay:
+        """2D UI overlay for drawing text, shapes, crosshairs, and stats."""
+        return self._ui
+
+    @property
+    def tweens(self) -> TweenManager:
+        """Active TweenManager instance."""
+        return self._tweens
 
     @property
     def input(self) -> _core.InputManager:
@@ -98,12 +231,29 @@ class App:
     def set_update_callback(self, callback: Optional[Callable[[float], None]]) -> None:
         """Register per-frame update callback accepting dt (delta time in seconds)."""
         self._update_callback = callback
-        self._core.set_update_callback(callback)
 
     def on_update(self, func: Callable[[float], None]) -> Callable[[float], None]:
         """Decorator for registering frame update callbacks."""
         self.set_update_callback(func)
         return func
+
+    def on_click(self, func: Optional[Callable] = None) -> Callable:
+        """Decorator for registering mouse click raycast hit callbacks."""
+        def decorator(fn: Callable) -> Callable:
+            self._click_callbacks.append(fn)
+            return fn
+        if func is not None:
+            return decorator(func)
+        return decorator
+
+    def on_hover(self, func: Optional[Callable] = None) -> Callable:
+        """Decorator for registering mouse hover raycast hit callbacks."""
+        def decorator(fn: Callable) -> Callable:
+            self._hover_callbacks.append(fn)
+            return fn
+        if func is not None:
+            return decorator(func)
+        return decorator
 
     def run(self) -> None:
         """Launch the Sokol native rendering loop (blocks until window is closed)."""

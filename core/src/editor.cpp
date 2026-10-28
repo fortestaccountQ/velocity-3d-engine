@@ -94,22 +94,12 @@ bool EditorManager::handle_event(const void* raw_event) {
             float sw = sapp_widthf();
             float sh = sapp_heightf();
             if (sw > 0.0f && sh > 0.0f) {
-                float ndc_x = (2.0f * ev->mouse_x) / sw - 1.0f;
-                float ndc_y = 1.0f - (2.0f * ev->mouse_y) / sh;
-                glm::mat4 inv_vp = glm::inverse(app_.camera().view_projection_matrix());
-                glm::vec4 near_pt = inv_vp * glm::vec4(ndc_x, ndc_y, 0.0f, 1.0f);
-                glm::vec4 far_pt  = inv_vp * glm::vec4(ndc_x, ndc_y, 1.0f, 1.0f);
-                if (near_pt.w != 0.0f && far_pt.w != 0.0f) {
-                    near_pt /= near_pt.w;
-                    far_pt /= far_pt.w;
-                    glm::vec3 ray_dir = glm::normalize(glm::vec3(far_pt - near_pt));
-                    Ray ray(glm::vec3(near_pt), ray_dir);
-                    RaycastHit hit = app_.scene().raycast(ray, 100.0f);
-                    if (hit.hit && hit.entity) {
-                        selected_entity_ = hit.entity;
-                        while (selected_entity_->parent && selected_entity_->parent->parent) {
-                            selected_entity_ = selected_entity_->parent;
-                        }
+                Ray ray = app_.camera().screen_to_ray(ev->mouse_x, ev->mouse_y, sw, sh);
+                RaycastHit hit = app_.scene().raycast(ray, 100.0f);
+                if (hit.hit && hit.entity) {
+                    selected_entity_ = hit.entity;
+                    while (selected_entity_->parent && selected_entity_->parent->parent) {
+                        selected_entity_ = selected_entity_->parent;
                     }
                 }
             }

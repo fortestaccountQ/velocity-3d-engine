@@ -83,6 +83,7 @@ add_library(velocity_engine_core STATIC
     core/src/sokol_impl.cpp
     core/src/texture.cpp
     core/src/mesh.cpp
+    core/src/camera.cpp
     core/src/scene.cpp
     core/src/model_loader.cpp
     core/src/input.cpp

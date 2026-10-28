@@ -18,6 +18,9 @@ public:
 
     std::shared_ptr<Model> load_model(const std::string& filepath);
     std::shared_ptr<Entity> create_cube(const glm::vec4& color = glm::vec4(1.0f));
+    std::shared_ptr<Entity> create_box(const glm::vec3& size = glm::vec3(1.0f), const glm::vec4& color = glm::vec4(1.0f));
+    std::shared_ptr<Entity> create_sphere(float radius = 1.0f, int rings = 32, int sectors = 32, const glm::vec4& color = glm::vec4(1.0f));
+    std::shared_ptr<Entity> create_cylinder(float radius = 0.5f, float height = 2.0f, int segments = 32, bool capped = true, const glm::vec4& color = glm::vec4(1.0f));
     std::shared_ptr<Entity> create_plane(float size = 10.0f, float uv_tiling = 5.0f, std::shared_ptr<Material> material = nullptr);
     std::shared_ptr<Entity> create_entity(const std::string& name = "Entity");
 

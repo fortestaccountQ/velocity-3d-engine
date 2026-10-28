@@ -1,0 +1,61 @@
+"""Pythonic API Data Contract for VelocityEngine (Three.js Parity)."""
+
+from __future__ import annotations
+from typing import Tuple, Callable, Optional, Sequence, Union, Protocol, Any
+
+# ---------------------------------------------------------------------------
+# Color Protocol
+# ---------------------------------------------------------------------------
+class ColorContract(Protocol):
+    r: float
+    g: float
+    b: float
+    a: float
+
+    @classmethod
+    def from_hex(cls, hex_str: str, alpha: float = 1.0) -> ColorContract: ...
+
+    @classmethod
+    def from_rgb(cls, r: float, g: float, b: float, a: float = 1.0) -> ColorContract: ...
+
+    def lerp(self, other: ColorContract, t: float) -> ColorContract: ...
+
+# ---------------------------------------------------------------------------
+# Tween Protocol
+# ---------------------------------------------------------------------------
+class TweenContract(Protocol):
+    def update(self, dt: float) -> bool: ...
+    def cancel(self) -> None: ...
+    def on_complete(self, callback: Callable[[], None]) -> TweenContract: ...
+
+# ---------------------------------------------------------------------------
+# OrbitController Protocol
+# ---------------------------------------------------------------------------
+class OrbitControllerContract(Protocol):
+    target: Tuple[float, float, float]
+    distance: float
+    min_distance: float
+    max_distance: float
+    damping: float
+
+    def update(self, dt: float, input_mgr: Any, width: int, height: int) -> None: ...
+
+# ---------------------------------------------------------------------------
+# UI Overlay Protocol
+# ---------------------------------------------------------------------------
+class UIOverlayContract(Protocol):
+    def draw_text(self, text: str, pos: Tuple[float, float], size: float = 16.0, color: Any = ...) -> None: ...
+    def draw_rect(self, x: float, y: float, w: float, h: float, color: Any = ...) -> None: ...
+    def draw_crosshair(self, size: float = 10.0, color: Any = ...) -> None: ...
+    def show_stats(self, show: bool = True) -> None: ...
+
+# ---------------------------------------------------------------------------
+# Scene Factory Methods
+# ---------------------------------------------------------------------------
+class SceneFactoryContract(Protocol):
+    def create_box(self, size: Tuple[float, float, float] = (1, 1, 1), position: Tuple[float, float, float] = (0, 0, 0), color: Any = ...) -> Any: ...
+    def create_sphere(self, radius: float = 1.0, segments: int = 32, position: Tuple[float, float, float] = (0, 0, 0), color: Any = ...) -> Any: ...
+    def create_plane(self, width: float = 20.0, height: float = 20.0, subdivisions: int = 10, position: Tuple[float, float, float] = (0, 0, 0), color: Any = ...) -> Any: ...
+    def create_cylinder(self, radius: float = 0.5, height: float = 2.0, segments: int = 32, position: Tuple[float, float, float] = (0, 0, 0), color: Any = ...) -> Any: ...
+    def create_grid(self, size: float = 50.0, step: float = 1.0, color: Any = ...) -> Any: ...
+    def set_sun(self, direction: Tuple[float, float, float], color: Any = ..., intensity: float = 1.0) -> None: ...

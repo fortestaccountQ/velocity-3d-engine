@@ -2,59 +2,101 @@
 
 from __future__ import annotations
 
-from .app import App
-from .material import Material, gold, metal, plastic, rubber
-
+# Core native bindings import
 try:
-    from ._VelocityEngine_core import (
-        Mode,
-        Key,
-        Vec3,
-        Vec4,
-        Transform,
-        Camera,
-        DirectionalLight,
-        Mesh,
-        Texture,
-        Entity,
-        Model,
-        Scene,
-        InputManager,
-        AudioManager,
-        EditorManager,
-        AABB,
-        Cylinder,
-        Ray,
-        RaycastHit,
-    )
+    from . import _VelocityEngine_core as _core
 except ImportError:
-    from _VelocityEngine_core import (
-        Mode,
-        Key,
-        Vec3,
-        Vec4,
-        Transform,
-        Camera,
-        DirectionalLight,
-        Mesh,
-        Texture,
-        Entity,
-        Model,
-        Scene,
-        InputManager,
-        AudioManager,
-        EditorManager,
-        AABB,
-        Cylinder,
-        Ray,
-        RaycastHit,
-    )
+    import _VelocityEngine_core as _core
 
+Mode = _core.Mode
+Key = _core.Key
+Vec3 = _core.Vec3
+Vec4 = _core.Vec4
+Transform = _core.Transform
+Camera = _core.Camera
+DirectionalLight = _core.DirectionalLight
+Mesh = _core.Mesh
+Texture = _core.Texture
+Entity = _core.Entity
+Model = _core.Model
+Scene = _core.Scene
+InputManager = _core.InputManager
+AudioManager = _core.AudioManager
+EditorManager = _core.EditorManager
+AABB = _core.AABB
+Cylinder = _core.Cylinder
+Ray = _core.Ray
+RaycastHit = _core.RaycastHit
+
+# Optional native extensions
+InstancedMesh = getattr(_core, "InstancedMesh", None)
+InstanceData = getattr(_core, "InstanceData", None)
+
+# High-level ergonomics & Pythonic API modules
+from .color import (
+    Color,
+    as_color,
+    WHITE,
+    BLACK,
+    RED,
+    GREEN,
+    BLUE,
+    YELLOW,
+    CYAN,
+    MAGENTA,
+    GRAY,
+    DARK_GRAY,
+    LIGHT_GRAY,
+    WARM_WHITE,
+    ORANGE,
+    PURPLE,
+)
+
+from .tween import (
+    Tween,
+    TweenManager,
+    linear,
+    in_quad,
+    out_quad,
+    in_out_quad,
+    in_cubic,
+    out_cubic,
+    in_out_cubic,
+    in_bounce,
+    out_bounce,
+    in_out_bounce,
+    in_elastic,
+    out_elastic,
+    in_out_elastic,
+    patch_entity_and_model,
+)
+
+from .camera_utils import screen_to_ray, patch_camera
+from .orbit_controller import OrbitController, FollowCamera
+from .ui import UIOverlay
+from .scene_factory import (
+    SceneFactory,
+    create_box,
+    create_sphere,
+    create_plane,
+    create_cylinder,
+    create_grid,
+    set_sun,
+    patch_scene,
+)
+from .material import Material, gold, metal, plastic, rubber
 from .controller import FirstPersonController
+from .app import App
+
+# Automatically apply Pythonic patches to native core classes
+patch_camera()
+patch_entity_and_model()
+patch_scene()
 
 __version__ = "0.2.0-beta"
 
 __all__ = [
+    # Engine & App
     "App",
     "Mode",
     "Key",
@@ -64,6 +106,8 @@ __all__ = [
     "Camera",
     "DirectionalLight",
     "Mesh",
+    "InstancedMesh",
+    "InstanceData",
     "Texture",
     "Material",
     "Entity",
@@ -76,7 +120,55 @@ __all__ = [
     "Cylinder",
     "Ray",
     "RaycastHit",
+    # Controllers
     "FirstPersonController",
+    "OrbitController",
+    "FollowCamera",
+    # Pythonic Color
+    "Color",
+    "as_color",
+    "WHITE",
+    "BLACK",
+    "RED",
+    "GREEN",
+    "BLUE",
+    "YELLOW",
+    "CYAN",
+    "MAGENTA",
+    "GRAY",
+    "DARK_GRAY",
+    "LIGHT_GRAY",
+    "WARM_WHITE",
+    "ORANGE",
+    "PURPLE",
+    # Tween & Animation
+    "Tween",
+    "TweenManager",
+    "linear",
+    "in_quad",
+    "out_quad",
+    "in_out_quad",
+    "in_cubic",
+    "out_cubic",
+    "in_out_cubic",
+    "in_bounce",
+    "out_bounce",
+    "in_out_bounce",
+    "in_elastic",
+    "out_elastic",
+    "in_out_elastic",
+    # UI & Raycasting
+    "UIOverlay",
+    "screen_to_ray",
+    # Scene Factory
+    "SceneFactory",
+    "create_box",
+    "create_sphere",
+    "create_plane",
+    "create_cylinder",
+    "create_grid",
+    "set_sun",
+    # Materials
     "gold",
     "metal",
     "plastic",
