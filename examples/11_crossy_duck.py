@@ -400,10 +400,10 @@ def main() -> None:
 
     # 3. Instantiate Subsystems with Optimized Streaming Span
     world = WorldGenerator(app.scene, material_registry=registry)
-    world.generate_ahead(0, lookahead=28)
+    world.generate_ahead(0, lookahead=34)
     try:
         from examples.crossy_duck.world import StartRow
-        for bz in range(-8, -5):
+        for bz in range(-10, -5):
             world.active_rows[bz] = StartRow(bz, scene=app.scene, material_registry=registry)
     except Exception:
         pass
@@ -523,8 +523,8 @@ def main() -> None:
         world.update(clamped_dt)
         if player.grid_z != last_stream_z:
             last_stream_z = player.grid_z
-            world.generate_ahead(player.grid_z, lookahead=28)
-            world.prune_behind(player.grid_z, keep_behind=10)
+            world.generate_ahead(player.grid_z, lookahead=34)
+            world.prune_behind(player.grid_z, keep_behind=12)
 
         # Update Player & Physics
         current_row = world.get_row(player.grid_z)
@@ -542,8 +542,8 @@ def main() -> None:
         hud.render(clamped_dt, player, bot_active=bot_active, vsync=is_vsync)
         app.set_hud_score(player.score)
 
-        mode_tag = "VSync (Locked)" if is_vsync else "Uncapped"
-        bot_badge = " [🤖 BOT]" if bot_active else ""
+        mode_tag = "VSync" if is_vsync else "Uncapped"
+        bot_badge = " [BOT]" if bot_active else ""
         app.set_hud_title(f"PYTHON {py_ver} | {mode_tag}{bot_badge}")
         app.set_hud_hint("[WASD] Hop   [B] Bot Autoplay   [V] VSync   [R] Restart   [ESC] Exit")
 

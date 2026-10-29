@@ -845,13 +845,13 @@ class BaseRow:
 
 
 BOUNDARY_FOREST_LANES: List[int] = [
-    -54, -48, -42, -36, -30, -25, -24, -20, -17, -15, -13, -12, -11,
-    11, 12, 13, 15, 17, 20, 24, 25, 30, 36, 42, 48, 54,
+    -24, -20, -18, -16, -14, -13, -12, -11,
+    11, 12, 13, 14, 16, 18, 20, 24,
 ]
 
 
 class StartRow(BaseRow):
-    """Safe starting zone row with wide green ground and boundary trees."""
+    """Safe starting zone row with wide green ground and authentic voxel boundary trees."""
 
     def __init__(
         self,
@@ -875,52 +875,9 @@ class StartRow(BaseRow):
             )
             self.entities.append(ground)
 
-            # High-performance multi-tiered evergreen forest massing outside playable width
-            foliage_mat = _get_mat(self.material_registry, "tree_leaves")
-            col_f1 = Color.from_hex("#1b4324")
-            col_f2 = Color.from_hex("#14341c")
-            c_l1 = scene.create_box(
-                size=(48.0, 1.8, 1.0),
-                position=(-38.0, 0.9, float(self.z_index)),
-                color=col_f1 if foliage_mat is None else WHITE,
-                material=foliage_mat,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassL1_{self.z_index}",
-            )
-            c_l2 = scene.create_box(
-                size=(40.0, 1.4, 0.8),
-                position=(-42.0, 2.2, float(self.z_index)),
-                color=col_f2,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassL2_{self.z_index}",
-            )
-            c_r1 = scene.create_box(
-                size=(48.0, 1.8, 1.0),
-                position=(38.0, 0.9, float(self.z_index)),
-                color=col_f1 if foliage_mat is None else WHITE,
-                material=foliage_mat,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassR1_{self.z_index}",
-            )
-            c_r2 = scene.create_box(
-                size=(40.0, 1.4, 0.8),
-                position=(42.0, 2.2, float(self.z_index)),
-                color=col_f2,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassR2_{self.z_index}",
-            )
-            self.entities.extend([c_l1, c_l2, c_r1, c_r2])
-
-        # Dense boundary lanes outside playable grid blocked for collision and bot navigation
+        # Place authentic voxel boundary trees outside playable corridor [-10, 10]
         for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
-
-        # Place detailed voxel trees right along the visible perimeter edges
-        for bx in [-13, -11, 11, 13]:
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
             self.entities.extend(tree.entities)
 
@@ -931,7 +888,7 @@ class StartRow(BaseRow):
 
 
 class GrassRow(BaseRow):
-    """Vibrant meadow row with procedural trees blocking player movement."""
+    """Vibrant meadow row with procedural trees and authentic voxel pine forest borders."""
 
     def __init__(
         self,
@@ -960,52 +917,9 @@ class GrassRow(BaseRow):
             )
             self.entities.append(ground)
 
-            # High-performance multi-tiered evergreen forest massing outside playable width
-            foliage_mat = _get_mat(self.material_registry, "tree_leaves")
-            col_f1 = Color.from_hex("#1b4324")
-            col_f2 = Color.from_hex("#14341c")
-            c_l1 = scene.create_box(
-                size=(48.0, 1.8, 1.0),
-                position=(-38.0, 0.9, float(self.z_index)),
-                color=col_f1 if foliage_mat is None else WHITE,
-                material=foliage_mat,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassL1_{self.z_index}",
-            )
-            c_l2 = scene.create_box(
-                size=(40.0, 1.4, 0.8),
-                position=(-42.0, 2.2, float(self.z_index)),
-                color=col_f2,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassL2_{self.z_index}",
-            )
-            c_r1 = scene.create_box(
-                size=(48.0, 1.8, 1.0),
-                position=(38.0, 0.9, float(self.z_index)),
-                color=col_f1 if foliage_mat is None else WHITE,
-                material=foliage_mat,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassR1_{self.z_index}",
-            )
-            c_r2 = scene.create_box(
-                size=(40.0, 1.4, 0.8),
-                position=(42.0, 2.2, float(self.z_index)),
-                color=col_f2,
-                cast_shadows=False,
-                has_collision=False,
-                name=f"ForestMassR2_{self.z_index}",
-            )
-            self.entities.extend([c_l1, c_l2, c_r1, c_r2])
-
-        # Dense boundary forest outside playable grid
+        # Dense authentic voxel boundary trees outside playable grid
         for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
-
-        # Place detailed voxel trees along the visible playable boundary
-        for bx in [-13, -11, 11, 13]:
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
             self.entities.extend(tree.entities)
 
@@ -1193,19 +1107,7 @@ class RoadRow(BaseRow):
                         )
                         self.entities.append(marker)
 
-            # Highway guardrails along outer road verges (z ± 0.46)
-            for side_sign in (-1.0, 1.0):
-                z_offset = side_sign * 0.46
-                for gx in (-32.0, 32.0):
-                    rail = scene.create_box(
-                        size=(28.0, 0.35, 0.08),
-                        position=(gx, 0.05, float(self.z_index) + z_offset),
-                        color=Color.from_hex("#94a3b8"),
-                        cast_shadows=False,
-                        has_collision=False,
-                        name=f"RoadRail_{z_index}_{int(side_sign)}_{int(gx)}",
-                    )
-                    self.entities.append(rail)
+
 
         # 2. Vehicles (3-4 cars or trucks spawning and wrapping far off-screen)
         count = vehicle_count if vehicle_count is not None else r.choice([3, 4])
@@ -1472,17 +1374,7 @@ class RailRow(BaseRow):
             )
             self.entities.extend([base, post, crossbuck, head, self.beacon_light_entity, self.beacon_light_r])
 
-            # Railway telegraph poles outside tracks
-            for px in [-18.0, 18.0]:
-                pole = scene.create_box(
-                    size=(0.25, 2.2, 0.25),
-                    position=(px, 0.85, float(self.z_index) + 0.42),
-                    color=Color.from_hex("#475569"),
-                    cast_shadows=False,
-                    has_collision=False,
-                    name=f"TelegraphPole_{z_index}_{int(px)}",
-                )
-                self.entities.append(pole)
+
 
         # 5. Bullet train obstacle (starts off-screen)
         initial_train_x = -999.0
@@ -1614,16 +1506,16 @@ class HorizonBackdrop:
 
         for i, px in enumerate(peak_x_positions):
             # Vary dimensions per peak for organic skyline
-            w1 = 12.0 + float((i * 7) % 8)
-            h1 = 4.5 + float((i * 3) % 4)
-            d1 = 7.0 + float((i * 5) % 3)
+            w1 = 14.0 + float((i * 7) % 8)
+            h1 = 6.0 + float((i * 3) % 4)
+            d1 = 8.0 + float((i * 5) % 3)
 
             w2 = w1 * 0.65
-            h2 = 5.0 + float((i * 5) % 4)
+            h2 = 7.0 + float((i * 5) % 4)
             d2 = d1 * 0.70
 
             w3 = w2 * 0.55
-            h3 = 4.0 + float((i * 2) % 3)
+            h3 = 5.5 + float((i * 2) % 3)
             d3 = d2 * 0.65
 
             rel_z = float(((i * 11) % 5) * 1.6)
@@ -1694,33 +1586,7 @@ class HorizonBackdrop:
                 self.peak_data.append((pine_trunk, tree_x, tree_y, rel_z + (sign * 1.5)))
                 self.peak_data.append((pine_foliage, tree_x, tree_y + 1.6, rel_z + (sign * 1.5)))
 
-        # Side Flank Rolling Foothills along the borders
-        flank_offsets = [
-            (-32.0, -6.0), (-28.0, 2.0), (-34.0, 10.0), (-26.0, 18.0),
-            (32.0, -6.0), (28.0, 2.0), (34.0, 10.0), (26.0, 18.0),
-        ]
-        for fi, (fx, fz) in enumerate(flank_offsets):
-            fh1 = 3.5 + float((fi * 3) % 3)
-            fh2 = 3.0
-            hill_base = self.scene.create_box(
-                size=(12.0, fh1, 8.0),
-                position=(fx, -0.5 + fh1 * 0.5, self.current_forward_z - 24.0 + fz),
-                color=Color.from_hex("#235732"),
-                cast_shadows=False,
-                has_collision=False,
-                name=f"FlankHillBase_{fi}",
-            )
-            hill_mid = self.scene.create_box(
-                size=(7.0, fh2, 5.0),
-                position=(fx, -0.5 + fh1 + fh2 * 0.5, self.current_forward_z - 24.0 + fz),
-                color=Color.from_hex("#475569"),
-                cast_shadows=False,
-                has_collision=False,
-                name=f"FlankHillMid_{fi}",
-            )
-            self.entities.extend([hill_base, hill_mid])
-            self.peak_data.append((hill_base, fx, -0.5 + fh1 * 0.5, fz - 24.0))
-            self.peak_data.append((hill_mid, fx, -0.5 + fh1 + fh2 * 0.5, fz - 24.0))
+
 
     def update(self, forward_z: float) -> None:
         """Stream forward mountain range to remain seamlessly aligned with the horizon."""
@@ -1908,7 +1774,7 @@ class WorldGenerator:
             self._clump_remaining -= 1
 
         if getattr(self, "backdrop", None) is not None:
-            self.backdrop.update(float(player_z + 24.0))
+            self.backdrop.update(float(target_z + 4.0))
 
     def prune_behind(self, player_z: int, keep_behind: int = 8) -> None:
         """Remove and cleanup rows behind player_z - keep_behind to maintain 500+ FPS."""
