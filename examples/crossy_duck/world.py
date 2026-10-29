@@ -747,6 +747,7 @@ class VoxelTree:
         foliage_color: Optional[Color] = None,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
+        cast_shadows: bool = True,
     ) -> None:
         self.x: float = float(x)
         self.z: float = float(z)
@@ -765,7 +766,7 @@ class VoxelTree:
                 position=(self.x, 0.35, self.z),
                 color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
                 material=trunk_mat,
-                cast_shadows=True,
+                cast_shadows=cast_shadows,
                 has_collision=True,
                 name="TreeTrunk",
             )
@@ -775,7 +776,7 @@ class VoxelTree:
                 position=(self.x, 1.25, self.z),
                 color=fol_col if foliage_mat is None else WHITE,
                 material=foliage_mat,
-                cast_shadows=True,
+                cast_shadows=cast_shadows,
                 has_collision=True,
                 name="TreeFoliage",
             )
@@ -874,10 +875,53 @@ class StartRow(BaseRow):
             )
             self.entities.append(ground)
 
-        # Place dense outer perimeter trees outside playable width [-10, 10] to create infinite forest borders
+            # High-performance multi-tiered evergreen forest massing outside playable width
+            foliage_mat = _get_mat(self.material_registry, "tree_leaves")
+            col_f1 = Color.from_hex("#1b4324")
+            col_f2 = Color.from_hex("#14341c")
+            c_l1 = scene.create_box(
+                size=(48.0, 1.8, 1.0),
+                position=(-38.0, 0.9, float(self.z_index)),
+                color=col_f1 if foliage_mat is None else WHITE,
+                material=foliage_mat,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassL1_{self.z_index}",
+            )
+            c_l2 = scene.create_box(
+                size=(40.0, 1.4, 0.8),
+                position=(-42.0, 2.2, float(self.z_index)),
+                color=col_f2,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassL2_{self.z_index}",
+            )
+            c_r1 = scene.create_box(
+                size=(48.0, 1.8, 1.0),
+                position=(38.0, 0.9, float(self.z_index)),
+                color=col_f1 if foliage_mat is None else WHITE,
+                material=foliage_mat,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassR1_{self.z_index}",
+            )
+            c_r2 = scene.create_box(
+                size=(40.0, 1.4, 0.8),
+                position=(42.0, 2.2, float(self.z_index)),
+                color=col_f2,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassR2_{self.z_index}",
+            )
+            self.entities.extend([c_l1, c_l2, c_r1, c_r2])
+
+        # Dense boundary lanes outside playable grid blocked for collision and bot navigation
         for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
+
+        # Place detailed voxel trees right along the visible perimeter edges
+        for bx in [-13, -11, 11, 13]:
+            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
             self.entities.extend(tree.entities)
 
     def is_blocked(self, px: float, pz: float) -> bool:
@@ -916,10 +960,53 @@ class GrassRow(BaseRow):
             )
             self.entities.append(ground)
 
+            # High-performance multi-tiered evergreen forest massing outside playable width
+            foliage_mat = _get_mat(self.material_registry, "tree_leaves")
+            col_f1 = Color.from_hex("#1b4324")
+            col_f2 = Color.from_hex("#14341c")
+            c_l1 = scene.create_box(
+                size=(48.0, 1.8, 1.0),
+                position=(-38.0, 0.9, float(self.z_index)),
+                color=col_f1 if foliage_mat is None else WHITE,
+                material=foliage_mat,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassL1_{self.z_index}",
+            )
+            c_l2 = scene.create_box(
+                size=(40.0, 1.4, 0.8),
+                position=(-42.0, 2.2, float(self.z_index)),
+                color=col_f2,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassL2_{self.z_index}",
+            )
+            c_r1 = scene.create_box(
+                size=(48.0, 1.8, 1.0),
+                position=(38.0, 0.9, float(self.z_index)),
+                color=col_f1 if foliage_mat is None else WHITE,
+                material=foliage_mat,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassR1_{self.z_index}",
+            )
+            c_r2 = scene.create_box(
+                size=(40.0, 1.4, 0.8),
+                position=(42.0, 2.2, float(self.z_index)),
+                color=col_f2,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"ForestMassR2_{self.z_index}",
+            )
+            self.entities.extend([c_l1, c_l2, c_r1, c_r2])
+
         # Dense boundary forest outside playable grid
         for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
+
+        # Place detailed voxel trees along the visible playable boundary
+        for bx in [-13, -11, 11, 13]:
+            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
             self.entities.extend(tree.entities)
 
         # In-bounds trees: pick 2 to 4 lanes to block, ensuring at least 3 contiguous paths exist
@@ -937,7 +1024,7 @@ class GrassRow(BaseRow):
 
             self.blocked_lanes.add(cand_x)
             fol_col = r.choice(COLOR_TREE_FOLIAGE)
-            tree = VoxelTree(cand_x, float(self.z_index), foliage_color=fol_col, scene=scene, material_registry=self.material_registry)
+            tree = VoxelTree(cand_x, float(self.z_index), foliage_color=fol_col, scene=scene, material_registry=self.material_registry, cast_shadows=True)
             self.entities.extend(tree.entities)
             placed_count += 1
 
@@ -1106,28 +1193,19 @@ class RoadRow(BaseRow):
                         )
                         self.entities.append(marker)
 
-            # Roadside safety barriers along outer road verges and flanking woodland pines
-            for fx in [-58.0, -53.0, -49.0, 49.0, 53.0, 58.0]:
-                barrier_s = scene.create_box(
-                    size=(0.35, 0.42, 0.08),
-                    position=(fx, 0.05, float(self.z_index) - 0.46),
-                    color=Color.from_hex("#94a3b8"),
-                    cast_shadows=False,
-                    has_collision=False,
-                    name=f"RoadBarrierS_{z_index}_{int(fx)}",
-                )
-                barrier_n = scene.create_box(
-                    size=(0.35, 0.42, 0.08),
-                    position=(fx, 0.05, float(self.z_index) + 0.46),
-                    color=Color.from_hex("#94a3b8"),
-                    cast_shadows=False,
-                    has_collision=False,
-                    name=f"RoadBarrierN_{z_index}_{int(fx)}",
-                )
-                self.entities.extend([barrier_s, barrier_n])
-            for tx in [-55.0, 55.0]:
-                tree = VoxelTree(tx, float(self.z_index) + 0.46, scene=scene, material_registry=self.material_registry)
-                self.entities.extend(tree.entities)
+            # Highway guardrails along outer road verges (z ± 0.46)
+            for side_sign in (-1.0, 1.0):
+                z_offset = side_sign * 0.46
+                for gx in (-32.0, 32.0):
+                    rail = scene.create_box(
+                        size=(28.0, 0.35, 0.08),
+                        position=(gx, 0.05, float(self.z_index) + z_offset),
+                        color=Color.from_hex("#94a3b8"),
+                        cast_shadows=False,
+                        has_collision=False,
+                        name=f"RoadRail_{z_index}_{int(side_sign)}_{int(gx)}",
+                    )
+                    self.entities.append(rail)
 
         # 2. Vehicles (3-4 cars or trucks spawning and wrapping far off-screen)
         count = vehicle_count if vehicle_count is not None else r.choice([3, 4])
@@ -1215,10 +1293,10 @@ class RiverRow(BaseRow):
             )
             self.entities.append(water)
 
-            # Riverbank stone boulders and weeping woodland pines outside water channel
-            for rx in [-54.0, -46.0, -40.0, 40.0, 46.0, 54.0]:
+            # Riverbank stone boulders flanking the water channel
+            for rx in [-16.0, 16.0]:
                 boulder = scene.create_box(
-                    size=(1.1, 0.55, 0.9),
+                    size=(1.6, 0.55, 0.9),
                     position=(rx, -0.05, float(self.z_index)),
                     color=Color.from_hex("#64748b"),
                     cast_shadows=False,
@@ -1226,9 +1304,6 @@ class RiverRow(BaseRow):
                     name=f"RiverBoulder_{z_index}_{int(rx)}",
                 )
                 self.entities.append(boulder)
-            for tx in [-48.0, 48.0]:
-                tree = VoxelTree(tx, float(self.z_index), scene=scene, material_registry=self.material_registry)
-                self.entities.extend(tree.entities)
 
         # 2. Wooden logs (3-4 logs spaced out across widened span)
         count = log_count if log_count is not None else r.choice([3, 4])
@@ -1397,8 +1472,8 @@ class RailRow(BaseRow):
             )
             self.entities.extend([base, post, crossbuck, head, self.beacon_light_entity, self.beacon_light_r])
 
-            # Railway telegraph poles and embankment trees outside tracks
-            for px in [-52.0, -42.0, -35.0, 35.0, 42.0, 52.0]:
+            # Railway telegraph poles outside tracks
+            for px in [-18.0, 18.0]:
                 pole = scene.create_box(
                     size=(0.25, 2.2, 0.25),
                     position=(px, 0.85, float(self.z_index) + 0.42),
@@ -1408,9 +1483,6 @@ class RailRow(BaseRow):
                     name=f"TelegraphPole_{z_index}_{int(px)}",
                 )
                 self.entities.append(pole)
-            for tx in [-46.0, 46.0]:
-                tree = VoxelTree(tx, float(self.z_index), scene=scene, material_registry=self.material_registry)
-                self.entities.extend(tree.entities)
 
         # 5. Bullet train obstacle (starts off-screen)
         initial_train_x = -999.0
