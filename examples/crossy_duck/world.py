@@ -796,6 +796,7 @@ class VoxelTree:
         cast_shadows: bool = True,
         tree_type: str = "standard",
         scale: float = 1.0,
+        max_foliage_depth: Optional[float] = None,
     ) -> None:
         self.x: float = float(x)
         self.z: float = float(z)
@@ -810,6 +811,9 @@ class VoxelTree:
             foliage_mat = _get_mat(self.material_registry, "tree_leaves")
             fol_col = foliage_color if foliage_color is not None else random.choice(COLOR_TREE_FOLIAGE)
 
+            def _clamp_d(val: float) -> float:
+                return min(val, max_foliage_depth) if max_foliage_depth is not None else val
+
             if tree_type == "shrub":
                 # Low ground bush / shrub
                 trunk = scene.create_box(
@@ -822,7 +826,7 @@ class VoxelTree:
                     name="TreeTrunk",
                 )
                 foliage = scene.create_box(
-                    size=(0.95 * scale, 0.65 * scale, 0.95 * scale),
+                    size=(0.95 * scale, 0.65 * scale, _clamp_d(0.95 * scale)),
                     position=(self.x, 0.50 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -844,7 +848,7 @@ class VoxelTree:
                     name="TreeTrunk",
                 )
                 fol_tier1 = scene.create_box(
-                    size=(1.25 * scale, 0.70 * scale, 1.25 * scale),
+                    size=(1.25 * scale, 0.70 * scale, _clamp_d(1.25 * scale)),
                     position=(self.x, 1.10 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -853,7 +857,7 @@ class VoxelTree:
                     name="TreeFoliage",
                 )
                 fol_tier2 = scene.create_box(
-                    size=(0.80 * scale, 0.80 * scale, 0.80 * scale),
+                    size=(0.80 * scale, 0.80 * scale, _clamp_d(0.80 * scale)),
                     position=(self.x, 1.75 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -875,7 +879,7 @@ class VoxelTree:
                     name="TreeTrunk",
                 )
                 foliage = scene.create_box(
-                    size=(1.15 * scale, 1.25 * scale, 1.15 * scale),
+                    size=(1.15 * scale, 1.25 * scale, _clamp_d(1.15 * scale)),
                     position=(self.x, 1.90 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -897,7 +901,7 @@ class VoxelTree:
                     name="TreeTrunk",
                 )
                 foliage = scene.create_box(
-                    size=(1.50 * scale, 1.20 * scale, 1.50 * scale),
+                    size=(1.50 * scale, 1.20 * scale, _clamp_d(1.50 * scale)),
                     position=(self.x, 2.80 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -919,7 +923,7 @@ class VoxelTree:
                     name="TreeTrunk",
                 )
                 foliage = scene.create_box(
-                    size=(0.92 * scale, 1.15 * scale, 0.92 * scale),
+                    size=(0.92 * scale, 1.15 * scale, _clamp_d(0.92 * scale)),
                     position=(self.x, 1.25 * scale, self.z),
                     color=fol_col if foliage_mat is None else WHITE,
                     material=foliage_mat,
@@ -1010,6 +1014,7 @@ def populate_boundary_forest(
     scene: Optional[Any],
     material_registry: Optional[Any],
     is_road_or_river: bool = False,
+    adjacent_road_or_rail: bool = False,
 ) -> None:
     """Generate organic, varied, and layered voxel forest framing the playable corridor."""
     # Ensure boundary lanes are marked as blocked in row
@@ -1022,32 +1027,21 @@ def populate_boundary_forest(
         for bx in range(11, 26):
             row.blocked_lanes.add(bx)
 
-    if scene is None:
+    if scene is None or is_road_or_river:
         return
+
+    max_fol_depth = 0.70 if adjacent_road_or_rail else None
 
     # Deterministic generation per lane
     for lane in BOUNDARY_FOREST_LANES:
         h = _forest_hash(z_index, lane)
 
-        # For road/river rows, flank naturally with arch trees set back
-        if is_road_or_river:
-            if abs(lane) < 14:
-                continue  # Keep road/river shoulder clear of low trunks
-            tree_type = "arch"
-            jitter_x = (((h % 1000) / 1000.0) - 0.5) * 0.40
-            side_sign = 1.0 if (h % 2 == 0) else -1.0
-            tz = float(z_index) + side_sign * 0.24 + ((((h >> 8) % 100) / 100.0) - 0.5) * 0.08
-            tx = float(lane) + jitter_x
-            col_idx = (h >> 16) % len(COLOR_TREE_FOLIAGE)
-            fol_col = COLOR_TREE_FOLIAGE[col_idx]
-            scale = 0.95 + (((h >> 12) % 25) / 100.0)
-            tree = VoxelTree(tx, tz, foliage_color=fol_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type=tree_type, scale=scale)
-            row.entities.extend(tree.entities)
-            continue
-
         # For grass & start rows: full rich organic forest
         jitter_x = (((h % 1000) / 1000.0) - 0.5) * 0.44  # +/- 0.22 X jitter
-        jitter_z = ((((h >> 8) % 1000) / 1000.0) - 0.5) * 0.30  # +/- 0.15 Z jitter
+        if adjacent_road_or_rail:
+            jitter_z = 0.0  # Clamp Z jitter so trees strictly remain inside grass row
+        else:
+            jitter_z = ((((h >> 8) % 1000) / 1000.0) - 0.5) * 0.30  # +/- 0.15 Z jitter
         tx = float(lane) + jitter_x
         tz = float(z_index) + jitter_z
 
@@ -1065,16 +1059,34 @@ def populate_boundary_forest(
         fol_col = COLOR_TREE_FOLIAGE[col_idx]
         scale = 0.85 + (((h >> 12) % 35) / 100.0)
 
-        tree = VoxelTree(tx, tz, foliage_color=fol_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type=tree_type, scale=scale)
+        tree = VoxelTree(
+            tx, tz,
+            foliage_color=fol_col,
+            scene=scene,
+            material_registry=material_registry,
+            cast_shadows=False,
+            tree_type=tree_type,
+            scale=scale,
+            max_foliage_depth=max_fol_depth,
+        )
         row.entities.extend(tree.entities)
 
         # Deep forest layering: for lanes far out (abs >= 14), add secondary staggered shrub/tree
         if abs(lane) >= 14 and ((h >> 24) % 3 == 0):
             h2 = _forest_hash(z_index, lane, salt=77)
-            stagger_z = tz + (0.32 if (h2 % 2 == 0) else -0.32)
+            stagger_z = tz + (0.0 if adjacent_road_or_rail else (0.32 if (h2 % 2 == 0) else -0.32))
             stagger_x = tx + (0.30 if (h2 % 3 == 0) else -0.30)
             sub_col = COLOR_TREE_FOLIAGE[(h2 >> 4) % len(COLOR_TREE_FOLIAGE)]
-            sub_tree = VoxelTree(stagger_x, stagger_z, foliage_color=sub_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type="shrub", scale=0.75)
+            sub_tree = VoxelTree(
+                stagger_x, stagger_z,
+                foliage_color=sub_col,
+                scene=scene,
+                material_registry=material_registry,
+                cast_shadows=False,
+                tree_type="shrub",
+                scale=0.75,
+                max_foliage_depth=max_fol_depth,
+            )
             row.entities.extend(sub_tree.entities)
 
 
@@ -1086,9 +1098,11 @@ class StartRow(BaseRow):
         z_index: int,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
+        adjacent_road_or_rail: bool = False,
     ) -> None:
         super().__init__(z_index, RowType.START, scene, material_registry)
         self.blocked_lanes: Set[int] = set()
+        self.adjacent_road_or_rail: bool = bool(adjacent_road_or_rail)
 
         if scene is not None:
             mat = _get_mat(self.material_registry, "grass", uv_scale=(140.0, 1.0))
@@ -1104,7 +1118,14 @@ class StartRow(BaseRow):
             self.entities.append(ground)
 
         # Populate organic boundary forest outside playable corridor [-10, 10]
-        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=False)
+        populate_boundary_forest(
+            self,
+            self.z_index,
+            scene,
+            self.material_registry,
+            is_road_or_river=False,
+            adjacent_road_or_rail=self.adjacent_road_or_rail,
+        )
 
     def is_blocked(self, px: float, pz: float) -> bool:
         if abs(pz - self.z_index) <= 0.6:
@@ -1122,8 +1143,10 @@ class GrassRow(BaseRow):
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
+        adjacent_road_or_rail: bool = False,
     ) -> None:
         super().__init__(z_index, RowType.GRASS, scene, material_registry)
+        self.adjacent_road_or_rail: bool = bool(adjacent_road_or_rail)
         r = rng if rng is not None else random.Random()
         self.blocked_lanes: Set[int] = set()
 
@@ -1143,7 +1166,14 @@ class GrassRow(BaseRow):
             self.entities.append(ground)
 
         # Dense organic voxel boundary trees outside playable grid
-        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=False)
+        populate_boundary_forest(
+            self,
+            self.z_index,
+            scene,
+            self.material_registry,
+            is_road_or_river=False,
+            adjacent_road_or_rail=self.adjacent_road_or_rail,
+        )
 
         # In-bounds trees: pick 2 to 4 lanes to block, ensuring at least 3 contiguous paths exist
         candidates = list(range(CELL_MIN_X, CELL_MAX_X + 1))
@@ -1160,7 +1190,15 @@ class GrassRow(BaseRow):
 
             self.blocked_lanes.add(cand_x)
             fol_col = r.choice(COLOR_TREE_FOLIAGE)
-            tree = VoxelTree(cand_x, float(self.z_index), foliage_color=fol_col, scene=scene, material_registry=self.material_registry, cast_shadows=True)
+            tree = VoxelTree(
+                cand_x,
+                float(self.z_index),
+                foliage_color=fol_col,
+                scene=scene,
+                material_registry=self.material_registry,
+                cast_shadows=True,
+                max_foliage_depth=0.70 if self.adjacent_road_or_rail else None,
+            )
             self.entities.extend(tree.entities)
             placed_count += 1
 
@@ -1376,8 +1414,11 @@ class RoadRow(BaseRow):
                 )
                 self.obstacles.append(car)
 
-        # 3. Naturally flank road edges with boundary trees
-        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+        # 3. Unobstructed open roadway (no trees on traffic surface; mark boundary lanes blocked)
+        for bx in range(-25, -10):
+            self.blocked_lanes.add(bx)
+        for bx in range(11, 26):
+            self.blocked_lanes.add(bx)
 
     def is_blocked(self, px: float, pz: float) -> bool:
         if abs(pz - self.z_index) <= 0.6:
@@ -1465,8 +1506,11 @@ class RiverRow(BaseRow):
             )
             self.obstacles.append(log)
 
-        # 3. Flank river banks naturally with forest trees
-        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+        # 3. Unobstructed open water channel (no trees on water; mark boundary lanes blocked)
+        for bx in range(-25, -10):
+            self.blocked_lanes.add(bx)
+        for bx in range(11, 26):
+            self.blocked_lanes.add(bx)
 
     def is_blocked(self, px: float, pz: float) -> bool:
         if abs(pz - self.z_index) <= 0.6:
@@ -1629,8 +1673,11 @@ class RailRow(BaseRow):
         )
         self.obstacles.append(self.train)
 
-        # 6. Flank railroad line with boundary trees
-        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+        # 6. Unobstructed railroad tracks (no trees on tracks; mark boundary lanes blocked)
+        for bx in range(-25, -10):
+            self.blocked_lanes.add(bx)
+        for bx in range(11, 26):
+            self.blocked_lanes.add(bx)
 
     def is_blocked(self, px: float, pz: float) -> bool:
         if abs(pz - self.z_index) <= 0.6:
@@ -1891,6 +1938,7 @@ class WorldGenerator:
         self.max_generated_z: int = -1
         self.min_active_z: int = 0
         self.backdrop: Optional[HorizonBackdrop] = None
+        self._planned_row_types: Dict[int, RowType] = {}
 
         # Clumping state machine for procedural generation
         self._current_clump_type: RowType = RowType.GRASS
@@ -1915,6 +1963,9 @@ class WorldGenerator:
 
         self.max_generated_z = -1
         self.min_active_z = -5
+        self._planned_row_types.clear()
+        for z in range(-5, 1):
+            self._planned_row_types[z] = RowType.START
         self._current_clump_type = RowType.GRASS
         self._clump_remaining = 0
         self._clump_size = 0
@@ -1922,13 +1973,37 @@ class WorldGenerator:
         self._last_major_type = RowType.GRASS
 
         # 1. Safe start rows behind and around spawn [-5 .. 0]
+        next_1_type = self._get_planned_row_type(1)
         for z in range(-5, 1):
-            start_row = StartRow(z, scene=self.scene, material_registry=self.material_registry)
+            adj = (z == 0 and next_1_type in (RowType.ROAD, RowType.RAIL))
+            start_row = StartRow(z, scene=self.scene, material_registry=self.material_registry, adjacent_road_or_rail=adj)
             self.active_rows[z] = start_row
             self.max_generated_z = z
 
         # 2. Initial forward lookahead terrain (Z = 1 .. 25)
         self.generate_ahead(player_z=0, lookahead=25)
+
+    def _get_planned_row_type(self, z: int) -> RowType:
+        """Fetch or procedurally advance planned row type for row z."""
+        if z in self._planned_row_types:
+            return self._planned_row_types[z]
+
+        # Advance planning until z is reached
+        last_z = max(self._planned_row_types.keys()) if self._planned_row_types else 0
+        while last_z < z:
+            plan_z = last_z + 1
+            if self._clump_remaining <= 0:
+                self._current_clump_type, self._clump_remaining = self._choose_next_clump()
+                self._clump_size = self._clump_remaining
+                self._clump_step = 0
+            else:
+                self._clump_step += 1
+
+            self._planned_row_types[plan_z] = self._current_clump_type
+            self._clump_remaining -= 1
+            last_z = plan_z
+
+        return self._planned_row_types[z]
 
     def _get_road_lane_direction(self, step: int, total_lanes: int, z: int) -> float:
         """Calculate traffic flow direction for a road lane within a multi-lane roadway."""
@@ -1971,16 +2046,26 @@ class WorldGenerator:
 
     def _create_row_by_type(self, z: int, row_type: RowType) -> BaseRow:
         """Instantiate row of specified type."""
+        prev_type = self._get_planned_row_type(z - 1)
+        next_type = self._get_planned_row_type(z + 1)
+        is_adjacent_to_traffic = (
+            prev_type in (RowType.ROAD, RowType.RAIL)
+            or next_type in (RowType.ROAD, RowType.RAIL)
+        )
+
         if row_type == RowType.GRASS:
-            return GrassRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
+            return GrassRow(
+                z,
+                rng=self.rng,
+                scene=self.scene,
+                material_registry=self.material_registry,
+                adjacent_road_or_rail=is_adjacent_to_traffic,
+            )
         elif row_type == RowType.ROAD:
             total_lanes = getattr(self, "_clump_size", 1)
             step = getattr(self, "_clump_step", 0)
-            has_prev = (step > 0) or (
-                self.active_rows.get(z - 1) is not None
-                and getattr(self.active_rows.get(z - 1), "row_type", None) == RowType.ROAD
-            )
-            has_next = (self._clump_remaining > 1)
+            has_prev = (prev_type == RowType.ROAD)
+            has_next = (next_type == RowType.ROAD)
             dir_curr = self._get_road_lane_direction(step, total_lanes, z)
             dir_next = self._get_road_lane_direction(step + 1, total_lanes, z + 1) if has_next else None
             dir_prev = self._get_road_lane_direction(step - 1, total_lanes, z - 1) if (has_prev and step > 0) else None
@@ -2001,25 +2086,22 @@ class WorldGenerator:
         elif row_type == RowType.RAIL:
             return RailRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         else:
-            return StartRow(z, scene=self.scene, material_registry=self.material_registry)
+            return StartRow(
+                z,
+                scene=self.scene,
+                material_registry=self.material_registry,
+                adjacent_road_or_rail=is_adjacent_to_traffic,
+            )
 
     def generate_ahead(self, player_z: int, lookahead: int = 25) -> None:
         """Stream new rows forward up to player_z + lookahead."""
         target_z = int(player_z + lookahead)
         while self.max_generated_z < target_z:
             next_z = self.max_generated_z + 1
-
-            if self._clump_remaining <= 0:
-                self._current_clump_type, self._clump_remaining = self._choose_next_clump()
-                self._clump_size = self._clump_remaining
-                self._clump_step = 0
-            else:
-                self._clump_step += 1
-
-            row = self._create_row_by_type(next_z, self._current_clump_type)
+            row_type = self._get_planned_row_type(next_z)
+            row = self._create_row_by_type(next_z, row_type)
             self.active_rows[next_z] = row
             self.max_generated_z = next_z
-            self._clump_remaining -= 1
 
         if getattr(self, "backdrop", None) is not None:
             self.backdrop.update(float(target_z + 28.0))
@@ -2032,6 +2114,10 @@ class WorldGenerator:
         for z in stale_z:
             row = self.active_rows.pop(z)
             row.cleanup(self.scene)
+
+        stale_plan_z = [pz for pz in self._planned_row_types.keys() if pz < min_retained_z - 5]
+        for pz in stale_plan_z:
+            self._planned_row_types.pop(pz, None)
 
         if self.active_rows:
             self.min_active_z = min(self.active_rows.keys())

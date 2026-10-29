@@ -496,9 +496,9 @@ def main() -> None:
         elif is_just_pressed(Key.S) or is_just_pressed(Key.DOWN):
             manual_hop = (0, -1)
         elif is_just_pressed(Key.A) or is_just_pressed(Key.LEFT):
-            manual_hop = (-1, 0)
+            manual_hop = (1, 0)   # Hops to screen left (+X)
         elif is_just_pressed(Key.D) or is_just_pressed(Key.RIGHT):
-            manual_hop = (1, 0)
+            manual_hop = (-1, 0)  # Hops to screen right (-X)
 
         if player.status in (PlayerStatus.IDLE, PlayerStatus.HOPPING):
             if manual_hop is not None:

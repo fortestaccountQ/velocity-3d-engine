@@ -172,10 +172,9 @@ def test_boundary_forest_jitter_and_archetypes() -> None:
     river_row = world.RiverRow(3, scene=scene, material_registry=reg)
     rail_row = world.RailRow(4, scene=scene, material_registry=reg)
 
-    all_rows = [start_row, grass_row, road_row, river_row, rail_row]
-
-    # Collect boundary tree positions per row
-    for row in all_rows:
+    # 1. StartRow and GrassRow have rich boundary trees with organic position jitter
+    vegetative_rows = [start_row, grass_row]
+    for row in vegetative_rows:
         tree_trunks = [e for e in row.entities if e.name == "TreeTrunk"]
         assert len(tree_trunks) > 0, f"Row {row.row_type} should have boundary trees!"
 
@@ -184,13 +183,51 @@ def test_boundary_forest_jitter_and_archetypes() -> None:
         has_non_integer = any(abs(x - round(x)) > 0.01 for x in x_positions)
         assert has_non_integer, f"Row {row.row_type} boundary trees lack X position jitter!"
 
-    # Verify varied tree heights across grass row entities
+    # 2. RoadRow, RailRow, and RiverRow have ZERO trees on their traffic surfaces,
+    # ensuring vehicles, bullet trains, and river logs have completely unobstructed paths!
+    assert len([e for e in road_row.entities if e.name == "TreeTrunk"]) == 0
+    assert len([e for e in rail_row.entities if e.name == "TreeTrunk"]) == 0
+    assert len([e for e in river_row.entities if e.name == "TreeTrunk"]) == 0
+
+    # 3. Verify varied tree heights across grass row entities
     foliage_boxes = [e for e in grass_row.entities if "TreeFoliage" in e.name]
     assert len(foliage_boxes) >= 10
     foliage_heights = [e.size[1] for e in foliage_boxes]
     # Check that heights are not all identical (multiple archetypes and scales exist)
     unique_heights = {round(h, 2) for h in foliage_heights}
     assert len(unique_heights) >= 3, f"Foliage heights should vary across archetypes, got: {unique_heights}"
+
+
+def test_tree_no_overhang_into_adjacent_traffic() -> None:
+    """Verify that if GrassRow or StartRow is adjacent to road/rail, tree foliage strictly stays in [-0.35, 0.35]."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    # Grass row directly adjacent to traffic
+    grass_adj = world.GrassRow(5, scene=scene, material_registry=reg, adjacent_road_or_rail=True)
+
+    tree_trunks = [e for e in grass_adj.entities if e.name == "TreeTrunk"]
+    assert len(tree_trunks) > 0
+
+    # For every boundary trunk, jitter_z must be clamped to 0.0 (z == 5.0)
+    for t in tree_trunks:
+        assert pytest.approx(t.transform.position[2], abs=1e-3) == 5.0, (
+            f"Trunk Z {t.transform.position[2]} should be exactly 5.0 (jitter_z=0.0) when adjacent to traffic"
+        )
+
+    # For all foliage boxes, foliage depth (size[2]) must be <= 0.70
+    # meaning foliage extends at most ±0.35 from z=5.0 (staying within [4.65, 5.35], leaving 0.15 margin)
+    foliage_boxes = [e for e in grass_adj.entities if "TreeFoliage" in e.name]
+    assert len(foliage_boxes) >= 10
+    for f in foliage_boxes:
+        depth = f.size[2]
+        assert depth <= 0.7001, f"Foliage depth {depth} exceeds 0.70 clamp limit!"
+        z_pos = f.transform.position[2]
+        half_depth = depth * 0.5
+        min_z = z_pos - half_depth
+        max_z = z_pos + half_depth
+        assert min_z >= 5.0 - 0.3501, f"Foliage overhangs south into traffic row: min_z={min_z}"
+        assert max_z <= 5.0 + 0.3501, f"Foliage overhangs north into traffic row: max_z={max_z}"
 
 
 def test_boundary_forest_deterministic_reproducibility() -> None:
