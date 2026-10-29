@@ -357,13 +357,13 @@ class PlayerController(PlayerControllerContract):
 
         # Snap facing rotation to movement direction
         if dx > 0:
-            self.rotation_y = -90.0
+            self.rotation_y = 90.0   # Turn face RIGHT (+X)
         elif dx < 0:
-            self.rotation_y = 90.0
+            self.rotation_y = -90.0  # Turn face LEFT (-X)
         elif dz > 0:
-            self.rotation_y = 0.0
+            self.rotation_y = 0.0    # Turn face FORWARD (+Z)
         elif dz < 0:
-            self.rotation_y = 180.0
+            self.rotation_y = 180.0  # Turn face BACKWARD (-Z)
 
         # Start hopping state
         self.status = PlayerStatus.HOPPING

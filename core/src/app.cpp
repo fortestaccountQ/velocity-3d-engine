@@ -1307,6 +1307,15 @@ void EngineApp::run() {
     running_ = false;
 }
 
+extern "C" void sapp_set_swap_interval(int interval);
+
+void EngineApp::set_vsync(bool enabled) {
+    config_.vsync = enabled;
+    if (running_) {
+        sapp_set_swap_interval(enabled ? 1 : 0);
+    }
+}
+
 void EngineApp::close() {
     if (running_) {
         sapp_request_quit();

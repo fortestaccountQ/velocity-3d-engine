@@ -115,9 +115,57 @@ MATERIAL_PRESETS: Dict[str, MaterialConfig] = {
         is_pixel_art=True,
     ),
     "car_paint": MaterialConfig(
-        name="vehicle",
+        name="car_paint",
+        roughness=0.22,
+        metallic=0.20,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "car_cabin": MaterialConfig(
+        name="car_cabin",
+        roughness=0.12,
+        metallic=0.10,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "car_wheel": MaterialConfig(
+        name="car_wheel",
+        roughness=0.55,
+        metallic=0.45,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "truck_cargo": MaterialConfig(
+        name="truck_cargo",
+        roughness=0.60,
+        metallic=0.20,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "train_body": MaterialConfig(
+        name="train_body",
+        roughness=0.20,
+        metallic=0.35,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "train_window": MaterialConfig(
+        name="train_window",
+        roughness=0.15,
+        metallic=0.10,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
+    "train_front": MaterialConfig(
+        name="train_front",
         roughness=0.25,
-        metallic=0.15,
+        metallic=0.40,
         base_color=(1.0, 1.0, 1.0, 1.0),
         uv_scale=(1.0, 1.0),
         is_pixel_art=True,
@@ -163,6 +211,28 @@ MATERIAL_PRESETS: Dict[str, MaterialConfig] = {
         is_pixel_art=True,
     ),
 }
+
+
+CORE_TEXTURE_NAMES = [
+    "grass",
+    "asphalt",
+    "water",
+    "wood_bark",
+    "wood_rings",
+    "rail_gravel",
+    "rail_tie",
+    "car_grille",
+    "duck",
+    "car_paint",
+    "car_cabin",
+    "car_wheel",
+    "truck_cargo",
+    "train_body",
+    "train_window",
+    "train_front",
+]
+
+EXTENDED_TEXTURE_NAMES = CORE_TEXTURE_NAMES + ["tree_leaves", "lilypad"]
 
 
 # -----------------------------------------------------------------------------
@@ -825,6 +895,469 @@ def create_lilypad_image(size: int = 64) -> Image.Image:
     return Image.fromarray(arr)
 
 
+def create_car_paint_image(size: int = 64, seed: int = 101) -> Image.Image:
+    """Generate glossy automotive car paint with clearcoat sheen, micro-flakes, and panel bevel."""
+    rng = np.random.RandomState(seed)
+    y, x = np.mgrid[:size, :size]
+
+    # Neutral high-key pearl/metallic silver-white base for universal tintability
+    vert_grad = 1.0 - (y / float(size)) * 0.12
+    base_luma = 232.0 * vert_grad
+
+    # Metallic micro-flakes (+/- 4.5)
+    flakes = rng.uniform(-4.5, 4.5, (size, size))
+
+    # Subtle diagonal clear-coat highlight streak across body
+    diag = (x * 0.7 + y * 0.3) / float(size)
+    clearcoat = 14.0 * np.exp(-((diag - 0.45) ** 2) / 0.04)
+
+    luma = np.clip(base_luma + flakes + clearcoat, 0, 255)
+
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    arr[..., 0] = np.clip(luma - 1.0, 0, 255).astype(np.uint8)  # slight cool pearl undertone
+    arr[..., 1] = np.clip(luma, 0, 255).astype(np.uint8)
+    arr[..., 2] = np.clip(luma + 3.0, 0, 255).astype(np.uint8)
+    arr[..., 3] = 255
+
+    # Top & Left bevel specular highlight (car panel edge reflection)
+    bevel_w = max(1, size // 32)
+    arr[:bevel_w, :, :3] = [255, 255, 255]
+    arr[:, :bevel_w, :3] = [255, 255, 255]
+
+    # Bottom & Right subtle ambient occlusion shadow
+    arr[-bevel_w:, :, :3] = np.clip(arr[-bevel_w:, :, :3].astype(int) - 38, 0, 255).astype(np.uint8)
+    arr[:, -bevel_w:, :3] = np.clip(arr[:, -bevel_w:, :3].astype(int) - 38, 0, 255).astype(np.uint8)
+
+    # Stylized panel seam / shutline near lower quarter
+    seam_y = int(size * 0.78)
+    if 0 <= seam_y < size:
+        arr[seam_y, :, :3] = [170, 175, 185]
+        if seam_y + 1 < size:
+            arr[seam_y + 1, :, :3] = [252, 252, 255]
+
+    return Image.fromarray(arr)
+
+
+def create_car_cabin_image(size: int = 64, seed: int = 202) -> Image.Image:
+    """Generate tinted cyan/charcoal automotive glass with diagonal glare streaks and seals."""
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    y, x = np.mgrid[:size, :size]
+
+    # Base tinted charcoal glass with cyan depth undertone
+    y_norm = y / float(size)
+    r_base = 22.0 + y_norm * 14.0
+    g_base = 38.0 + y_norm * 22.0
+    b_base = 56.0 + y_norm * 28.0
+
+    arr[..., 0] = np.clip(r_base, 0, 255).astype(np.uint8)
+    arr[..., 1] = np.clip(g_base, 0, 255).astype(np.uint8)
+    arr[..., 2] = np.clip(b_base, 0, 255).astype(np.uint8)
+    arr[..., 3] = 255
+
+    # Diagonal glare streaks across the glass
+    dist1 = np.abs((x - y * 1.2) - int(size * 0.25))
+    glare1_core = dist1 < max(1, size // 32)
+    glare1_glow = (dist1 < max(2, size // 16)) & (~glare1_core)
+    arr[glare1_glow, 0] = 85
+    arr[glare1_glow, 1] = 160
+    arr[glare1_glow, 2] = 210
+    arr[glare1_core, 0] = 215
+    arr[glare1_core, 1] = 245
+    arr[glare1_core, 2] = 255
+
+    dist2 = np.abs((x - y * 1.2) - int(size * 0.65))
+    glare2_core = dist2 < max(1, size // 32)
+    glare2_glow = (dist2 < max(2, size // 18)) & (~glare2_core)
+    arr[glare2_glow, 0] = 70
+    arr[glare2_glow, 1] = 140
+    arr[glare2_glow, 2] = 185
+    arr[glare2_core, 0] = 180
+    arr[glare2_core, 1] = 225
+    arr[glare2_core, 2] = 248
+
+    # A/B Pillar: vertical structural window divider
+    pillar_x = int(size * 0.44)
+    pillar_w = max(2, size // 24)
+    arr[:, pillar_x : pillar_x + pillar_w, :3] = [28, 32, 40]
+    arr[:, pillar_x, :3] = [58, 64, 76]
+
+    # Dark perimeter rubber weatherstrip / window seal
+    seal_w = max(1, size // 32)
+    arr[:seal_w, :, :3] = [18, 20, 26]
+    arr[-seal_w:, :, :3] = [18, 20, 26]
+    arr[:, :seal_w, :3] = [18, 20, 26]
+    arr[:, -seal_w:, :3] = [18, 20, 26]
+
+    return Image.fromarray(arr)
+
+
+def create_car_wheel_image(size: int = 64, seed: int = 303) -> Image.Image:
+    """Generate dark rubber tire tread with metallic alloy rim/hubcap in center."""
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    cy, cx = (size - 1.0) / 2.0, (size - 1.0) / 2.0
+    y, x = np.mgrid[:size, :size]
+    dx = x - cx
+    dy = y - cy
+    r = np.hypot(dx, dy)
+    r_norm = r / (size / 2.0)
+    theta = np.arctan2(dy, dx)
+
+    # Base rubber tire background (dark charcoal)
+    arr[..., 0] = 30
+    arr[..., 1] = 32
+    arr[..., 2] = 36
+    arr[..., 3] = 255
+
+    # Outer tire tread pattern (16-lug radial tread blocks)
+    tread_mask = (r_norm >= 0.72) & (r_norm <= 0.98)
+    tread_groove = (np.sin(theta * 16.0) > 0.65) & tread_mask
+    arr[tread_mask, :3] = [40, 43, 48]
+    arr[tread_groove, :3] = [16, 18, 22]
+
+    # Tire sidewall
+    sidewall = (r_norm >= 0.56) & (r_norm < 0.72)
+    arr[sidewall, :3] = [34, 36, 42]
+
+    # Metallic rim outer lip (r_norm 0.46 to 0.56)
+    rim_lip = (r_norm >= 0.46) & (r_norm < 0.56)
+    arr[rim_lip, :3] = [170, 178, 192]
+    highlight_lip = rim_lip & (theta > -2.4) & (theta < -0.7)
+    arr[highlight_lip, :3] = [230, 238, 248]
+    shadow_lip = rim_lip & (theta > 0.7) & (theta < 2.4)
+    arr[shadow_lip, :3] = [105, 112, 122]
+
+    # Inner wheel well / brake cavity (r_norm 0.22 to 0.46)
+    cavity = (r_norm >= 0.22) & (r_norm < 0.46)
+    arr[cavity, :3] = [38, 42, 50]
+
+    # 5-spoke stylized alloy star
+    spoke_angle = (theta + np.pi) % (2.0 * np.pi / 5.0) - (np.pi / 5.0)
+    is_spoke = cavity & (np.abs(spoke_angle) < 0.22)
+    arr[is_spoke, :3] = [205, 215, 228]
+    spoke_bevel = is_spoke & (spoke_angle < -0.08)
+    arr[spoke_bevel, :3] = [240, 246, 255]
+
+    # Metallic Center Hubcap (r_norm < 0.22)
+    hubcap = r_norm < 0.22
+    arr[hubcap, :3] = [185, 195, 210]
+    hubcap_rim = (r_norm >= 0.18) & (r_norm < 0.22)
+    arr[hubcap_rim, :3] = [140, 148, 160]
+
+    # Central axle nut
+    axle_nut = r_norm < 0.08
+    arr[axle_nut, :3] = [45, 50, 60]
+
+    # 5 Lug nuts around hubcap center
+    for i in range(5):
+        angle = i * (2.0 * np.pi / 5.0)
+        bx = int(cx + np.cos(angle) * (size * 0.13))
+        by = int(cy + np.sin(angle) * (size * 0.13))
+        rad = max(1, size // 48)
+        arr[max(0, by - rad) : min(size, by + rad + 1), max(0, bx - rad) : min(size, bx + rad + 1), :3] = [245, 250, 255]
+
+    return Image.fromarray(arr)
+
+
+def create_truck_cargo_image(size: int = 64, seed: int = 404) -> Image.Image:
+    """Generate industrial corrugated shipping container siding with crisp vertical shadows."""
+    rng = np.random.RandomState(seed)
+    y, x = np.mgrid[:size, :size]
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+
+    base_r = 222.0
+    base_g = 228.0
+    base_b = 236.0
+
+    # Vertical corrugated ribs
+    flute_width = max(4, size // 8)
+    flute_pos = (x % flute_width).astype(float) / flute_width
+
+    is_crevice = flute_pos < 0.22
+    is_highlight = flute_pos > 0.78
+
+    shade = np.zeros((size, size), dtype=float)
+    shade[is_crevice] = -68.0
+    shade[is_highlight] = 26.0
+
+    # Subtle horizontal crease across mid-height
+    mid_y = size // 2
+    crease_mask = np.abs(y - mid_y) <= max(1, size // 48)
+    shade[crease_mask] -= 18.0
+
+    # Industrial steel grain noise
+    grain = rng.uniform(-3.5, 3.5, (size, size))
+
+    r = np.clip(base_r + shade + grain, 0, 255)
+    g = np.clip(base_g + shade + grain, 0, 255)
+    b = np.clip(base_b + shade * 0.9 + grain, 0, 255)
+
+    arr[..., 0] = r.astype(np.uint8)
+    arr[..., 1] = g.astype(np.uint8)
+    arr[..., 2] = b.astype(np.uint8)
+    arr[..., 3] = 255
+
+    # Top & bottom heavy industrial perimeter rails
+    rail_h = max(2, int(size * 0.08))
+    arr[:rail_h, :, 0] = 188
+    arr[:rail_h, :, 1] = 196
+    arr[:rail_h, :, 2] = 206
+    arr[rail_h - 1, :, :3] = [135, 145, 158]
+
+    arr[-rail_h:, :, 0] = 165
+    arr[-rail_h:, :, 1] = 175
+    arr[-rail_h:, :, 2] = 186
+    arr[-rail_h, :, :3] = [245, 250, 255]
+
+    # Left & right structural corner posts
+    post_w = max(2, int(size * 0.06))
+    arr[:, :post_w, :3] = [178, 186, 198]
+    arr[:, post_w - 1, :3] = [120, 130, 145]
+    arr[:, -post_w:, :3] = [178, 186, 198]
+    arr[:, -post_w, :3] = [245, 250, 255]
+
+    # Stencil hazard/ISO label plate on right panel
+    tag_w = max(4, int(size * 0.16))
+    tag_h = max(3, int(size * 0.10))
+    tag_x0 = size - post_w - tag_w - max(1, size // 32)
+    tag_y0 = rail_h + max(2, size // 24)
+    arr[tag_y0 : tag_y0 + tag_h, tag_x0 : tag_x0 + tag_w, :3] = [238, 142, 28]
+    arr[tag_y0 + 1 : tag_y0 + tag_h - 1, tag_x0 + 1 : tag_x0 + tag_w - 1, :3] = [255, 255, 255]
+
+    return Image.fromarray(arr)
+
+
+def create_train_body_image(size: int = 64, seed: int = 505) -> Image.Image:
+    """Generate high-speed bullet train metallic white/silver body with racing speed stripes."""
+    rng = np.random.RandomState(seed)
+    y, x = np.mgrid[:size, :size]
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+
+    # 1. Main aerodynamic body: metallic pearl-white / brushed silver
+    brushed = rng.uniform(-3.0, 3.0, (size, size))
+    vert_sheen = 244.0 - (y / float(size)) * 14.0
+
+    r = np.clip(vert_sheen + brushed, 0, 255)
+    g = np.clip(vert_sheen + brushed + 2.0, 0, 255)
+    b = np.clip(vert_sheen + brushed + 5.0, 0, 255)
+
+    arr[..., 0] = r.astype(np.uint8)
+    arr[..., 1] = g.astype(np.uint8)
+    arr[..., 2] = b.astype(np.uint8)
+    arr[..., 3] = 255
+
+    # Top edge aerodynamic specular highlight
+    arr[0, :, :3] = [255, 255, 255]
+
+    # 2. Racing Speed Stripes
+    red_y0 = int(size * 0.58)
+    red_h = max(2, int(size * 0.08))
+    red_y1 = red_y0 + red_h
+    arr[red_y0:red_y1, :, 0] = 228
+    arr[red_y0:red_y1, :, 1] = 34
+    arr[red_y0:red_y1, :, 2] = 42
+
+    white_h = max(1, size // 48)
+    white_y0 = red_y1
+    white_y1 = white_y0 + white_h
+    arr[white_y0:white_y1, :, :3] = [255, 255, 255]
+
+    blue_y0 = white_y1
+    blue_h = max(3, int(size * 0.12))
+    blue_y1 = min(size - 1, blue_y0 + blue_h)
+    arr[blue_y0:blue_y1, :, 0] = 16
+    arr[blue_y0:blue_y1, :, 1] = 42
+    arr[blue_y0:blue_y1, :, 2] = 104
+
+    arr[blue_y1, :, :3] = [210, 222, 235]
+
+    # 3. Lower aerodynamic undercarriage skirt
+    skirt_y0 = int(size * 0.84)
+    arr[skirt_y0:, :, 0] = 42
+    arr[skirt_y0:, :, 1] = 46
+    arr[skirt_y0:, :, 2] = 56
+    arr[skirt_y0, :, :3] = [28, 32, 40]
+
+    louver_spacing = max(4, size // 8)
+    for lx in range(max(2, size // 16), size - max(2, size // 16), louver_spacing):
+        arr[skirt_y0 + 2 : size - 2, lx, :3] = [22, 24, 30]
+
+    return Image.fromarray(arr)
+
+
+def create_train_window_image(size: int = 64, seed: int = 606) -> Image.Image:
+    """Generate aerodynamic passenger windows band with interior glow and pillar dividers."""
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+
+    top_band_h = int(size * 0.18)
+    bot_band_y = int(size * 0.82)
+
+    arr[:top_band_h, :, 0] = 236
+    arr[:top_band_h, :, 1] = 240
+    arr[:top_band_h, :, 2] = 246
+    arr[bot_band_y:, :, 0] = 236
+    arr[bot_band_y:, :, 1] = 240
+    arr[bot_band_y:, :, 2] = 246
+    arr[..., 3] = 255
+
+    arr[0, :, :3] = [255, 255, 255]
+    arr[top_band_h - 1, :, :3] = [32, 36, 44]
+    arr[bot_band_y, :, :3] = [32, 36, 44]
+
+    win_y0 = top_band_h
+    win_y1 = bot_band_y
+    arr[win_y0:win_y1, :, 0] = 24
+    arr[win_y0:win_y1, :, 1] = 34
+    arr[win_y0:win_y1, :, 2] = 48
+
+    num_bays = 3
+    bay_w = size // num_bays
+    pillar_w = max(2, size // 24)
+
+    for i in range(num_bays):
+        bay_x0 = i * bay_w
+        bay_x1 = (i + 1) * bay_w if i < num_bays - 1 else size
+
+        if i < num_bays - 1:
+            px0 = bay_x1 - pillar_w
+            px1 = bay_x1
+            arr[win_y0:win_y1, px0:px1, 0] = 220
+            arr[win_y0:win_y1, px0:px1, 1] = 226
+            arr[win_y0:win_y1, px0:px1, 2] = 234
+            arr[win_y0:win_y1, px0, :3] = [255, 255, 255]
+            arr[win_y0:win_y1, px1 - 1, :3] = [170, 178, 190]
+
+        pane_x0 = bay_x0 + max(1, size // 32)
+        pane_x1 = (bay_x1 - pillar_w if i < num_bays - 1 else bay_x1) - max(1, size // 32)
+        pane_cx = (pane_x0 + pane_x1) // 2
+        pane_cy = (win_y0 + win_y1) // 2
+
+        glow_rad_x = max(2, (pane_x1 - pane_x0) // 3)
+        glow_rad_y = max(2, (win_y1 - win_y0) // 3)
+
+        if pane_x1 > pane_x0 + 2 and win_y1 > win_y0 + 4:
+            bay_ys, bay_xs = np.mgrid[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1]
+            dx = (bay_xs - pane_cx) / float(glow_rad_x)
+            dy = (bay_ys - pane_cy) / float(glow_rad_y)
+            dist2 = dx * dx + dy * dy
+            glow_mask = dist2 < 1.0
+            glow = np.clip(1.0 - dist2, 0.0, 1.0)
+
+            sub_r = arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 0].astype(float)
+            sub_g = arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 1].astype(float)
+            sub_b = arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 2].astype(float)
+
+            sub_r[glow_mask] = 24.0 + glow[glow_mask] * 215.0
+            sub_g[glow_mask] = 34.0 + glow[glow_mask] * 165.0
+            sub_b[glow_mask] = 48.0 + glow[glow_mask] * 65.0
+
+            arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 0] = sub_r.astype(np.uint8)
+            arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 1] = sub_g.astype(np.uint8)
+            arr[win_y0 + 2 : win_y1 - 2, pane_x0 + 1 : pane_x1 - 1, 2] = sub_b.astype(np.uint8)
+
+        hr_w = max(1, size // 32)
+        hr_h = max(2, size // 20)
+        arr[pane_cy - hr_h : pane_cy, pane_cx - hr_w : pane_cx + hr_w + 1, :3] = [45, 42, 48]
+
+    y_win, x_win = np.mgrid[win_y0:win_y1, :size]
+    glare_mask = np.abs((x_win - (y_win - win_y0) * 1.5) - int(size * 0.4)) < max(1, size // 32)
+    arr[win_y0:win_y1, :][glare_mask, 0] = np.clip(arr[win_y0:win_y1, :][glare_mask, 0].astype(int) + 110, 0, 255).astype(np.uint8)
+    arr[win_y0:win_y1, :][glare_mask, 1] = np.clip(arr[win_y0:win_y1, :][glare_mask, 1].astype(int) + 160, 0, 255).astype(np.uint8)
+    arr[win_y0:win_y1, :][glare_mask, 2] = np.clip(arr[win_y0:win_y1, :][glare_mask, 2].astype(int) + 200, 0, 255).astype(np.uint8)
+
+    return Image.fromarray(arr)
+
+
+def create_train_front_image(size: int = 64, seed: int = 707) -> Image.Image:
+    """Generate bullet train front nose decal with aerodynamic raked windshield and warm radiant headlights."""
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    cx = (size - 1.0) / 2.0
+
+    # 1. Upper Section: Aerodynamic Raked Cockpit Windshield (top 42%)
+    h_windshield = int(size * 0.42)
+    y_ws, x_ws = np.mgrid[:h_windshield, :size]
+
+    arr[:h_windshield, :, 0] = 22
+    arr[:h_windshield, :, 1] = 38
+    arr[:h_windshield, :, 2] = 58
+    arr[..., 3] = 255
+
+    side_frame_w = max(2, int(size * 0.10))
+    arr[:h_windshield, :side_frame_w, 0] = 236
+    arr[:h_windshield, :side_frame_w, 1] = 240
+    arr[:h_windshield, :side_frame_w, 2] = 246
+    arr[:h_windshield, -side_frame_w:, 0] = 236
+    arr[:h_windshield, -side_frame_w:, 1] = 240
+    arr[:h_windshield, -side_frame_w:, 2] = 246
+
+    glare = np.abs((x_ws - y_ws * 1.4) - int(size * 0.28)) < max(1, size // 32)
+    arr[:h_windshield, :][glare, 0] = 175
+    arr[:h_windshield, :][glare, 1] = 225
+    arr[:h_windshield, :][glare, 2] = 255
+
+    arr[0, :, :3] = [238, 242, 248]
+    arr[h_windshield - 1, :, :3] = [20, 24, 30]
+
+    # 2. Middle Section: Aerodynamic Bullet Nose Cone (42% to 68%)
+    h_nose_end = int(size * 0.68)
+    arr[h_windshield:h_nose_end, :, 0] = 238
+    arr[h_windshield:h_nose_end, :, 1] = 242
+    arr[h_windshield:h_nose_end, :, 2] = 248
+
+    emb_y0 = h_windshield + max(2, size // 24)
+    emb_h = max(3, size // 16)
+    emb_w = max(4, int(size * 0.22))
+    emb_x0 = int(cx - emb_w / 2.0)
+    emb_x1 = emb_x0 + emb_w
+    arr[emb_y0 : emb_y0 + emb_h, emb_x0:emb_x1, :3] = [18, 48, 110]
+    arr[emb_y0 + 1 : emb_y0 + emb_h - 1, emb_x0 : emb_x0 + 2, :3] = [245, 210, 50]
+    arr[emb_y0 + 1 : emb_y0 + emb_h - 1, emb_x1 - 2 : emb_x1, :3] = [245, 210, 50]
+
+    band_y = emb_y0 + emb_h + max(1, size // 32)
+    arr[band_y : band_y + max(1, size // 32), :, 0] = 228
+    arr[band_y : band_y + max(1, size // 32), :, 1] = 34
+    arr[band_y : band_y + max(1, size // 32), :, 2] = 42
+
+    # 3. Lower Section: High-Intensity Dual Radiant Headlights (68% to 86%)
+    h_hl_end = int(size * 0.86)
+    arr[h_nose_end:h_hl_end, :, 0] = 228
+    arr[h_nose_end:h_hl_end, :, 1] = 232
+    arr[h_nose_end:h_hl_end, :, 2] = 238
+
+    hl_w = max(6, int(size * 0.22))
+    hl_h = max(4, int(size * 0.14))
+    hl_y0 = h_nose_end + max(1, (h_hl_end - h_nose_end - hl_h) // 2)
+    hl_y1 = hl_y0 + hl_h
+
+    hl_left_x0 = max(2, int(size * 0.10))
+    hl_left_x1 = hl_left_x0 + hl_w
+    hl_right_x1 = size - max(2, int(size * 0.10))
+    hl_right_x0 = hl_right_x1 - hl_w
+
+    for hx0, hx1 in [(hl_left_x0, hl_left_x1), (hl_right_x0, hl_right_x1)]:
+        arr[hl_y0:hl_y1, hx0:hx1, :3] = [170, 180, 195]
+        arr[hl_y0, hx0:hx1, :3] = [40, 44, 52]
+        arr[hl_y1 - 1, hx0:hx1, :3] = [40, 44, 52]
+        arr[hl_y0:hl_y1, hx0, :3] = [40, 44, 52]
+        arr[hl_y0:hl_y1, hx1 - 1, :3] = [40, 44, 52]
+
+        arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx1 - 1, 0] = 255
+        arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx1 - 1, 1] = 246
+        arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx1 - 1, 2] = 165
+        arr[hl_y0 + 2 : hl_y1 - 2, hx0 + 2 : hx1 - 2, :3] = [255, 255, 245]
+
+    center_hl_w = max(2, size // 16)
+    arr[hl_y0 + 1 : hl_y1 - 1, int(cx - center_hl_w / 2) : int(cx + center_hl_w / 2) + 1, :3] = [255, 252, 215]
+
+    # 4. Bottom Cowcatcher / Aerodynamic Air Dam Skirt (86% to 100%)
+    arr[h_hl_end:, :, 0] = 36
+    arr[h_hl_end:, :, 1] = 40
+    arr[h_hl_end:, :, 2] = 48
+    arr[h_hl_end, :, :3] = [185, 195, 210]
+
+    return Image.fromarray(arr)
+
+
+
 # -----------------------------------------------------------------------------
 # Module-level raw RGBA bytes generators conforming to TextureGeneratorContract
 # -----------------------------------------------------------------------------
@@ -894,6 +1427,41 @@ def generate_lilypad_texture(size: int = 64) -> bytes:
     return create_lilypad_image(size=size).tobytes("raw", "RGBA")
 
 
+def generate_car_paint_texture(size: int = 64) -> bytes:
+    """Generate glossy automotive car paint texture RGBA bytes."""
+    return create_car_paint_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_car_cabin_texture(size: int = 64) -> bytes:
+    """Generate tinted automotive cabin glass texture RGBA bytes with glare streaks."""
+    return create_car_cabin_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_car_wheel_texture(size: int = 64) -> bytes:
+    """Generate dark rubber tire with metallic rim hubcap texture RGBA bytes."""
+    return create_car_wheel_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_truck_cargo_texture(size: int = 64) -> bytes:
+    """Generate corrugated shipping container siding texture RGBA bytes."""
+    return create_truck_cargo_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_train_body_texture(size: int = 64) -> bytes:
+    """Generate metallic bullet train body with racing speed stripes RGBA bytes."""
+    return create_train_body_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_train_window_texture(size: int = 64) -> bytes:
+    """Generate passenger train windows band with interior glow RGBA bytes."""
+    return create_train_window_image(size=size).tobytes("raw", "RGBA")
+
+
+def generate_train_front_texture(size: int = 64) -> bytes:
+    """Generate bullet train nose decal with raked windshield and headlights RGBA bytes."""
+    return create_train_front_image(size=size).tobytes("raw", "RGBA")
+
+
 # -----------------------------------------------------------------------------
 # CrossyTextureGenerator Class (adheres to TextureGeneratorContract)
 # -----------------------------------------------------------------------------
@@ -928,6 +1496,34 @@ class CrossyTextureGenerator(TextureGeneratorContract):
     @staticmethod
     def generate_rail_tie_texture(size: int = 64) -> bytes:
         return generate_rail_tie_texture(size=size)
+
+    @staticmethod
+    def generate_car_paint_texture(size: int = 64) -> bytes:
+        return generate_car_paint_texture(size=size)
+
+    @staticmethod
+    def generate_car_cabin_texture(size: int = 64) -> bytes:
+        return generate_car_cabin_texture(size=size)
+
+    @staticmethod
+    def generate_car_wheel_texture(size: int = 64) -> bytes:
+        return generate_car_wheel_texture(size=size)
+
+    @staticmethod
+    def generate_truck_cargo_texture(size: int = 64) -> bytes:
+        return generate_truck_cargo_texture(size=size)
+
+    @staticmethod
+    def generate_train_body_texture(size: int = 64) -> bytes:
+        return generate_train_body_texture(size=size)
+
+    @staticmethod
+    def generate_train_window_texture(size: int = 64) -> bytes:
+        return generate_train_window_texture(size=size)
+
+    @staticmethod
+    def generate_train_front_texture(size: int = 64) -> bytes:
+        return generate_train_front_texture(size=size)
 
     # Extended generators for vehicles, duck, and foliage
     @staticmethod
@@ -972,7 +1568,23 @@ class CrossyTextureGenerator(TextureGeneratorContract):
             return create_rail_gravel_image(size=size)
         elif clean in ("rail_tie", "tie", "sleeper"):
             return create_rail_tie_image(size=size)
-        elif clean in ("car_grille", "vehicle", "car", "truck"):
+        elif clean in ("car_paint", "paint", "car_chassis", "chassis", "car_body"):
+            return create_car_paint_image(size=size)
+        elif clean in ("car_cabin", "cabin", "car_window", "windshield"):
+            return create_car_cabin_image(size=size)
+        elif clean in ("car_wheel", "wheel", "tire", "truck_wheel"):
+            return create_car_wheel_image(size=size)
+        elif clean in ("truck_cargo", "cargo", "container", "shipping_container"):
+            return create_truck_cargo_image(size=size)
+        elif clean in ("train_body", "train", "locomotive"):
+            return create_train_body_image(size=size)
+        elif clean in ("train_window", "train_windows", "passenger_window"):
+            return create_train_window_image(size=size)
+        elif clean in ("train_front", "bullet_train_front", "train_nose", "train_headlight"):
+            return create_train_front_image(size=size)
+        elif clean in ("car_grille", "grille"):
+            return create_car_grille_image(size=size)
+        elif clean in ("vehicle", "car", "truck"):
             return create_car_grille_image(size=size)
         elif clean in ("duck", "feathers", "player"):
             return create_duck_image(size=size)
@@ -1016,6 +1628,13 @@ def ensure_textures_generated(assets_dir: Optional[Union[str, Path]] = None) -> 
         "rail_tie",
         "car_grille",
         "duck",
+        "car_paint",
+        "car_cabin",
+        "car_wheel",
+        "truck_cargo",
+        "train_body",
+        "train_window",
+        "train_front",
         "tree_leaves",
         "lilypad",
     ]
@@ -1056,6 +1675,21 @@ def ensure_textures_generated(assets_dir: Optional[Union[str, Path]] = None) -> 
     filepaths["vehicle"] = filepaths["car_grille"]
     filepaths["vehicle_64"] = filepaths["car_grille_64"]
     filepaths["vehicle_128"] = filepaths["car_grille_128"]
+    filepaths["paint"] = filepaths["car_paint"]
+    filepaths["paint_64"] = filepaths["car_paint_64"]
+    filepaths["paint_128"] = filepaths["car_paint_128"]
+    filepaths["cabin"] = filepaths["car_cabin"]
+    filepaths["cabin_64"] = filepaths["car_cabin_64"]
+    filepaths["cabin_128"] = filepaths["car_cabin_128"]
+    filepaths["wheel"] = filepaths["car_wheel"]
+    filepaths["wheel_64"] = filepaths["car_wheel_64"]
+    filepaths["wheel_128"] = filepaths["car_wheel_128"]
+    filepaths["cargo"] = filepaths["truck_cargo"]
+    filepaths["cargo_64"] = filepaths["truck_cargo_64"]
+    filepaths["cargo_128"] = filepaths["truck_cargo_128"]
+    filepaths["train"] = filepaths["train_body"]
+    filepaths["train_64"] = filepaths["train_body_64"]
+    filepaths["train_128"] = filepaths["train_body_128"]
 
     return filepaths
 
@@ -1233,6 +1867,27 @@ class TextureRegistry(MaterialPaletteContract):
             "player": "duck",
             "leaves": "tree_leaves",
             "pad": "lilypad",
+            "paint": "car_paint",
+            "car_chassis": "car_paint",
+            "chassis": "car_paint",
+            "car_body": "car_paint",
+            "cabin": "car_cabin",
+            "car_window": "car_cabin",
+            "windshield": "car_cabin",
+            "wheel": "car_wheel",
+            "tire": "car_wheel",
+            "truck_wheel": "car_wheel",
+            "cargo": "truck_cargo",
+            "container": "truck_cargo",
+            "shipping_container": "truck_cargo",
+            "train": "train_body",
+            "locomotive": "train_body",
+            "train_windows": "train_window",
+            "passenger_window": "train_window",
+            "bullet_train_front": "train_front",
+            "train_nose": "train_front",
+            "train_headlight": "train_front",
+            "grille": "car_grille",
         }
         return alias_map.get(clean, clean)
 
@@ -1241,6 +1896,8 @@ class TextureRegistry(MaterialPaletteContract):
 MaterialRegistry = TextureRegistry
 
 __all__ = [
+    "CORE_TEXTURE_NAMES",
+    "EXTENDED_TEXTURE_NAMES",
     "MaterialConfig",
     "MATERIAL_PRESETS",
     "StylizedMaterial",
@@ -1257,6 +1914,13 @@ __all__ = [
     "create_duck_image",
     "create_tree_leaves_image",
     "create_lilypad_image",
+    "create_car_paint_image",
+    "create_car_cabin_image",
+    "create_car_wheel_image",
+    "create_truck_cargo_image",
+    "create_train_body_image",
+    "create_train_window_image",
+    "create_train_front_image",
     "generate_grass_texture",
     "generate_asphalt_texture",
     "generate_water_texture",
@@ -1270,6 +1934,13 @@ __all__ = [
     "generate_duck_texture",
     "generate_tree_leaves_texture",
     "generate_lilypad_texture",
+    "generate_car_paint_texture",
+    "generate_car_cabin_texture",
+    "generate_car_wheel_texture",
+    "generate_truck_cargo_texture",
+    "generate_train_body_texture",
+    "generate_train_window_texture",
+    "generate_train_front_texture",
     "CrossyTextureGenerator",
     "TextureGenerator",
     "ensure_textures_generated",

@@ -48,6 +48,42 @@ class TextureGeneratorContract(Protocol):
         """Generate rustic treated railroad timber tie texture RGBA bytes."""
         ...
 
+    @staticmethod
+    def generate_car_paint_texture(size: int = 64) -> bytes:
+        """Generate glossy automotive car paint texture RGBA bytes."""
+        ...
+
+    @staticmethod
+    def generate_car_cabin_texture(size: int = 64) -> bytes:
+        """Generate tinted automotive cabin glass texture RGBA bytes with glare streaks."""
+        ...
+
+    @staticmethod
+    def generate_car_wheel_texture(size: int = 64) -> bytes:
+        """Generate dark rubber tire with metallic rim hubcap texture RGBA bytes."""
+        ...
+
+    @staticmethod
+    def generate_truck_cargo_texture(size: int = 64) -> bytes:
+        """Generate corrugated shipping container siding texture RGBA bytes."""
+        ...
+
+    @staticmethod
+    def generate_train_body_texture(size: int = 64) -> bytes:
+        """Generate metallic bullet train body with racing speed stripes RGBA bytes."""
+        ...
+
+    @staticmethod
+    def generate_train_window_texture(size: int = 64) -> bytes:
+        """Generate passenger train windows band with interior glow RGBA bytes."""
+        ...
+
+    @staticmethod
+    def generate_train_front_texture(size: int = 64) -> bytes:
+        """Generate bullet train nose decal with raked windshield and headlights RGBA bytes."""
+        ...
+
+
 
 class MaterialPaletteContract(Protocol):
     """Protocol for unified game material management."""

@@ -562,16 +562,61 @@ def test_material_wiring_on_obstacles() -> None:
     assert foliage.material is not None
     assert foliage.material.name == "tree_leaves"
 
-    # 3. CarObstacle and TruckObstacle: cab/chassis with stylized vehicle textures
+    # 3. CarObstacle and TruckObstacle: cab/chassis, cabin, cargo, and wheel textures
     car = world.CarObstacle(0.0, 0.0, speed=5.0, scene=scene, material_registry=reg)
     assert car.entity is not None
     assert car.entity.material is not None
     assert car.entity.material.name in ("vehicle", "car_grille")
 
+    car_cabin = [ent for ent, _ in car.sub_entities if ent.name == "CarCabin"][0]
+    assert car_cabin.material is not None
+    assert car_cabin.material.name == "car_cabin"
+
+    car_wheels = [ent for ent, _ in car.sub_entities if ent.name == "CarWheel"]
+    assert len(car_wheels) == 4
+    for w in car_wheels:
+        assert w.material is not None
+        assert w.material.name == "car_wheel"
+
     truck = world.TruckObstacle(0.0, 0.0, speed=4.0, scene=scene, material_registry=reg)
     assert truck.entity is not None
     assert truck.entity.material is not None
-    assert truck.entity.material.name in ("vehicle", "car_grille")
+    assert truck.entity.material.name in ("truck_cargo", "vehicle", "car_grille")
+
+    truck_cabin = [ent for ent, _ in truck.sub_entities if ent.name == "TruckCabin"][0]
+    assert truck_cabin.material is not None
+    assert truck_cabin.material.name == "car_cabin"
+
+    truck_wheels = [ent for ent, _ in truck.sub_entities if ent.name == "TruckWheel"]
+    assert len(truck_wheels) == 6
+    for w in truck_wheels:
+        assert w.material is not None
+        assert w.material.name == "car_wheel"
+
+    # 4. TrainObstacle: body with train_body, windows with train_window, nose with train_front
+    train = world.TrainObstacle(0.0, 0.0, speed=45.0, scene=scene, material_registry=reg)
+    assert train.entity is not None
+    assert train.entity.material is not None
+    assert train.entity.material.name == "train_body"
+
+    train_windows = [ent for ent, _ in train.sub_entities if ent.name == "BulletTrainWindows"][0]
+    assert train_windows.material is not None
+    assert train_windows.material.name == "train_window"
+
+    train_nose = [ent for ent, _ in train.sub_entities if ent.name == "BulletTrainNose"][0]
+    assert train_nose.material is not None
+    assert train_nose.material.name == "train_front"
+
+    # Roof fluting receives train_body material
+    roof_flutes = [ent for ent, _ in train.sub_entities if "RoofFlute" in ent.name]
+    assert len(roof_flutes) == 2
+    for rf in roof_flutes:
+        assert rf.material is not None
+        assert rf.material.name == "train_body"
+
+    # Headlights present
+    headlights = [ent for ent, _ in train.sub_entities if "Headlight" in ent.name or "HighBeam" in ent.name]
+    assert len(headlights) == 3
 
 
 def test_material_wiring_on_player() -> None:
@@ -638,4 +683,82 @@ def test_backward_compatibility_none_scene_and_registry() -> None:
     assert p.entity is None
     p.hop(0, 1)
     p.update(0.016)
+
+
+# =============================================================================
+# 12. Road Markings & Multi-Lane Configuration
+# =============================================================================
+
+def test_road_markings_single_lane() -> None:
+    """Verify single-direction standalone road has outer edge lines and no center dashes."""
+    scene = MockScene()
+    road = world.RoadRow(z_index=4, scene=scene)
+
+    entity_names = [e.name for e in road.entities]
+    assert "RoadAsphalt_4" in entity_names
+    assert "RoadEdgeSouth_4" in entity_names
+    assert "RoadEdgeNorth_4" in entity_names
+
+    # Verify positions: outer borders at z ± 0.45
+    south_edge = [e for e in road.entities if e.name == "RoadEdgeSouth_4"][0]
+    north_edge = [e for e in road.entities if e.name == "RoadEdgeNorth_4"][0]
+    assert pytest.approx(south_edge.transform.position[2], abs=0.01) == 4.0 - 0.45
+    assert pytest.approx(north_edge.transform.position[2], abs=0.01) == 4.0 + 0.45
+
+    # A single-direction road lane must NOT have a dashed line down the center
+    center_dashes = [e for e in road.entities if "LaneMarker_4" in e.name or (
+        pytest.approx(e.transform.position[2], abs=0.05) == 4.0 and e.name != "RoadAsphalt_4"
+    )]
+    assert len(center_dashes) == 0
+
+
+def test_road_markings_consecutive_same_direction() -> None:
+    """Verify consecutive road rows going in the same direction place dashed divider along shared border."""
+    scene = MockScene()
+    # Lane 1 at z=4 going right (+1.0) with next road at z=5 also going right (+1.0)
+    road1 = world.RoadRow(
+        z_index=4,
+        scene=scene,
+        has_prev_road=False,
+        has_next_road=True,
+        direction=1.0,
+        next_direction=1.0,
+    )
+
+    names1 = [e.name for e in road1.entities]
+    assert "RoadEdgeSouth_4" in names1
+    assert "RoadEdgeNorth_4" not in names1  # Shared border, not outer north edge
+
+    dashed_dividers = [e for e in road1.entities if "LaneDivider_4" in e.name]
+    assert len(dashed_dividers) > 0
+    # Shared border is at z = 4 + 0.5 = 4.5
+    for div in dashed_dividers:
+        assert pytest.approx(div.transform.position[2], abs=0.01) == 4.5
+
+
+def test_road_markings_consecutive_opposing_directions() -> None:
+    """Verify consecutive road rows with opposing traffic place distinct center divider."""
+    scene = MockScene()
+    # Lane 1 at z=2 going right (+1.0), lane 2 at z=3 going left (-1.0)
+    road1 = world.RoadRow(
+        z_index=2,
+        scene=scene,
+        has_prev_road=False,
+        has_next_road=True,
+        direction=1.0,
+        next_direction=-1.0,
+    )
+
+    names1 = [e.name for e in road1.entities]
+    assert "RoadEdgeSouth_2" in names1
+    assert "RoadEdgeNorth_2" not in names1
+    assert "CenterDividerA_2" in names1
+    assert "CenterDividerB_2" in names1
+
+    # Distinct center divider placed along shared border z = 2.5
+    div_a = [e for e in road1.entities if e.name == "CenterDividerA_2"][0]
+    div_b = [e for e in road1.entities if e.name == "CenterDividerB_2"][0]
+    assert pytest.approx(div_a.transform.position[2], abs=0.1) == 2.5
+    assert pytest.approx(div_b.transform.position[2], abs=0.1) == 2.5
+
 

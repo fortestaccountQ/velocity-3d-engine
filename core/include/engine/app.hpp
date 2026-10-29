@@ -80,7 +80,7 @@ public:
     // Frame pacing / Target FPS limiter & VSync
     void set_target_fps(int fps) { target_fps_ = fps; }
     int target_fps() const { return target_fps_; }
-    void set_vsync(bool enabled) { config_.vsync = enabled; }
+    void set_vsync(bool enabled);
     bool vsync() const { return config_.vsync; }
     float fps() const { return current_fps_; }
     float frame_time_ms() const { return current_fps_ > 0.0f ? (1000.0f / current_fps_) : 0.0f; }

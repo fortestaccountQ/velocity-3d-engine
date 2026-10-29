@@ -119,6 +119,9 @@ COLOR_START_ZONE = Color.from_hex("#5cb85c")
 
 COLOR_ROAD_ASPHALT = Color.from_hex("#21252b")
 COLOR_ROAD_MARKER = Color.from_hex("#f5d76e")
+COLOR_ROAD_EDGE_WHITE = Color.from_hex("#ffffff")
+COLOR_ROAD_DASH_WHITE = Color.from_hex("#f8fafc")
+COLOR_ROAD_DIVIDER_CENTER = Color.from_hex("#facc15")
 
 COLOR_RIVER_WATER = Color.from_hex("#0288d1")
 COLOR_LOG_WOOD = Color.from_hex("#795548")
@@ -215,6 +218,17 @@ class BaseObstacle:
             if hasattr(sub_ent, "transform"):
                 sub_ent.transform.set_position(self.x + ox, self.y + oy, self.z + oz)
 
+    def set_position(self, x: float, y: float, z: float) -> None:
+        """Explicitly set obstacle position and synchronize all sub-entity transforms."""
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        if self.entity is not None and hasattr(self.entity, "transform"):
+            self.entity.transform.set_position(self.x, self.y, self.z)
+        for sub_ent, (ox, oy, oz) in self.sub_entities:
+            if hasattr(sub_ent, "transform"):
+                sub_ent.transform.set_position(self.x + ox, self.y + oy, self.z + oz)
+
     def check_hit(self, px: float, pz: float, radius: float = 0.35) -> bool:
         """Check circle-to-AABB intersection in the XZ horizontal ground plane."""
         half_w = self.width * 0.5
@@ -298,10 +312,12 @@ class CarObstacle(BaseObstacle):
 
             # 2. Cabin top (tinted windshield and windows)
             cabin_ox = -facing_dir * 0.08
+            cabin_mat = _get_mat(self.material_registry, "car_cabin")
             cabin = scene.create_box(
                 size=(width * 0.54, 0.35, depth * 0.82),
                 position=(self.x + cabin_ox, self.y + 0.36, self.z),
-                color=COLOR_CABIN_WINDOW,
+                color=COLOR_CABIN_WINDOW if cabin_mat is None else WHITE,
+                material=cabin_mat,
                 cast_shadows=True,
                 name="CarCabin",
             )
@@ -359,13 +375,15 @@ class CarObstacle(BaseObstacle):
             self.sub_entities.append((tl2, (rear_x, 0.04, 0.24)))
 
             # 6. Wheels (4 dark corner wheels)
-            wheel_col = Color.from_hex("#0f172a")
+            wheel_mat = _get_mat(self.material_registry, "car_wheel")
+            wheel_col = Color.from_hex("#0f172a") if wheel_mat is None else WHITE
             for wx_dir in (0.32, -0.32):
                 for wz_dir in (0.42, -0.42):
                     wheel = scene.create_box(
                         size=(0.36, 0.20, 0.08),
                         position=(self.x + wx_dir * width, self.y - 0.14, self.z + wz_dir * depth),
                         color=wheel_col,
+                        material=wheel_mat,
                         cast_shadows=False,
                         name="CarWheel",
                     )
@@ -418,16 +436,17 @@ class TruckObstacle(BaseObstacle):
             cab_ox = facing_dir * (cargo_w * 0.5)
 
             # 1. Main cargo container (clean freight white with crisp shadow)
+            cargo_mat = _get_mat(self.material_registry, "truck_cargo")
             self.entity = scene.create_box(
                 size=(cargo_w, height, depth),
                 position=(self.x + cargo_ox, self.y, self.z),
-                color=COLOR_TRUCK_CARGO,
-                material=veh_mat,
+                color=COLOR_TRUCK_CARGO if cargo_mat is None else WHITE,
+                material=cargo_mat,
                 cast_shadows=True,
                 name="TruckCargo",
             )
 
-            # 2. Cab with glossy paint
+            # 2. Cab with glossy paint and tinted cabin windshield
             cab = scene.create_box(
                 size=(cab_w, height * 0.75, depth * 0.88),
                 position=(self.x + cab_ox, self.y - 0.12, self.z),
@@ -437,6 +456,17 @@ class TruckObstacle(BaseObstacle):
                 name="TruckCab",
             )
             self.sub_entities.append((cab, (cab_ox, -0.12, 0.0)))
+
+            cabin_mat = _get_mat(self.material_registry, "car_cabin")
+            cabin = scene.create_box(
+                size=(cab_w * 0.70, height * 0.38, depth * 0.90),
+                position=(self.x + cab_ox, self.y + 0.14, self.z),
+                color=COLOR_CABIN_WINDOW if cabin_mat is None else WHITE,
+                material=cabin_mat,
+                cast_shadows=False,
+                name="TruckCabin",
+            )
+            self.sub_entities.append((cabin, (cab_ox, 0.14, 0.0)))
 
             # 3. Dedicated Front Grille Decal Plate on Cab Face
             grille_ox = cab_ox + facing_dir * (cab_w * 0.50 + 0.01)
@@ -490,7 +520,8 @@ class TruckObstacle(BaseObstacle):
             self.sub_entities.append((tl2, (rear_x, -0.25, 0.28)))
 
             # 6. Wheels (6 heavy wheels for cargo truck)
-            wheel_col = Color.from_hex("#0f172a")
+            wheel_mat = _get_mat(self.material_registry, "car_wheel")
+            wheel_col = Color.from_hex("#0f172a") if wheel_mat is None else WHITE
             wheel_x_positions = [
                 cab_ox + facing_dir * (cab_w * 0.20),
                 cargo_ox - facing_dir * (cargo_w * 0.15),
@@ -502,6 +533,7 @@ class TruckObstacle(BaseObstacle):
                         size=(0.42, 0.24, 0.08),
                         position=(self.x + wx, self.y - 0.42, self.z + wz_dir * depth),
                         color=wheel_col,
+                        material=wheel_mat,
                         cast_shadows=False,
                         name="TruckWheel",
                     )
@@ -586,6 +618,7 @@ class TrainObstacle(BaseObstacle):
         width: float = 24.0,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
+        direction: Optional[float] = None,
     ) -> None:
         height = 1.25
         depth = 0.85
@@ -605,24 +638,97 @@ class TrainObstacle(BaseObstacle):
             material_registry=material_registry,
         )
 
+        facing_dir = 1.0 if (direction is not None and direction >= 0) or (direction is None and speed >= 0) else -1.0
+
         if scene is not None:
-            # 1. Main train locomotive body
+            body_mat = _get_mat(self.material_registry, "train_body")
+            win_mat = _get_mat(self.material_registry, "train_window")
+            front_mat = _get_mat(self.material_registry, "train_front")
+
+            # 1. Main train locomotive body with sleek white/silver livery
+            body_col = WHITE if body_mat is not None else Color.from_hex("#f1f5f9")
             self.entity = scene.create_box(
                 size=(width, height, depth),
                 position=(self.x, self.y, self.z),
-                color=COLOR_TRAIN_BODY,
+                color=body_col,
+                material=body_mat,
                 cast_shadows=True,
                 name="BulletTrainBody",
             )
+
             # 2. Window strip
+            win_col = WHITE if win_mat is not None else COLOR_TRAIN_WINDOWS
             win = scene.create_box(
                 size=(width * 0.94, height * 0.28, depth * 1.04),
                 position=(self.x, self.y + 0.18, self.z),
-                color=COLOR_TRAIN_WINDOWS,
+                color=win_col,
+                material=win_mat,
                 cast_shadows=False,
                 name="BulletTrainWindows",
             )
             self.sub_entities.append((win, (0.0, 0.18, 0.0)))
+
+            # 3. Aerodynamic front nose wedge/plate decal in travel direction
+            nose_ox = facing_dir * (width * 0.50 + 0.08)
+            nose_col = WHITE if front_mat is not None else Color.from_hex("#e2e8f0")
+            nose = scene.create_box(
+                size=(0.16, height * 0.88, depth * 0.96),
+                position=(self.x + nose_ox, self.y, self.z),
+                color=nose_col,
+                material=front_mat,
+                cast_shadows=True,
+                name="BulletTrainNose",
+            )
+            self.sub_entities.append((nose, (nose_ox, 0.0, 0.0)))
+
+            # 4. Luminous front headlights
+            hl_x = facing_dir * (width * 0.50 + 0.17)
+            hl_col = Color.from_hex("#fff59d")
+            hl1 = scene.create_box(
+                size=(0.08, 0.14, 0.18),
+                position=(self.x + hl_x, self.y - 0.10, self.z - 0.22),
+                color=hl_col,
+                cast_shadows=False,
+                name="TrainHeadlight1",
+            )
+            hl2 = scene.create_box(
+                size=(0.08, 0.14, 0.18),
+                position=(self.x + hl_x, self.y - 0.10, self.z + 0.22),
+                color=hl_col,
+                cast_shadows=False,
+                name="TrainHeadlight2",
+            )
+            hl_top = scene.create_box(
+                size=(0.08, 0.12, 0.14),
+                position=(self.x + hl_x, self.y + 0.26, self.z),
+                color=WHITE,
+                cast_shadows=False,
+                name="TrainHighBeam",
+            )
+            self.sub_entities.append((hl1, (hl_x, -0.10, -0.22)))
+            self.sub_entities.append((hl2, (hl_x, -0.10, 0.22)))
+            self.sub_entities.append((hl_top, (hl_x, 0.26, 0.0)))
+
+            # 5. Roof fluting (aerodynamic metallic ribs along the roof)
+            flute_col = Color.from_hex("#cbd5e1")
+            flute1 = scene.create_box(
+                size=(width * 0.96, 0.05, 0.12),
+                position=(self.x, self.y + height * 0.51, self.z - 0.18),
+                color=flute_col,
+                material=body_mat,
+                cast_shadows=False,
+                name="BulletTrainRoofFlute1",
+            )
+            flute2 = scene.create_box(
+                size=(width * 0.96, 0.05, 0.12),
+                position=(self.x, self.y + height * 0.51, self.z + 0.18),
+                color=flute_col,
+                material=body_mat,
+                cast_shadows=False,
+                name="BulletTrainRoofFlute2",
+            )
+            self.sub_entities.append((flute1, (0.0, height * 0.51, -0.18)))
+            self.sub_entities.append((flute2, (0.0, height * 0.51, 0.18)))
 
 
 # =============================================================================
@@ -846,14 +952,28 @@ class RoadRow(BaseRow):
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
+        has_prev_road: bool = False,
+        has_next_road: bool = False,
+        prev_direction: Optional[float] = None,
+        next_direction: Optional[float] = None,
+        direction: Optional[float] = None,
+        place_prev_divider: bool = False,
     ) -> None:
         super().__init__(z_index, RowType.ROAD, scene, material_registry)
         r = rng if rng is not None else random.Random()
 
         # Direction and speed
-        direction = 1.0 if (abs(z_index) % 2 == 0) else -1.0
+        if direction is not None:
+            self.direction = 1.0 if direction >= 0 else -1.0
+        else:
+            self.direction = 1.0 if (abs(z_index) % 2 == 0) else -1.0
         base_spd = speed if speed is not None else r.uniform(5.0, 9.5)
-        signed_speed = abs(base_spd) * direction
+        signed_speed = abs(base_spd) * self.direction
+
+        self.has_prev_road = has_prev_road
+        self.has_next_road = has_next_road
+        self.prev_direction = prev_direction
+        self.next_direction = next_direction
 
         # 1. Dark asphalt strip
         if scene is not None:
@@ -869,17 +989,113 @@ class RoadRow(BaseRow):
             )
             self.entities.append(asphalt)
 
-            # Dashed lane markers (elevated to 0.025 to prevent coplanar Z-fighting)
-            for mx in range(-12, 13, 4):
-                marker = scene.create_box(
-                    size=(1.4, 0.04, 0.14),
-                    position=(float(mx), 0.025, float(self.z_index)),
-                    color=COLOR_ROAD_MARKER,
+            # Road Markings:
+            # A single-direction road lane does NOT have a dashed line down the center.
+            # Outer borders have solid white edge lines (at z ± 0.45).
+            if not self.has_prev_road:
+                edge_south = scene.create_box(
+                    size=(44.0, 0.03, 0.08),
+                    position=(0.0, 0.025, float(self.z_index) - 0.45),
+                    color=COLOR_ROAD_EDGE_WHITE,
                     cast_shadows=False,
                     has_collision=False,
-                    name=f"LaneMarker_{z_index}_{mx}",
+                    name=f"RoadEdgeSouth_{z_index}",
                 )
-                self.entities.append(marker)
+                self.entities.append(edge_south)
+
+            if not self.has_next_road:
+                edge_north = scene.create_box(
+                    size=(44.0, 0.03, 0.08),
+                    position=(0.0, 0.025, float(self.z_index) + 0.45),
+                    color=COLOR_ROAD_EDGE_WHITE,
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"RoadEdgeNorth_{z_index}",
+                )
+                self.entities.append(edge_north)
+
+            # Shared border with next road (z + 0.5):
+            if self.has_next_road:
+                z_shared = float(self.z_index) + 0.5
+                target_next_dir = (
+                    self.next_direction
+                    if self.next_direction is not None
+                    else (1.0 if (abs(z_index + 1) % 2 == 0) else -1.0)
+                )
+                is_opposing = (self.direction * target_next_dir) < 0
+
+                if is_opposing:
+                    # Opposing directions meet -> distinct center divider (double solid yellow lines)
+                    div_a = scene.create_box(
+                        size=(44.0, 0.03, 0.04),
+                        position=(0.0, 0.025, z_shared - 0.04),
+                        color=COLOR_ROAD_DIVIDER_CENTER,
+                        cast_shadows=False,
+                        has_collision=False,
+                        name=f"CenterDividerA_{z_index}",
+                    )
+                    div_b = scene.create_box(
+                        size=(44.0, 0.03, 0.04),
+                        position=(0.0, 0.025, z_shared + 0.04),
+                        color=COLOR_ROAD_DIVIDER_CENTER,
+                        cast_shadows=False,
+                        has_collision=False,
+                        name=f"CenterDividerB_{z_index}",
+                    )
+                    self.entities.append(div_a)
+                    self.entities.append(div_b)
+                else:
+                    # Same direction lanes -> dashed white lane divider
+                    for mx in range(-20, 21, 4):
+                        marker = scene.create_box(
+                            size=(1.4, 0.03, 0.10),
+                            position=(float(mx), 0.025, z_shared),
+                            color=COLOR_ROAD_DASH_WHITE,
+                            cast_shadows=False,
+                            has_collision=False,
+                            name=f"LaneDivider_{z_index}_{mx}",
+                        )
+                        self.entities.append(marker)
+
+            # Optional divider along prev border (z - 0.5) when requested
+            if self.has_prev_road and place_prev_divider:
+                z_shared_prev = float(self.z_index) - 0.5
+                target_prev_dir = (
+                    self.prev_direction
+                    if self.prev_direction is not None
+                    else (1.0 if (abs(z_index - 1) % 2 == 0) else -1.0)
+                )
+                is_opposing_prev = (self.direction * target_prev_dir) < 0
+                if is_opposing_prev:
+                    div_a = scene.create_box(
+                        size=(44.0, 0.03, 0.04),
+                        position=(0.0, 0.025, z_shared_prev - 0.04),
+                        color=COLOR_ROAD_DIVIDER_CENTER,
+                        cast_shadows=False,
+                        has_collision=False,
+                        name=f"CenterDividerPrevA_{z_index}",
+                    )
+                    div_b = scene.create_box(
+                        size=(44.0, 0.03, 0.04),
+                        position=(0.0, 0.025, z_shared_prev + 0.04),
+                        color=COLOR_ROAD_DIVIDER_CENTER,
+                        cast_shadows=False,
+                        has_collision=False,
+                        name=f"CenterDividerPrevB_{z_index}",
+                    )
+                    self.entities.append(div_a)
+                    self.entities.append(div_b)
+                else:
+                    for mx in range(-20, 21, 4):
+                        marker = scene.create_box(
+                            size=(1.4, 0.03, 0.10),
+                            position=(float(mx), 0.025, z_shared_prev),
+                            color=COLOR_ROAD_DASH_WHITE,
+                            cast_shadows=False,
+                            has_collision=False,
+                            name=f"LaneDividerPrev_{z_index}_{mx}",
+                        )
+                        self.entities.append(marker)
 
         # 2. Vehicles (1-2 cars or trucks)
         count = vehicle_count if vehicle_count is not None else r.choice([1, 2])
@@ -1103,6 +1319,7 @@ class RailRow(BaseRow):
             speed=0.0,
             scene=scene,
             material_registry=self.material_registry,
+            direction=self.train_direction,
         )
         self.obstacles.append(self.train)
 
@@ -1123,14 +1340,11 @@ class RailRow(BaseRow):
 
         # Position train at approach edge
         if self.train_direction > 0.0:
-            self.train.x = -32.0
             self.train.speed = self.train_speed
+            self.train.set_position(-32.0, self.train.y, self.train.z)
         else:
-            self.train.x = 32.0
             self.train.speed = -self.train_speed
-
-        if self.train.entity is not None:
-            self.train.entity.transform.set_position(self.train.x, self.train.y, self.train.z)
+            self.train.set_position(32.0, self.train.y, self.train.z)
 
     def update(self, dt: float) -> None:
         if dt <= 0.0:
@@ -1167,9 +1381,7 @@ class RailRow(BaseRow):
                 self.is_warning = False
                 self.train_timer = 0.0
                 self.train.speed = 0.0
-                self.train.x = -999.0
-                if self.train.entity is not None:
-                    self.train.entity.transform.set_position(self.train.x, self.train.y, self.train.z)
+                self.train.set_position(-999.0, self.train.y, self.train.z)
                 if self.beacon_light_entity is not None:
                     self.beacon_light_entity.color = COLOR_BEACON_IDLE
 
@@ -1233,6 +1445,8 @@ class WorldGenerator:
         self.min_active_z = -5
         self._current_clump_type = RowType.GRASS
         self._clump_remaining = 0
+        self._clump_size = 0
+        self._clump_step = 0
         self._last_major_type = RowType.GRASS
 
         # 1. Safe start rows behind and around spawn [-5 .. 0]
@@ -1243,6 +1457,14 @@ class WorldGenerator:
 
         # 2. Initial forward lookahead terrain (Z = 1 .. 25)
         self.generate_ahead(player_z=0, lookahead=25)
+
+    def _get_road_lane_direction(self, step: int, total_lanes: int, z: int) -> float:
+        """Calculate traffic flow direction for a road lane within a multi-lane roadway."""
+        if total_lanes <= 1:
+            return 1.0 if (abs(z) % 2 == 0) else -1.0
+        # Multi-lane roadway: opposing traffic on either side of the center divider
+        half = total_lanes // 2
+        return 1.0 if step < half else -1.0
 
     def _choose_next_clump(self) -> Tuple[RowType, int]:
         """Procedurally choose next terrain clump with authentic pacing."""
@@ -1280,7 +1502,28 @@ class WorldGenerator:
         if row_type == RowType.GRASS:
             return GrassRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         elif row_type == RowType.ROAD:
-            return RoadRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
+            total_lanes = getattr(self, "_clump_size", 1)
+            step = getattr(self, "_clump_step", 0)
+            has_prev = (step > 0) or (
+                self.active_rows.get(z - 1) is not None
+                and getattr(self.active_rows.get(z - 1), "row_type", None) == RowType.ROAD
+            )
+            has_next = (self._clump_remaining > 1)
+            dir_curr = self._get_road_lane_direction(step, total_lanes, z)
+            dir_next = self._get_road_lane_direction(step + 1, total_lanes, z + 1) if has_next else None
+            dir_prev = self._get_road_lane_direction(step - 1, total_lanes, z - 1) if (has_prev and step > 0) else None
+
+            return RoadRow(
+                z,
+                rng=self.rng,
+                scene=self.scene,
+                material_registry=self.material_registry,
+                has_prev_road=has_prev,
+                has_next_road=has_next,
+                prev_direction=dir_prev,
+                next_direction=dir_next,
+                direction=dir_curr,
+            )
         elif row_type == RowType.RIVER:
             return RiverRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         elif row_type == RowType.RAIL:
@@ -1296,6 +1539,10 @@ class WorldGenerator:
 
             if self._clump_remaining <= 0:
                 self._current_clump_type, self._clump_remaining = self._choose_next_clump()
+                self._clump_size = self._clump_remaining
+                self._clump_step = 0
+            else:
+                self._clump_step += 1
 
             row = self._create_row_by_type(next_z, self._current_clump_type)
             self.active_rows[next_z] = row

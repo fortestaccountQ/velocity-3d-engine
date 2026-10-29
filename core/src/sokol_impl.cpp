@@ -18,3 +18,8 @@
 #endif
 #include "util/sokol_imgui.h"
 
+extern "C" void sapp_set_swap_interval(int interval) {
+    _sapp.desc.swap_interval = interval;
+    _sapp.desc.disable_vsync = (interval == 0);
+}
+

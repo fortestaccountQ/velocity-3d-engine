@@ -138,12 +138,12 @@ def test_player_rotation_directions():
 
     # Right
     player.hop(1, 0)
-    assert player.rotation_y == -90.0
+    assert player.rotation_y == 90.0
     player.update(HOP_DURATION + 0.01)
 
     # Left
     player.hop(-1, 0)
-    assert player.rotation_y == 90.0
+    assert player.rotation_y == -90.0
     player.update(HOP_DURATION + 0.01)
 
     # Backward

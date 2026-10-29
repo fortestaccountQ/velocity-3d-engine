@@ -29,6 +29,8 @@ from examples.crossy_duck.textures import (
     StylizedMaterial,
     MaterialConfig,
     MATERIAL_PRESETS,
+    CORE_TEXTURE_NAMES,
+    EXTENDED_TEXTURE_NAMES,
     ensure_textures_generated,
     create_grass_image,
     create_asphalt_image,
@@ -43,6 +45,13 @@ from examples.crossy_duck.textures import (
     create_duck_image,
     create_tree_leaves_image,
     create_lilypad_image,
+    create_car_paint_image,
+    create_car_cabin_image,
+    create_car_wheel_image,
+    create_truck_cargo_image,
+    create_train_body_image,
+    create_train_window_image,
+    create_train_front_image,
     generate_grass_texture,
     generate_asphalt_texture,
     generate_water_texture,
@@ -56,22 +65,14 @@ from examples.crossy_duck.textures import (
     generate_duck_texture,
     generate_tree_leaves_texture,
     generate_lilypad_texture,
+    generate_car_paint_texture,
+    generate_car_cabin_texture,
+    generate_car_wheel_texture,
+    generate_truck_cargo_texture,
+    generate_train_body_texture,
+    generate_train_window_texture,
+    generate_train_front_texture,
 )
-
-
-CORE_TEXTURE_NAMES = [
-    "grass",
-    "asphalt",
-    "water",
-    "wood_bark",
-    "wood_rings",
-    "rail_gravel",
-    "rail_tie",
-    "car_grille",
-    "duck",
-]
-
-EXTENDED_TEXTURE_NAMES = CORE_TEXTURE_NAMES + ["tree_leaves", "lilypad"]
 
 
 # -----------------------------------------------------------------------------
@@ -88,6 +89,13 @@ def test_texture_generator_contract_conformance() -> None:
         "generate_wood_rings_texture",
         "generate_gravel_texture",
         "generate_rail_tie_texture",
+        "generate_car_paint_texture",
+        "generate_car_cabin_texture",
+        "generate_car_wheel_texture",
+        "generate_truck_cargo_texture",
+        "generate_train_body_texture",
+        "generate_train_window_texture",
+        "generate_train_front_texture",
     ]
     for method_name in required_methods:
         assert hasattr(CrossyTextureGenerator, method_name), f"Missing method {method_name}"
@@ -155,6 +163,13 @@ def test_raw_byte_buffer_lengths_and_matching(size: int) -> None:
         "duck": generate_duck_texture(size=size),
         "tree_leaves": generate_tree_leaves_texture(size=size),
         "lilypad": generate_lilypad_texture(size=size),
+        "car_paint": generate_car_paint_texture(size=size),
+        "car_cabin": generate_car_cabin_texture(size=size),
+        "car_wheel": generate_car_wheel_texture(size=size),
+        "truck_cargo": generate_truck_cargo_texture(size=size),
+        "train_body": generate_train_body_texture(size=size),
+        "train_window": generate_train_window_texture(size=size),
+        "train_front": generate_train_front_texture(size=size),
     }
 
     for name, raw_bytes in generators.items():
@@ -202,6 +217,13 @@ def test_procedural_determinism() -> None:
         assert generate_wood_bark_texture(64) == generate_wood_bark_texture(64)
         assert generate_wood_rings_texture(64) == generate_wood_rings_texture(64)
         assert generate_duck_texture(64) == generate_duck_texture(64)
+        assert generate_car_paint_texture(64) == generate_car_paint_texture(64)
+        assert generate_car_cabin_texture(64) == generate_car_cabin_texture(64)
+        assert generate_car_wheel_texture(64) == generate_car_wheel_texture(64)
+        assert generate_truck_cargo_texture(64) == generate_truck_cargo_texture(64)
+        assert generate_train_body_texture(64) == generate_train_body_texture(64)
+        assert generate_train_window_texture(64) == generate_train_window_texture(64)
+        assert generate_train_front_texture(64) == generate_train_front_texture(64)
 
 
 # -----------------------------------------------------------------------------
@@ -297,6 +319,35 @@ def test_texture_registry_caching_and_properties(tmp_path: Path) -> None:
     duck_mat = reg.get_material("duck")
     assert pytest.approx(duck_mat.roughness, 0.01) == 0.45
     assert pytest.approx(duck_mat.metallic, 0.01) == 0.00
+
+    # Check vehicle and train materials
+    paint_mat = reg.get_material("car_paint")
+    assert pytest.approx(paint_mat.roughness, 0.01) == 0.22
+    assert pytest.approx(paint_mat.metallic, 0.01) == 0.20
+
+    cabin_mat = reg.get_material("car_cabin")
+    assert pytest.approx(cabin_mat.roughness, 0.01) == 0.12
+    assert pytest.approx(cabin_mat.metallic, 0.01) == 0.10
+
+    wheel_mat = reg.get_material("car_wheel")
+    assert pytest.approx(wheel_mat.roughness, 0.01) == 0.55
+    assert pytest.approx(wheel_mat.metallic, 0.01) == 0.45
+
+    cargo_mat = reg.get_material("truck_cargo")
+    assert pytest.approx(cargo_mat.roughness, 0.01) == 0.60
+    assert pytest.approx(cargo_mat.metallic, 0.01) == 0.20
+
+    train_body_mat = reg.get_material("train_body")
+    assert pytest.approx(train_body_mat.roughness, 0.01) == 0.20
+    assert pytest.approx(train_body_mat.metallic, 0.01) == 0.35
+
+    train_win_mat = reg.get_material("train_window")
+    assert pytest.approx(train_win_mat.roughness, 0.01) == 0.15
+    assert pytest.approx(train_win_mat.metallic, 0.01) == 0.10
+
+    train_front_mat = reg.get_material("train_front")
+    assert pytest.approx(train_front_mat.roughness, 0.01) == 0.25
+    assert pytest.approx(train_front_mat.metallic, 0.01) == 0.40
 
 
 def test_registry_update_animated_materials(tmp_path: Path) -> None:

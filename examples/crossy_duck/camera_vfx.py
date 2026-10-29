@@ -113,17 +113,23 @@ class CrossyHUD:
     def __init__(self, app: Optional[Any] = None) -> None:
         self.app = app
         self.high_score: int = 0
-        self.smoothed_fps: float = 500.0
+        self.smoothed_fps: float = 60.0
 
         py_ver = sys.version.split()[0]
-        self.py_version_tag: str = f"🐍 PYTHON {py_ver} (64-bit) | Sokol GFX D3D11 | 500+ FPS"
+        self.py_version_tag: str = f"🐍 PYTHON {py_ver} (64-bit) | Sokol GFX D3D11"
 
     def update_high_score(self, score: int) -> None:
         """Update persistent high score if current score exceeds it."""
         if score > self.high_score:
             self.high_score = score
 
-    def render(self, dt: float, player: Any) -> None:
+    def render(
+        self,
+        dt: float,
+        player: Any,
+        bot_active: bool = False,
+        vsync: Optional[bool] = None,
+    ) -> None:
         """Draw 2D HUD overlays via app.ui commands."""
         if self.app is None or not hasattr(self.app, "ui"):
             return
@@ -132,8 +138,8 @@ class CrossyHUD:
         self.update_high_score(score)
 
         if dt > 0.0:
-            fps = 1.0 / dt
-            self.smoothed_fps = self.smoothed_fps * 0.9 + fps * 0.1
+            inst_fps = 1.0 / dt
+            self.smoothed_fps = self.smoothed_fps * 0.9 + inst_fps * 0.1
 
         ui = self.app.ui
         ui.clear()
@@ -141,13 +147,35 @@ class CrossyHUD:
         screen_w = float(getattr(self.app, "width", 1280))
         screen_h = float(getattr(self.app, "height", 720))
 
+        # Determine real smoothed or instant FPS and VSync status
+        real_fps = getattr(self.app, "fps", 0.0)
+        if real_fps <= 0.0:
+            real_fps = self.smoothed_fps
+
+        is_vsync = vsync if vsync is not None else getattr(self.app, "vsync", True)
+        if is_vsync:
+            vsync_label = f"FPS: {real_fps:.0f} (VSync Locked)"
+        else:
+            vsync_label = f"FPS: {real_fps:.0f} (Uncapped Mode)"
+
+        py_ver = sys.version.split()[0]
+        top_left_text = f"🐍 PYTHON {py_ver} (64-bit) | Sokol GFX D3D11 | {vsync_label}"
+
         # 1. Top-left Slate Card
-        card_w = 540.0
+        card_w = 590.0
         card_h = 38.0
         slate_col = Color(0.11, 0.13, 0.18, 0.88)
         cyan_col = Color.from_hex("#38bdf8") if hasattr(Color, "from_hex") else (0.22, 0.74, 0.97, 1.0)
         ui.draw_rect(16.0, 16.0, card_w, card_h, slate_col)
-        ui.draw_text(self.py_version_tag, (26.0, 25.0), size=14, color=cyan_col)
+        ui.draw_text(top_left_text, (26.0, 25.0), size=14, color=cyan_col)
+
+        # Bot Autoplay Badge
+        if bot_active:
+            bot_w = 175.0
+            bot_bg = Color(0.05, 0.22, 0.14, 0.92)
+            bot_fg = Color.from_hex("#34d399") if hasattr(Color, "from_hex") else (0.20, 0.83, 0.60, 1.0)
+            ui.draw_rect(card_w + 24.0, 16.0, bot_w, card_h, bot_bg)
+            ui.draw_text("[🤖 BOT AUTOPLAY]", (card_w + 32.0, 25.0), size=14, color=bot_fg)
 
         # 2. Big Arcade Score Top-Center: SCORE: <score>   HIGH: <high>
         score_text = f"SCORE: {score}   HIGH: {self.high_score}"
@@ -194,7 +222,7 @@ class CrossyHUD:
         # 4. Footer controls
         hint_col = Color.from_hex("#94a3b8") if hasattr(Color, "from_hex") else (0.58, 0.64, 0.72, 1.0)
         ui.draw_text(
-            "[W/A/S/D or Arrows] Hop  |  [R] Restart  |  [ESC] Exit",
+            "[WASD] Hop  |  [B] Bot Autoplay  |  [V] Toggle VSync  |  [R] Restart  |  [ESC] Exit",
             (24.0, screen_h - 28.0),
             size=14,
             color=hint_col,

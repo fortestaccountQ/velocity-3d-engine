@@ -39,6 +39,15 @@ from examples.crossy_duck.player import PlayerController, JUMP_HEIGHT, HOP_DURAT
 from examples.crossy_duck.camera_vfx import IsometricCamera, CrossyHUD
 
 try:
+    from examples.crossy_duck.self_play import CrossyBot, BenchmarkReport
+except ImportError:
+    try:
+        from crossy_duck.self_play import CrossyBot, BenchmarkReport
+    except ImportError:
+        CrossyBot = None
+        BenchmarkReport = None
+
+try:
     from examples.crossy_duck.textures import MaterialRegistry
 except ImportError:
     try:
@@ -329,6 +338,13 @@ except ImportError:
 def main() -> None:
     ensure_desktop_access()
 
+    uncapped_cli = "--uncapped" in sys.argv
+    bot_cli = "--bot" in sys.argv
+    benchmark_cli = "--benchmark" in sys.argv
+
+    # When --uncapped is provided, launch with VSync disabled for maximum frame rate
+    initial_vsync = False if uncapped_cli else True
+
     print("=" * 78)
     print(" 🦆 VelocityEngine: Crossy Duck 3D")
     print("=" * 78)
@@ -337,17 +353,21 @@ def main() -> None:
     print("  [S / DOWN]   : Hop Backward")
     print("  [A / LEFT]   : Hop Left")
     print("  [D / RIGHT]  : Hop Right")
+    print("  [B]          : Toggle Autonomous Bot Autoplay 🤖")
+    print("  [V]          : Toggle VSync (Uncapped 300+ FPS vs Locked 60/75Hz)")
     print("  [R]          : Restart Game")
     print("  [ESC]        : Exit to Desktop")
+    if benchmark_cli:
+        print("  MODE         : Automated Benchmark (300 frames)")
     print("=" * 78)
 
-    # 1. Initialize Engine Window with Smooth VSync Enabled
+    # 1. Initialize Engine Window with Smooth VSync or Uncapped mode
     app = App(
         title="Crossy Duck 3D",
         width=1280,
         height=720,
         clear_color=Color.from_hex("#70b0e0"),  # Vibrant daylight sky
-        vsync=True,
+        vsync=initial_vsync,
     )
 
     # 2. Setup Lighting & Atmosphere
@@ -359,7 +379,7 @@ def main() -> None:
     app.set_show_crosshair(False)
     py_ver = sys.version.split()[0]
     app.set_hud_title(f"PYTHON {py_ver} (64-bit) | Sokol GFX D3D11")
-    app.set_hud_hint("[WASD / ARROWS] Hop   [R] Restart   [ESC] Exit")
+    app.set_hud_hint("[WASD] Hop   [B] Bot Autoplay   [V] VSync   [R] Restart   [ESC] Exit")
 
     # Initialize MaterialRegistry
     registry = MaterialRegistry() if MaterialRegistry is not None else None
@@ -382,6 +402,14 @@ def main() -> None:
 
     hud = CrossyHUD(app=app)
 
+    # Autonomous Bot and Benchmarking
+    bot = CrossyBot() if CrossyBot is not None else None
+    bot_active = bot_cli or (benchmark_cli and bot is not None)
+    benchmark_report = BenchmarkReport() if (benchmark_cli and BenchmarkReport is not None) else None
+    benchmark_completed = False
+    ci_test_completed = False
+    bot_respawn_timer = 0.0
+
     # Input state transition debouncing
     prev_keys: Dict[int, bool] = {}
 
@@ -397,7 +425,7 @@ def main() -> None:
     # 4. Main Game Loop Callback
     @app.on_update
     def update(dt: float) -> None:
-        nonlocal frame_count, last_stream_z
+        nonlocal frame_count, last_stream_z, bot_active, bot_respawn_timer, benchmark_completed, ci_test_completed
         frame_count += 1
 
         # Smooth frame time clamping (prevents OS context switch hitches from jumping physics)
@@ -406,6 +434,16 @@ def main() -> None:
         # Animate water UVs and stylized materials
         if registry is not None:
             registry.update_animated_materials(clamped_dt)
+
+        # Benchmark frame collection
+        if benchmark_report is not None and not benchmark_completed:
+            benchmark_report.record_frame(dt)
+            if frame_count >= 300:
+                benchmark_completed = True
+                print("\n[Benchmark] 300 frames completed successfully!")
+                benchmark_report.print_summary()
+                app.close()
+                return
 
         # ESC to close
         if app.input.is_key_down(Key.ESCAPE):
@@ -420,16 +458,46 @@ def main() -> None:
             iso_camera.snap_to(player)
             print("[Game] Restarted!")
 
-        # Movement Inputs (when alive)
+        # V to toggle VSync runtime
+        if is_just_pressed(Key.V):
+            app.vsync = not app.vsync
+            state_str = "VSync Locked (60/75/144Hz)" if app.vsync else "Uncapped Mode (Max FPS)"
+            print(f"[Display] VSync toggled -> {state_str}")
+
+        # B to toggle Bot Autoplay
+        if is_just_pressed(Key.B):
+            bot_active = not bot_active
+            print(f"[Bot] Autonomous Autoplay -> {'ENABLED 🤖' if bot_active else 'DISABLED'}")
+
+        # Movement Inputs: Check manual input first (player can take over anytime)
+        manual_hop = None
+        if is_just_pressed(Key.W) or is_just_pressed(Key.UP):
+            manual_hop = (0, 1)
+        elif is_just_pressed(Key.S) or is_just_pressed(Key.DOWN):
+            manual_hop = (0, -1)
+        elif is_just_pressed(Key.A) or is_just_pressed(Key.LEFT):
+            manual_hop = (-1, 0)
+        elif is_just_pressed(Key.D) or is_just_pressed(Key.RIGHT):
+            manual_hop = (1, 0)
+
         if player.status in (PlayerStatus.IDLE, PlayerStatus.HOPPING):
-            if is_just_pressed(Key.W) or is_just_pressed(Key.UP):
-                player.hop(0, 1)
-            elif is_just_pressed(Key.S) or is_just_pressed(Key.DOWN):
-                player.hop(0, -1)
-            elif is_just_pressed(Key.A) or is_just_pressed(Key.LEFT):
-                player.hop(-1, 0)
-            elif is_just_pressed(Key.D) or is_just_pressed(Key.RIGHT):
-                player.hop(1, 0)
+            if manual_hop is not None:
+                # Player overrides bot anytime
+                player.hop(*manual_hop)
+            elif bot_active and bot is not None and player.status == PlayerStatus.IDLE:
+                action = bot.decide_next_action(player, world)
+                if action is not None:
+                    player.hop(*action)
+
+        # Autoplay Auto-Respawn (keeps autoplay loop running smoothly)
+        if bot_active and player.status in (PlayerStatus.SQUASHED, PlayerStatus.DROWNED, PlayerStatus.EATEN):
+            bot_respawn_timer += clamped_dt
+            if bot_respawn_timer > 0.6:
+                bot_respawn_timer = 0.0
+                player.reset()
+                world.reset()
+                last_stream_z = -999
+                iso_camera.snap_to(player)
 
         # Update World Streaming (amortized: only when player advances grid cell)
         world.update(clamped_dt)
@@ -442,13 +510,24 @@ def main() -> None:
         current_row = world.get_row(player.grid_z)
         player.update(clamped_dt, current_row)
 
-        # Update Camera & HUD
+        # Update Camera & HUD with real FPS and mode badge
+        is_vsync = app.vsync
+        current_fps = app.fps
+        if is_vsync:
+            fps_str = f"FPS: {current_fps:.0f} (VSync Locked)"
+        else:
+            fps_str = f"FPS: {current_fps:.0f} (Uncapped Mode)"
+
         iso_camera.update(clamped_dt, player)
-        hud.render(clamped_dt, player)
+        hud.render(clamped_dt, player, bot_active=bot_active, vsync=is_vsync)
         app.set_hud_score(player.score)
 
+        bot_badge = " | [🤖 BOT AUTOPLAY]" if bot_active else ""
+        app.set_hud_title(f"PYTHON {py_ver} (64-bit) | {fps_str}{bot_badge}")
+        app.set_hud_hint("[WASD] Hop   [B] Bot Autoplay   [V] VSync   [R] Restart   [ESC] Exit")
+
         # Automated CI Test Flag (--test)
-        if "--test" in sys.argv:
+        if "--test" in sys.argv and not ci_test_completed:
             # Trigger test hops at preset frames
             if frame_count == 5:
                 player.hop(0, 1)
@@ -458,6 +537,7 @@ def main() -> None:
                 player.hop(1, 0)
 
             if frame_count >= 60:
+                ci_test_completed = True
                 print(f"[CI Test] 60 frames verified successfully! Score: {player.score}. Exiting cleanly.")
                 app.close()
 
