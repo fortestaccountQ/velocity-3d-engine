@@ -240,6 +240,11 @@ private:
 
     // Render statistics
     RenderStats stats_{};
+
+    // Default textures for PBR bindings
+    std::shared_ptr<Texture> default_flat_normal_tex_{nullptr};
+    std::shared_ptr<Texture> default_white_tex_{nullptr};
+    std::shared_ptr<Texture> default_black_tex_{nullptr};
 };
 
 } // namespace engine

@@ -69,6 +69,40 @@ except ImportError:
     quat_look_rotation = getattr(_core, "quat_look_rotation", None)
     quat_slerp = getattr(_core, "quat_slerp", None)
 
+    # Phase 2: Materials, Textures, Geometry & Lights
+    Vertex = getattr(_core, "Vertex", None)
+    StandardMaterial = getattr(_core, "StandardMaterial", None)
+    PhysicalMaterial = getattr(_core, "PhysicalMaterial", None)
+    UnlitMaterial = getattr(_core, "UnlitMaterial", None)
+    LambertMaterial = getattr(_core, "LambertMaterial", None)
+    PhongMaterial = getattr(_core, "PhongMaterial", None)
+    ToonMaterial = getattr(_core, "ToonMaterial", None)
+    ShaderMaterial = getattr(_core, "ShaderMaterial", None)
+    MaterialType = getattr(_core, "MaterialType", None)
+    SideMode = getattr(_core, "SideMode", None)
+    BlendMode = getattr(_core, "BlendMode", None)
+    TextureFilter = getattr(_core, "TextureFilter", None)
+    TextureWrap = getattr(_core, "TextureWrap", None)
+    PipelineManager = getattr(_core, "PipelineManager", None)
+    PointLight = getattr(_core, "PointLight", None)
+    SpotLight = getattr(_core, "SpotLight", None)
+    HemisphereLight = getattr(_core, "HemisphereLight", None)
+    AmbientLight = getattr(_core, "AmbientLight", None)
+
+    def DataTexture(data: Any, width: int, height: int, channels: int = 4) -> Any:
+        """Create a Texture from raw bytes, bytearray, memoryview, or numpy array."""
+        if hasattr(data, "tobytes"):
+            raw_bytes = data.tobytes()
+        elif isinstance(data, (bytearray, memoryview)):
+            raw_bytes = bytes(data)
+        elif isinstance(data, bytes):
+            raw_bytes = data
+        else:
+            raw_bytes = bytes(data)
+        return Texture.create_data_texture(width, height, raw_bytes, channels)
+
+    setattr(Texture, "DataTexture", staticmethod(DataTexture))
+
     from .color import (
         Color,
         as_color,
@@ -259,4 +293,24 @@ except ImportError:
         "metal",
         "plastic",
         "rubber",
+        # Phase 2
+        "Vertex",
+        "StandardMaterial",
+        "PhysicalMaterial",
+        "UnlitMaterial",
+        "LambertMaterial",
+        "PhongMaterial",
+        "ToonMaterial",
+        "ShaderMaterial",
+        "MaterialType",
+        "SideMode",
+        "BlendMode",
+        "TextureFilter",
+        "TextureWrap",
+        "DataTexture",
+        "PipelineManager",
+        "PointLight",
+        "SpotLight",
+        "HemisphereLight",
+        "AmbientLight",
     ]

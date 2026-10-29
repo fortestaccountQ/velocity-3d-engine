@@ -96,6 +96,10 @@ class TestExamplesParity(unittest.TestCase):
         self.assertIsNotNone(m_09)
         self.assertTrue(hasattr(m_09, "main"))
 
+        m_12 = importlib.import_module("examples.12_phase2_pbr_helmet")
+        self.assertIsNotNone(m_12)
+        self.assertTrue(hasattr(m_12, "app"))
+
 
 if __name__ == "__main__":
     unittest.main()

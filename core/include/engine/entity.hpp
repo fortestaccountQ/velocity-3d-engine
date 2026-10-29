@@ -31,6 +31,9 @@ public:
         }
     }
 
+    Entity(const std::string& ent_name)
+        : Node3D(ent_name) {}
+
     glm::mat4 world_model_matrix() const {
         glm::mat4 self_m = transform.model_matrix() * local_matrix;
         if (parent) {

@@ -7,6 +7,7 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/unordered_map.h>
 
 #include "engine/math_types.hpp"
 #include "engine/node3d.hpp"
@@ -446,14 +447,24 @@ NB_MODULE(_VelocityEngine_core, m) {
         });
 
     // -----------------------------------------------------------------------
-    // Mesh
+    // Vertex & Mesh
     // -----------------------------------------------------------------------
+    nb::class_<engine::Vertex>(m, "Vertex")
+        .def(nb::init<>())
+        .def_rw("position", &engine::Vertex::position)
+        .def_rw("normal", &engine::Vertex::normal)
+        .def_rw("uv", &engine::Vertex::uv)
+        .def_rw("color", &engine::Vertex::color)
+        .def_rw("tangent", &engine::Vertex::tangent);
+
     nb::class_<engine::Mesh>(m, "Mesh")
         .def(nb::init<>())
         .def_ro("vbuf_id", &engine::Mesh::vbuf_id)
         .def_ro("ibuf_id", &engine::Mesh::ibuf_id)
         .def_ro("num_indices", &engine::Mesh::num_indices)
         .def_ro("local_aabb", &engine::Mesh::local_aabb)
+        .def_ro("cpu_vertices", &engine::Mesh::cpu_vertices)
+        .def_ro("cpu_indices", &engine::Mesh::cpu_indices)
         .def("calculate_aabb", &engine::Mesh::calculate_aabb)
         .def_static("create_box", &engine::Mesh::create_box,
             "width"_a = 1.0f, "height"_a = 1.0f, "depth"_a = 1.0f)
@@ -651,6 +662,14 @@ NB_MODULE(_VelocityEngine_core, m) {
                 is_pixel_art
             );
         }, "width"_a, "height"_a, "data"_a, "is_pixel_art"_a = false)
+        .def_static("create_data_texture", [](int width, int height, const nb::bytes& data, int channels) {
+            return engine::Texture::create_data_texture(
+                width,
+                height,
+                reinterpret_cast<const uint8_t*>(data.data()),
+                channels
+            );
+        }, "width"_a, "height"_a, "data"_a, "channels"_a = 4)
         .def_static("create_checkerboard", &engine::Texture::create_checkerboard,
             "width"_a = 64, "height"_a = 64, "tile_size"_a = 8,
             "color1"_a = 0xFFFFFFFF, "color2"_a = 0xFF2A2A38)
@@ -660,16 +679,98 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_ro("height", &engine::Texture::height)
         .def_ro("channels", &engine::Texture::channels)
         .def_rw("is_pixel_art", &engine::Texture::is_pixel_art)
+        .def_rw("wrap_s", &engine::Texture::wrap_s)
+        .def_rw("wrap_t", &engine::Texture::wrap_t)
+        .def_rw("filter_min", &engine::Texture::filter_min)
+        .def_rw("filter_mag", &engine::Texture::filter_mag)
         .def("is_valid", &engine::Texture::is_valid);
 
     // -----------------------------------------------------------------------
-    // Material
+    // Material Enums
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::SideMode>(m, "SideMode")
+        .value("Front", engine::SideMode::Front)
+        .value("Back", engine::SideMode::Back)
+        .value("Double", engine::SideMode::Double)
+        .export_values();
+
+    nb::enum_<engine::BlendMode>(m, "BlendMode")
+        .value("Opaque", engine::BlendMode::Opaque)
+        .value("Alpha", engine::BlendMode::Alpha)
+        .value("Additive", engine::BlendMode::Additive)
+        .value("Multiply", engine::BlendMode::Multiply)
+        .export_values();
+
+    nb::enum_<engine::TextureFilter>(m, "TextureFilter")
+        .value("Nearest", engine::TextureFilter::Nearest)
+        .value("Linear", engine::TextureFilter::Linear)
+        .export_values();
+
+    nb::enum_<engine::TextureWrap>(m, "TextureWrap")
+        .value("Repeat", engine::TextureWrap::Repeat)
+        .value("ClampToEdge", engine::TextureWrap::ClampToEdge)
+        .value("MirroredRepeat", engine::TextureWrap::MirroredRepeat)
+        .export_values();
+
+    nb::enum_<engine::MaterialType>(m, "MaterialType")
+        .value("Standard", engine::MaterialType::Standard)
+        .value("Physical", engine::MaterialType::Physical)
+        .value("Unlit", engine::MaterialType::Unlit)
+        .value("Lambert", engine::MaterialType::Lambert)
+        .value("Phong", engine::MaterialType::Phong)
+        .value("Toon", engine::MaterialType::Toon)
+        .value("CustomShader", engine::MaterialType::CustomShader)
+        .value("PBR", engine::MaterialType::PBR)
+        .export_values();
+
+    // -----------------------------------------------------------------------
+    // Material Hierarchy
     // -----------------------------------------------------------------------
     nb::class_<engine::Material>(m, "Material")
         .def(nb::init<>())
         .def(nb::init<std::shared_ptr<engine::Texture>, float, float>(),
             "texture"_a = nullptr, "roughness"_a = 0.5f, "metallic"_a = 0.0f)
-        .def_rw("albedo_map", &engine::Material::albedo_map)
+        .def_prop_ro("type", &engine::Material::type)
+        .def_rw("transparent", &engine::Material::transparent)
+        .def_rw("opacity", &engine::Material::opacity)
+        .def_rw("depth_write", &engine::Material::depth_write)
+        .def_rw("depth_test", &engine::Material::depth_test)
+        .def_rw("wireframe", &engine::Material::wireframe)
+        .def_rw("side", &engine::Material::side)
+        .def_rw("blend_mode", &engine::Material::blend_mode)
+        .def_prop_rw("albedo_map",
+            [](engine::Material& m) { return m.albedo_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.albedo_map = t; })
+        .def_prop_rw("normal_map",
+            [](engine::Material& m) { return m.normal_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.normal_map = t; })
+        .def_prop_rw("metallic_roughness_map",
+            [](engine::Material& m) { return m.metallic_roughness_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.metallic_roughness_map = t; })
+        .def_prop_rw("occlusion_map",
+            [](engine::Material& m) { return m.occlusion_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.occlusion_map = t; })
+        .def_prop_rw("ao_map",
+            [](engine::Material& m) { return m.ao_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.ao_map = t; m.occlusion_map = t; })
+        .def_prop_rw("emissive_map",
+            [](engine::Material& m) { return m.emissive_map; },
+            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.emissive_map = t; })
+        .def_rw("normal_scale", &engine::Material::normal_scale)
+        .def_rw("ao_intensity", &engine::Material::ao_intensity)
+        .def_rw("alpha_test", &engine::Material::alpha_test)
+        .def_rw("alpha_cutoff", &engine::Material::alpha_cutoff)
+        .def_prop_rw("emissive_color",
+            [](engine::Material& mat) -> glm::vec3& { return mat.emissive_color; },
+            [](engine::Material& mat, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    mat.emissive_color = nb::cast<glm::vec3>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) mat.emissive_color = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("emissive_intensity", &engine::Material::emissive_intensity)
         .def_rw("roughness", &engine::Material::roughness)
         .def_rw("metallic", &engine::Material::metallic)
         .def_prop_rw("base_color",
@@ -706,6 +807,76 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("set_color", &engine::Material::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
         .def("set_uv_scale", &engine::Material::set_uv_scale, "u"_a, "v"_a)
         .def("set_uv_offset", &engine::Material::set_uv_offset, "u"_a, "v"_a);
+
+    nb::class_<engine::StandardMaterial, engine::Material>(m, "StandardMaterial")
+        .def(nb::init<>())
+        .def(nb::init<std::shared_ptr<engine::Texture>, float, float>(),
+            "texture"_a = nullptr, "roughness"_a = 0.5f, "metallic"_a = 0.0f);
+
+    nb::class_<engine::PhysicalMaterial, engine::StandardMaterial>(m, "PhysicalMaterial")
+        .def(nb::init<>())
+        .def_rw("clearcoat", &engine::PhysicalMaterial::clearcoat)
+        .def_rw("clearcoat_roughness", &engine::PhysicalMaterial::clearcoat_roughness)
+        .def_rw("transmission", &engine::PhysicalMaterial::transmission)
+        .def_rw("ior", &engine::PhysicalMaterial::ior)
+        .def_prop_rw("sheen",
+            [](engine::PhysicalMaterial& mat) -> glm::vec3& { return mat.sheen; },
+            [](engine::PhysicalMaterial& mat, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    mat.sheen = nb::cast<glm::vec3>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) mat.sheen = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("sheen_roughness", &engine::PhysicalMaterial::sheen_roughness);
+
+    nb::class_<engine::UnlitMaterial, engine::Material>(m, "UnlitMaterial")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec4&, std::shared_ptr<engine::Texture>, bool>(),
+            "color"_a = glm::vec4(1.0f), "map"_a = nullptr, "wireframe"_a = false);
+
+    nb::class_<engine::LambertMaterial, engine::Material>(m, "LambertMaterial")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec4&, std::shared_ptr<engine::Texture>>(),
+            "color"_a = glm::vec4(1.0f), "map"_a = nullptr);
+
+    nb::class_<engine::PhongMaterial, engine::Material>(m, "PhongMaterial")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec4&, std::shared_ptr<engine::Texture>, float>(),
+            "color"_a = glm::vec4(1.0f), "map"_a = nullptr, "shininess"_a = 30.0f)
+        .def_rw("shininess", &engine::PhongMaterial::shininess)
+        .def_prop_rw("specular_color",
+            [](engine::PhongMaterial& mat) -> glm::vec3& { return mat.specular_color; },
+            [](engine::PhongMaterial& mat, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    mat.specular_color = nb::cast<glm::vec3>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) mat.specular_color = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal);
+
+    nb::class_<engine::ToonMaterial, engine::Material>(m, "ToonMaterial")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec4&, std::shared_ptr<engine::Texture>, int>(),
+            "color"_a = glm::vec4(1.0f), "map"_a = nullptr, "steps"_a = 3)
+        .def_rw("steps", &engine::ToonMaterial::steps)
+        .def_rw("num_steps", &engine::ToonMaterial::num_steps);
+
+    nb::class_<engine::ShaderMaterial, engine::Material>(m, "ShaderMaterial")
+        .def(nb::init<>())
+        .def(nb::init<std::string, std::string>(), "vertex_shader"_a = "", "fragment_shader"_a = "")
+        .def_rw("vertex_shader", &engine::ShaderMaterial::vertex_shader)
+        .def_rw("fragment_shader", &engine::ShaderMaterial::fragment_shader)
+        .def_rw("uniforms", &engine::ShaderMaterial::uniforms);
+
+    // -----------------------------------------------------------------------
+    // PipelineManager
+    // -----------------------------------------------------------------------
+    nb::class_<engine::PipelineManager>(m, "PipelineManager")
+        .def_static("instance", &engine::PipelineManager::instance, nb::rv_policy::reference)
+        .def("release_all", &engine::PipelineManager::release_all);
 
     // -----------------------------------------------------------------------
     // Camera
@@ -764,12 +935,14 @@ NB_MODULE(_VelocityEngine_core, m) {
              "mouse_x"_a, "mouse_y"_a, "screen_w"_a, "screen_h"_a);
 
     // -----------------------------------------------------------------------
-    // Light & DirectionalLight
+    // Light & Light Types
     // -----------------------------------------------------------------------
     nb::enum_<engine::LightType>(m, "LightType")
         .value("Directional", engine::LightType::Directional)
         .value("Point", engine::LightType::Point)
         .value("Spot", engine::LightType::Spot)
+        .value("Hemisphere", engine::LightType::Hemisphere)
+        .value("Ambient", engine::LightType::Ambient)
         .export_values();
 
     nb::class_<engine::Light, engine::Node3D>(m, "Light")
@@ -837,16 +1010,65 @@ NB_MODULE(_VelocityEngine_core, m) {
 
     nb::class_<engine::DirectionalLight, engine::Light>(m, "DirectionalLight")
         .def(nb::init<>())
-        .def(nb::init<const std::string&>(), "name"_a = "DirectionalLight");
+        .def(nb::init<const std::string&>(), "name"_a = "DirectionalLight")
+        .def(nb::init<const std::string&, const glm::vec3&, const glm::vec3&, float>(),
+             "name"_a, "direction"_a, "color"_a = glm::vec3(1.0f), "intensity"_a = 1.0f)
+        .def_rw("cast_shadow", &engine::DirectionalLight::cast_shadow);
+
+    nb::class_<engine::PointLight, engine::Light>(m, "PointLight")
+        .def(nb::init<const std::string&, const glm::vec3&, float, float, float>(),
+             "name"_a = "PointLight", "color"_a = glm::vec3(1.0f), "intensity"_a = 1.0f, "range"_a = 10.0f, "decay"_a = 2.0f)
+        .def_rw("decay", &engine::PointLight::decay);
+
+    nb::class_<engine::SpotLight, engine::Light>(m, "SpotLight")
+        .def(nb::init<const std::string&, const glm::vec3&, float, float>(),
+             "name"_a = "SpotLight", "color"_a = glm::vec3(1.0f), "intensity"_a = 1.0f, "range"_a = 15.0f)
+        .def_rw("inner_cone_angle", &engine::SpotLight::inner_cone_angle)
+        .def_rw("outer_cone_angle", &engine::SpotLight::outer_cone_angle)
+        .def_rw("penumbra", &engine::SpotLight::penumbra)
+        .def_rw("cast_shadow", &engine::SpotLight::cast_shadow)
+        .def("set_cone_angles", &engine::SpotLight::set_cone_angles, "inner_rad"_a, "outer_rad"_a);
+
+    nb::class_<engine::HemisphereLight, engine::Light>(m, "HemisphereLight")
+        .def(nb::init<const std::string&, const glm::vec3&, const glm::vec3&, float>(),
+             "name"_a = "HemisphereLight", "sky_color"_a = glm::vec3(0.6f, 0.7f, 0.9f),
+             "ground_color"_a = glm::vec3(0.3f, 0.25f, 0.2f), "intensity"_a = 1.0f)
+        .def_prop_rw("sky_color",
+            [](engine::HemisphereLight& l) -> glm::vec3& { return l.sky_color; },
+            [](engine::HemisphereLight& l, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) l.sky_color = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) l.sky_color = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("ground_color",
+            [](engine::HemisphereLight& l) -> glm::vec3& { return l.ground_color; },
+            [](engine::HemisphereLight& l, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) l.ground_color = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) l.ground_color = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal);
+
+    nb::class_<engine::AmbientLight, engine::Light>(m, "AmbientLight")
+        .def(nb::init<const std::string&, const glm::vec3&, float>(),
+             "name"_a = "AmbientLight", "color"_a = glm::vec3(1.0f), "intensity"_a = 0.2f);
 
     // -----------------------------------------------------------------------
     // Entity
     // -----------------------------------------------------------------------
     nb::class_<engine::Entity, engine::Node3D>(m, "Entity")
         .def(nb::init<>())
+        .def(nb::init<const std::string&>(), "name"_a)
         .def(nb::init<uint32_t, const std::string&>(), "id"_a = 0, "name"_a = "Entity")
-        .def_rw("mesh", &engine::Entity::mesh)
-        .def_rw("material", &engine::Entity::material)
+        .def_prop_rw("mesh",
+            [](engine::Entity& e) { return e.mesh; },
+            [](engine::Entity& e, std::shared_ptr<engine::Mesh> m) { e.mesh = m; })
+        .def_prop_rw("material",
+            [](engine::Entity& e) { return e.material; },
+            [](engine::Entity& e, std::shared_ptr<engine::Material> m) { e.material = m; })
         .def_prop_rw("color",
             [](engine::Entity& e) -> glm::vec4& { return e.color; },
             [](engine::Entity& e, const nb::object& val) {
@@ -949,6 +1171,11 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("raycast", &engine::Scene::raycast, "ray"_a, "max_distance"_a = 1000.0f)
         .def("clear", &engine::Scene::clear)
         .def_prop_ro("entities", &engine::Scene::entities)
+        .def("add_light", &engine::Scene::add_light, "light"_a)
+        .def("remove_light", &engine::Scene::remove_light, "light"_a)
+        .def_prop_ro("lights", [](engine::Scene& s) -> const std::vector<std::shared_ptr<engine::Light>>& {
+            return s.lights();
+        })
         .def("add_instanced_mesh", &engine::Scene::add_instanced_mesh, "mesh"_a)
         .def("remove_instanced_mesh", &engine::Scene::remove_instanced_mesh, "mesh"_a)
         .def_prop_ro("instanced_meshes", [](engine::Scene& s) -> const std::vector<std::shared_ptr<engine::InstancedMesh>>& {

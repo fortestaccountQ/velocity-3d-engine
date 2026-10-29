@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "contracts/phase2_materials_contracts.h"
+
 namespace engine {
 
 class Texture {
@@ -17,6 +19,11 @@ public:
     int channels{0};
     bool is_pixel_art{false};
 
+    TextureWrap wrap_s{TextureWrap::Repeat};
+    TextureWrap wrap_t{TextureWrap::Repeat};
+    TextureFilter filter_min{TextureFilter::Linear};
+    TextureFilter filter_mag{TextureFilter::Linear};
+
     std::vector<uint8_t> cpu_pixels;
 
     Texture() = default;
@@ -28,6 +35,7 @@ public:
 
     static std::shared_ptr<Texture> load_from_file(const std::string& filepath, bool is_pixel_art = false);
     static std::shared_ptr<Texture> create_from_rgba(int width, int height, const uint8_t* pixels, bool is_pixel_art = false);
+    static std::shared_ptr<Texture> create_data_texture(int width, int height, const uint8_t* data, int channels = 4);
     static std::shared_ptr<Texture> create_checkerboard(
         int width = 64,
         int height = 64,

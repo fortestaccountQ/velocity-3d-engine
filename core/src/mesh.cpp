@@ -59,43 +59,43 @@ std::shared_ptr<Mesh> Mesh::create_box(float width, float height, float depth) {
     float hh = height * 0.5f;
     float hd = depth * 0.5f;
 
-    // 24 vertices for 6 faces with proper position, normal, UV coordinates and base tint
+    // 24 vertices for 6 faces with proper position, normal, UV coordinates, base tint, and analytical tangents
     mesh->cpu_vertices = {
         // Front face (Z = +hd, normal: 0, 0, +1)
-        { { -hw, -hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw, -hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw,  hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { { -hw, -hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw, -hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw,  hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -hw,  hh,  hd }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
 
         // Back face (Z = -hd, normal: 0, 0, -1)
-        { {  hw, -hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw, -hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw,  hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { {  hw, -hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { -1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -hw, -hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { -1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -hw,  hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { -1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw,  hh, -hd }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { -1.0f, 0.0f, 0.0f, 1.0f } },
 
         // Left face (X = -hw, normal: -1, 0, 0)
-        { { -hw, -hh, -hd }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw, -hh,  hd }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw,  hh,  hd }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw,  hh, -hd }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { { -hw, -hh, -hd }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        { { -hw, -hh,  hd }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        { { -hw,  hh,  hd }, { -1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        { { -hw,  hh, -hd }, { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
 
         // Right face (X = +hw, normal: +1, 0, 0)
-        { {  hw, -hh,  hd }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw, -hh, -hd }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh, -hd }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh,  hd }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { {  hw, -hh,  hd }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f } },
+        { {  hw, -hh, -hd }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f } },
+        { {  hw,  hh, -hd }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f } },
+        { {  hw,  hh,  hd }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f } },
 
         // Top face (Y = +hh, normal: 0, +1, 0)
-        { { -hw,  hh,  hd }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh,  hd }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw,  hh, -hd }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw,  hh, -hd }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { { -hw,  hh,  hd }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw,  hh,  hd }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw,  hh, -hd }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -hw,  hh, -hd }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
 
         // Bottom face (Y = -hh, normal: 0, -1, 0)
-        { { -hw, -hh, -hd }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw, -hh, -hd }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { {  hw, -hh,  hd }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        { { -hw, -hh,  hd }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+        { { -hw, -hh, -hd }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw, -hh, -hd }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  hw, -hh,  hd }, { 0.0f, -1.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -hw, -hh,  hd }, { 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
     };
 
     mesh->cpu_indices = {
@@ -142,8 +142,9 @@ std::shared_ptr<Mesh> Mesh::create_sphere(float radius, int rings, int sectors) 
             glm::vec3 normal(sin_phi * cos_theta, cos_phi, sin_phi * sin_theta);
             glm::vec3 position = normal * radius;
             glm::vec2 uv(u, 1.0f - v);
+            glm::vec4 tangent(-sin_theta, 0.0f, cos_theta, 1.0f);
 
-            mesh->cpu_vertices.push_back({ position, normal, uv, glm::vec4(1.0f) });
+            mesh->cpu_vertices.push_back({ position, normal, uv, glm::vec4(1.0f), tangent });
         }
     }
 
@@ -191,9 +192,10 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
         glm::vec3 normal(cos_theta, 0.0f, sin_theta);
         glm::vec3 pos_top(radius * cos_theta,  half_h, radius * sin_theta);
         glm::vec3 pos_bot(radius * cos_theta, -half_h, radius * sin_theta);
+        glm::vec4 tangent(-sin_theta, 0.0f, cos_theta, 1.0f);
 
-        mesh->cpu_vertices.push_back({ pos_top, normal, { u, 1.0f }, glm::vec4(1.0f) });
-        mesh->cpu_vertices.push_back({ pos_bot, normal, { u, 0.0f }, glm::vec4(1.0f) });
+        mesh->cpu_vertices.push_back({ pos_top, normal, { u, 1.0f }, glm::vec4(1.0f), tangent });
+        mesh->cpu_vertices.push_back({ pos_bot, normal, { u, 0.0f }, glm::vec4(1.0f), tangent });
     }
 
     // Side indices
@@ -217,7 +219,7 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
     if (capped) {
         // Top Cap (+Y)
         uint16_t top_center_idx = static_cast<uint16_t>(mesh->cpu_vertices.size());
-        mesh->cpu_vertices.push_back({ { 0.0f, half_h, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f) });
+        mesh->cpu_vertices.push_back({ { 0.0f, half_h, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
 
         uint16_t top_ring_start = static_cast<uint16_t>(mesh->cpu_vertices.size());
         for (int s = 0; s <= segments; ++s) {
@@ -227,7 +229,7 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
             float sin_theta = std::sin(theta);
             glm::vec3 pos(radius * cos_theta, half_h, radius * sin_theta);
             glm::vec2 uv(0.5f + 0.5f * cos_theta, 0.5f + 0.5f * sin_theta);
-            mesh->cpu_vertices.push_back({ pos, { 0.0f, 1.0f, 0.0f }, uv, glm::vec4(1.0f) });
+            mesh->cpu_vertices.push_back({ pos, { 0.0f, 1.0f, 0.0f }, uv, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
         }
 
         for (int s = 0; s < segments; ++s) {
@@ -241,7 +243,7 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
 
         // Bottom Cap (-Y)
         uint16_t bot_center_idx = static_cast<uint16_t>(mesh->cpu_vertices.size());
-        mesh->cpu_vertices.push_back({ { 0.0f, -half_h, 0.0f }, { 0.0f, -1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f) });
+        mesh->cpu_vertices.push_back({ { 0.0f, -half_h, 0.0f }, { 0.0f, -1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
 
         uint16_t bot_ring_start = static_cast<uint16_t>(mesh->cpu_vertices.size());
         for (int s = 0; s <= segments; ++s) {
@@ -251,7 +253,7 @@ std::shared_ptr<Mesh> Mesh::create_cylinder(float radius, float height, int segm
             float sin_theta = std::sin(theta);
             glm::vec3 pos(radius * cos_theta, -half_h, radius * sin_theta);
             glm::vec2 uv(0.5f + 0.5f * cos_theta, 0.5f - 0.5f * sin_theta);
-            mesh->cpu_vertices.push_back({ pos, { 0.0f, -1.0f, 0.0f }, uv, glm::vec4(1.0f) });
+            mesh->cpu_vertices.push_back({ pos, { 0.0f, -1.0f, 0.0f }, uv, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
         }
 
         for (int s = 0; s < segments; ++s) {
@@ -295,7 +297,8 @@ std::shared_ptr<Mesh> Mesh::create_plane(float width, float depth, int subdivisi
                 { x, 0.0f, z },
                 { 0.0f, 1.0f, 0.0f },
                 { u, v },
-                { 1.0f, 1.0f, 1.0f, 1.0f }
+                { 1.0f, 1.0f, 1.0f, 1.0f },
+                { 1.0f, 0.0f, 0.0f, 1.0f }
             });
         }
     }
@@ -359,6 +362,11 @@ std::shared_ptr<Mesh> Mesh::create_custom(
                 v.color = glm::vec4(vf[8], vf[9], vf[10], vf[11]);
             } else {
                 v.color = glm::vec4(1.0f);
+            }
+            if (stride_bytes >= 16 * sizeof(float)) {
+                v.tangent = glm::vec4(vf[12], vf[13], vf[14], vf[15]);
+            } else {
+                v.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
             }
             mesh->cpu_vertices.push_back(v);
         }

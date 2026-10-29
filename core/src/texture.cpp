@@ -107,7 +107,7 @@ bool Texture::ensure_gpu_resources() {
     sg_image img = sg_make_image(&img_desc);
     image_id = img.id;
 
-    // 2. Create GPU Sampler (Trilinear + Anisotropy 8x or Nearest for Pixel-Art)
+    // 2. Create GPU Sampler (using wrap_s, wrap_t, filter_min, filter_mag or Pixel-Art preset)
     sg_sampler_desc smp_desc{};
     if (is_pixel_art) {
         smp_desc.min_filter = SG_FILTER_NEAREST;
@@ -115,13 +115,22 @@ bool Texture::ensure_gpu_resources() {
         smp_desc.mipmap_filter = SG_FILTER_NEAREST;
         smp_desc.max_anisotropy = 1;
     } else {
-        smp_desc.min_filter = SG_FILTER_LINEAR;
-        smp_desc.mag_filter = SG_FILTER_LINEAR;
-        smp_desc.mipmap_filter = SG_FILTER_LINEAR;
-        smp_desc.max_anisotropy = 8;
+        smp_desc.min_filter = (filter_min == TextureFilter::Nearest) ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+        smp_desc.mag_filter = (filter_mag == TextureFilter::Nearest) ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+        smp_desc.mipmap_filter = (filter_min == TextureFilter::Nearest) ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+        smp_desc.max_anisotropy = (filter_min == TextureFilter::Linear) ? 8 : 1;
     }
-    smp_desc.wrap_u = SG_WRAP_REPEAT;
-    smp_desc.wrap_v = SG_WRAP_REPEAT;
+
+    auto to_sg_wrap = [](TextureWrap wrap) {
+        switch (wrap) {
+            case TextureWrap::ClampToEdge: return SG_WRAP_CLAMP_TO_EDGE;
+            case TextureWrap::MirroredRepeat: return SG_WRAP_MIRRORED_REPEAT;
+            case TextureWrap::Repeat:
+            default: return SG_WRAP_REPEAT;
+        }
+    };
+    smp_desc.wrap_u = to_sg_wrap(wrap_s);
+    smp_desc.wrap_v = to_sg_wrap(wrap_t);
     smp_desc.label = "texture-rgba-sampler";
     sg_sampler smp = sg_make_sampler(&smp_desc);
     sampler_id = smp.id;
@@ -165,6 +174,54 @@ std::shared_ptr<Texture> Texture::load_from_file(const std::string& filepath, bo
 
     auto tex = create_from_rgba(w, h, data, is_pixel_art);
     stbi_image_free(data);
+    return tex;
+}
+
+std::shared_ptr<Texture> Texture::create_data_texture(int width, int height, const uint8_t* data, int channels) {
+    if (!data || width <= 0 || height <= 0 || channels <= 0) {
+        return nullptr;
+    }
+
+    auto tex = std::make_shared<Texture>();
+    tex->width = width;
+    tex->height = height;
+    tex->channels = channels;
+    tex->is_pixel_art = false;
+    tex->wrap_s = TextureWrap::ClampToEdge;
+    tex->wrap_t = TextureWrap::ClampToEdge;
+    tex->filter_min = TextureFilter::Linear;
+    tex->filter_mag = TextureFilter::Linear;
+
+    if (channels == 4) {
+        tex->cpu_pixels.assign(data, data + (width * height * 4));
+    } else if (channels == 3) {
+        tex->cpu_pixels.resize(static_cast<size_t>(width * height * 4));
+        for (int i = 0; i < width * height; ++i) {
+            tex->cpu_pixels[i * 4 + 0] = data[i * 3 + 0];
+            tex->cpu_pixels[i * 4 + 1] = data[i * 3 + 1];
+            tex->cpu_pixels[i * 4 + 2] = data[i * 3 + 2];
+            tex->cpu_pixels[i * 4 + 3] = 255;
+        }
+    } else if (channels == 1) {
+        tex->cpu_pixels.resize(static_cast<size_t>(width * height * 4));
+        for (int i = 0; i < width * height; ++i) {
+            uint8_t val = data[i];
+            tex->cpu_pixels[i * 4 + 0] = val;
+            tex->cpu_pixels[i * 4 + 1] = val;
+            tex->cpu_pixels[i * 4 + 2] = val;
+            tex->cpu_pixels[i * 4 + 3] = 255;
+        }
+    } else if (channels == 2) {
+        tex->cpu_pixels.resize(static_cast<size_t>(width * height * 4));
+        for (int i = 0; i < width * height; ++i) {
+            tex->cpu_pixels[i * 4 + 0] = data[i * 2 + 0];
+            tex->cpu_pixels[i * 4 + 1] = data[i * 2 + 1];
+            tex->cpu_pixels[i * 4 + 2] = 0;
+            tex->cpu_pixels[i * 4 + 3] = 255;
+        }
+    }
+
+    tex->ensure_gpu_resources();
     return tex;
 }
 

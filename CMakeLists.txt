@@ -83,6 +83,7 @@ add_library(velocity_engine_core STATIC
     core/src/sokol_impl.cpp
     core/src/node3d.cpp
     core/src/texture.cpp
+    core/src/material.cpp
     core/src/mesh.cpp
     core/src/camera.cpp
     core/src/scene.cpp
@@ -103,6 +104,7 @@ add_library(engine_core ALIAS velocity_engine_core)
 
 target_include_directories(velocity_engine_core PUBLIC
     core/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${SOKOL_INCLUDE_DIR}
     ${STB_INCLUDE_DIR}
     ${CGLTF_INCLUDE_DIR}

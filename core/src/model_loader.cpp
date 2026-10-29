@@ -96,7 +96,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
             return it->second;
         }
 
-        auto mat = std::make_shared<Material>();
+        auto mat = std::make_shared<StandardMaterial>();
         if (gltf_mat->has_pbr_metallic_roughness) {
             const auto& pbr = gltf_mat->pbr_metallic_roughness;
             mat->base_color = glm::vec4(
@@ -111,6 +111,41 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
             if (pbr.base_color_texture.texture) {
                 mat->albedo_map = get_or_load_texture(pbr.base_color_texture.texture);
             }
+            if (pbr.metallic_roughness_texture.texture) {
+                mat->metallic_roughness_map = get_or_load_texture(pbr.metallic_roughness_texture.texture);
+            }
+        }
+
+        if (gltf_mat->normal_texture.texture) {
+            mat->normal_map = get_or_load_texture(gltf_mat->normal_texture.texture);
+            mat->normal_scale = (gltf_mat->normal_texture.scale != 0.0f) ? gltf_mat->normal_texture.scale : 1.0f;
+        }
+
+        if (gltf_mat->occlusion_texture.texture) {
+            mat->ao_map = get_or_load_texture(gltf_mat->occlusion_texture.texture);
+            mat->occlusion_map = mat->ao_map;
+            mat->ao_intensity = (gltf_mat->occlusion_texture.scale != 0.0f) ? gltf_mat->occlusion_texture.scale : 1.0f;
+        }
+
+        if (gltf_mat->emissive_texture.texture) {
+            mat->emissive_map = get_or_load_texture(gltf_mat->emissive_texture.texture);
+        }
+        mat->emissive_color = glm::vec3(
+            gltf_mat->emissive_factor[0],
+            gltf_mat->emissive_factor[1],
+            gltf_mat->emissive_factor[2]
+        );
+
+        if (gltf_mat->double_sided) {
+            mat->side = SideMode::Double;
+        }
+
+        if (gltf_mat->alpha_mode == cgltf_alpha_mode_blend) {
+            mat->transparent = true;
+            mat->blend_mode = BlendMode::Alpha;
+            mat->depth_write = false;
+        } else if (gltf_mat->alpha_mode == cgltf_alpha_mode_mask) {
+            mat->alpha_cutoff = gltf_mat->alpha_cutoff;
         }
 
         if (!mat->albedo_map) {
@@ -146,6 +181,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 const cgltf_accessor* norm_acc = nullptr;
                 const cgltf_accessor* uv_acc = nullptr;
                 const cgltf_accessor* col_acc = nullptr;
+                const cgltf_accessor* tan_acc = nullptr;
 
                 for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai) {
                     const auto& attr = prim.attributes[ai];
@@ -157,6 +193,8 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                         uv_acc = attr.data;
                     } else if (attr.type == cgltf_attribute_type_color && attr.index == 0) {
                         col_acc = attr.data;
+                    } else if (attr.type == cgltf_attribute_type_tangent && attr.index == 0) {
+                        tan_acc = attr.data;
                     }
                 }
 
@@ -188,6 +226,12 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                     } else {
                         v.color = glm::vec4(1.0f);
                     }
+
+                    if (tan_acc) {
+                        cgltf_accessor_read_float(tan_acc, vi, &v.tangent.x, 4);
+                    } else {
+                        v.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                    }
                 }
 
                 if (prim.indices) {
@@ -202,6 +246,72 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                         mesh->cpu_indices[ii] = static_cast<uint16_t>(ii);
                     }
                     mesh->num_indices = static_cast<int>(pos_acc->count);
+                }
+
+                // If tangents were not provided by the glTF file, compute analytical MikkTSpace-style tangents
+                if (!tan_acc && !mesh->cpu_indices.empty()) {
+                    std::vector<glm::vec3> tan1(mesh->cpu_vertices.size(), glm::vec3(0.0f));
+                    std::vector<glm::vec3> tan2(mesh->cpu_vertices.size(), glm::vec3(0.0f));
+                    size_t tri_count = mesh->cpu_indices.size() / 3;
+                    for (size_t ti = 0; ti < tri_count; ++ti) {
+                        uint16_t i1 = mesh->cpu_indices[ti * 3 + 0];
+                        uint16_t i2 = mesh->cpu_indices[ti * 3 + 1];
+                        uint16_t i3 = mesh->cpu_indices[ti * 3 + 2];
+                        if (i1 >= mesh->cpu_vertices.size() || i2 >= mesh->cpu_vertices.size() || i3 >= mesh->cpu_vertices.size()) {
+                            continue;
+                        }
+                        const auto& v1 = mesh->cpu_vertices[i1];
+                        const auto& v2 = mesh->cpu_vertices[i2];
+                        const auto& v3 = mesh->cpu_vertices[i3];
+
+                        glm::vec3 p1 = v1.position;
+                        glm::vec3 p2 = v2.position;
+                        glm::vec3 p3 = v3.position;
+
+                        glm::vec2 w1 = v1.uv;
+                        glm::vec2 w2 = v2.uv;
+                        glm::vec2 w3 = v3.uv;
+
+                        float x1 = p2.x - p1.x;
+                        float x2 = p3.x - p1.x;
+                        float y1 = p2.y - p1.y;
+                        float y2 = p3.y - p1.y;
+                        float z1 = p2.z - p1.z;
+                        float z2 = p3.z - p1.z;
+
+                        float s1 = w2.x - w1.x;
+                        float s2 = w3.x - w1.x;
+                        float t1 = w2.y - w1.y;
+                        float t2 = w3.y - w1.y;
+
+                        float det = (s1 * t2 - s2 * t1);
+                        if (std::abs(det) > 1e-6f) {
+                            float r = 1.0f / det;
+                            glm::vec3 sdir((t2 * x1 - t1 * x2) * r, (t2 * y1 - t1 * y2) * r, (t2 * z1 - t1 * z2) * r);
+                            glm::vec3 tdir((s1 * x2 - s2 * x1) * r, (s1 * y2 - s2 * y1) * r, (s1 * z2 - s2 * z1) * r);
+                            tan1[i1] += sdir;
+                            tan1[i2] += sdir;
+                            tan1[i3] += sdir;
+                            tan2[i1] += tdir;
+                            tan2[i2] += tdir;
+                            tan2[i3] += tdir;
+                        }
+                    }
+                    for (size_t a = 0; a < mesh->cpu_vertices.size(); ++a) {
+                        const glm::vec3& n = mesh->cpu_vertices[a].normal;
+                        const glm::vec3& t = tan1[a];
+                        float len2 = glm::dot(t, t);
+                        if (len2 > 1e-8f) {
+                            glm::vec3 tangent_xyz = glm::normalize(t - n * glm::dot(n, t));
+                            float handedness = (glm::dot(glm::cross(n, t), tan2[a]) < 0.0f) ? -1.0f : 1.0f;
+                            mesh->cpu_vertices[a].tangent = glm::vec4(tangent_xyz, handedness);
+                        } else {
+                            glm::vec3 c1 = glm::cross(n, glm::vec3(0.0f, 0.0f, 1.0f));
+                            glm::vec3 c2 = glm::cross(n, glm::vec3(0.0f, 1.0f, 0.0f));
+                            glm::vec3 tangent_xyz = glm::dot(c1, c1) > glm::dot(c2, c2) ? glm::normalize(c1) : glm::normalize(c2);
+                            mesh->cpu_vertices[a].tangent = glm::vec4(tangent_xyz, 1.0f);
+                        }
+                    }
                 }
 
                 mesh->calculate_aabb();

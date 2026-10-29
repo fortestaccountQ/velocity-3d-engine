@@ -33,18 +33,16 @@ struct VSParams {
     glm::mat4 light_mvp;
 };
 
-struct FSParams {
-    glm::vec4 light_dir;        // xyz = dir, w = intensity
-    glm::vec4 light_color;      // rgb = color, w = unused
-    glm::vec4 ambient_color;    // rgb = ambient, w = unused
-    glm::vec4 eye_pos;          // xyz = camera position, w = unused
-    glm::vec4 material_color;   // rgba base_color
-    glm::vec4 material_params;  // x = roughness, y = metallic, zw = uv_scale
-    glm::vec4 material_uv_offset; // xy = uv_offset, zw = unused
-    glm::vec4 hemi_sky;         // rgb = sky ambient, w = 1.0
-    glm::vec4 hemi_ground;      // rgb = ground ambient, w = 1.0
-    glm::vec4 fog_color;        // rgb = fog color, w = tone_mapping_enabled (1.0 or 0.0)
-    glm::vec4 fog_params;       // x = fog_type (0=off, 1=linear, 2=exp2), y = near, z = far, w = density
+struct alignas(16) FSParams {
+    glm::vec4 eye_pos;            // xyz = camera position, w = unused
+    glm::vec4 material_color;     // rgba base_color
+    glm::vec4 material_params;    // x = roughness, y = metallic, zw = uv_scale
+    glm::vec4 material_uv_offset; // xy = uv_offset, z = normal_scale, w = ao_intensity
+    glm::vec4 emissive_params;    // xyz = emissive_color * emissive_intensity, w = alpha_cutoff
+    glm::vec4 texture_flags;      // x = has_normal_map, y = has_mr_map, z = has_emissive_map, w = has_ao_map
+    glm::vec4 fog_color;          // rgb = fog color, w = tone_mapping_enabled (1.0 or 0.0)
+    glm::vec4 fog_params;         // x = fog_type (0=off, 1=linear, 2=exp2), y = near, z = far, w = density
+    glm::vec4 extra_params;       // x = material_type, y = toon_steps/shininess, z = opacity, w = transparent
 };
 
 struct ShadowVSParams {
@@ -191,6 +189,7 @@ static const char* hlsl_vs =
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float4 color : COLOR0;\n"
+    "    float4 tangent : TANGENT;\n"
     "};\n"
     "struct vs_out {\n"
     "    float4 color : COLOR0;\n"
@@ -198,45 +197,87 @@ static const char* hlsl_vs =
     "    float2 uv : TEXCOORD0;\n"
     "    float3 world_pos : TEXCOORD1;\n"
     "    float4 light_pos : TEXCOORD2;\n"
+    "    float3 tangent : TEXCOORD3;\n"
+    "    float3 bitangent : TEXCOORD4;\n"
     "    float4 pos : SV_Position;\n"
     "};\n"
     "vs_out main(vs_in inp) {\n"
     "    vs_out outp;\n"
     "    outp.pos = mul(mvp, float4(inp.pos, 1.0));\n"
-    "    outp.world_pos = mul(model, float4(inp.pos, 1.0)).xyz;\n"
-    "    outp.normal = mul((float3x3)normal_mat, inp.normal);\n"
+    "    float4 wpos = mul(model, float4(inp.pos, 1.0));\n"
+    "    outp.world_pos = wpos.xyz;\n"
+    "    float3 N = normalize(mul((float3x3)normal_mat, inp.normal));\n"
+    "    float3 T = normalize(mul((float3x3)normal_mat, inp.tangent.xyz));\n"
+    "    T = normalize(T - dot(T, N) * N);\n"
+    "    float3 B = cross(N, T) * inp.tangent.w;\n"
+    "    outp.normal = N;\n"
+    "    outp.tangent = T;\n"
+    "    outp.bitangent = B;\n"
     "    outp.uv = inp.uv;\n"
     "    outp.color = inp.color;\n"
-    "    float3 normal_bias_offset = inp.normal * 0.04;\n"
+    "    float3 normal_bias_offset = N * 0.04;\n"
     "    outp.light_pos = mul(light_mvp, float4(inp.pos + normal_bias_offset, 1.0));\n"
     "    return outp;\n"
     "}\n";
 
 static const char* hlsl_fs =
     "cbuffer fs_params : register(b1) {\n"
-    "    float4 light_dir;\n"
-    "    float4 light_color;\n"
-    "    float4 ambient_color;\n"
     "    float4 eye_pos;\n"
     "    float4 material_color;\n"
-    "    float4 material_params;\n" // x=roughness, y=metallic, zw=uv_scale
-    "    float4 material_uv_offset;\n" // xy=uv_offset, zw=unused
+    "    float4 material_params;\n"
+    "    float4 material_uv_offset;\n"
+    "    float4 emissive_params;\n"
+    "    float4 texture_flags;\n"
+    "    float4 fog_color;\n"
+    "    float4 fog_params;\n"
+    "    float4 extra_params;\n"
+    "};\n"
+    "struct GPUDirectionalLight {\n"
+    "    float4 direction_and_cast_shadow;\n"
+    "    float4 color_and_intensity;\n"
+    "};\n"
+    "struct GPUPointLight {\n"
+    "    float4 position_and_range;\n"
+    "    float4 color_and_intensity;\n"
+    "    float4 params;\n"
+    "};\n"
+    "struct GPUSpotLight {\n"
+    "    float4 position_and_range;\n"
+    "    float4 direction_and_cast_shadow;\n"
+    "    float4 color_and_intensity;\n"
+    "    float4 cone_params;\n"
+    "};\n"
+    "cbuffer light_params : register(b2) {\n"
+    "    float4 ambient_and_count;\n"
+    "    float4 light_counts;\n"
     "    float4 hemi_sky;\n"
     "    float4 hemi_ground;\n"
-    "    float4 fog_color;\n"       // rgb=fog color, w=tone_mapping_enabled (1.0 or 0.0)
-    "    float4 fog_params;\n"      // x=fog_type (0=off, 1=linear, 2=exp2), y=near, z=far, w=density
+    "    GPUDirectionalLight dir_lights[4];\n"
+    "    GPUPointLight point_lights[16];\n"
+    "    GPUSpotLight spot_lights[8];\n"
     "};\n"
     "Texture2D tex_albedo : register(t0);\n"
     "SamplerState smp_albedo : register(s0);\n"
     "Texture2D tex_shadow : register(t1);\n"
     "SamplerState smp_shadow : register(s1);\n"
+    "Texture2D tex_normal : register(t2);\n"
+    "SamplerState smp_normal : register(s2);\n"
+    "Texture2D tex_metallic_roughness : register(t3);\n"
+    "SamplerState smp_metallic_roughness : register(s3);\n"
+    "Texture2D tex_emissive : register(t4);\n"
+    "SamplerState smp_emissive : register(s4);\n"
+    "Texture2D tex_ao : register(t5);\n"
+    "SamplerState smp_ao : register(s5);\n"
     "struct ps_in {\n"
     "    float4 color : COLOR0;\n"
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float3 world_pos : TEXCOORD1;\n"
     "    float4 light_pos : TEXCOORD2;\n"
+    "    float3 tangent : TEXCOORD3;\n"
+    "    float3 bitangent : TEXCOORD4;\n"
     "};\n"
+    "static const float PI = 3.14159265359;\n"
     "float3 apply_aces_filmic(float3 x) {\n"
     "    float a = 2.51;\n"
     "    float b = 0.03;\n"
@@ -256,7 +297,6 @@ static const char* hlsl_fs =
     "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
     "    float current_depth = proj.z - depth_bias;\n"
     "    float texel = 1.0 / 1024.0;\n"
-    "    // 4-tap optimized PCF\n"
     "    float s0 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
     "    float s1 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
     "    float s2 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
@@ -266,36 +306,198 @@ static const char* hlsl_fs =
     "    float edge_fade = saturate(min(border.x, border.y) * 15.0);\n"
     "    return lerp(1.0, shadow, edge_fade);\n"
     "}\n"
+    "float distribution_ggx(float3 N, float3 H, float roughness) {\n"
+    "    float a = roughness * roughness;\n"
+    "    float a2 = a * a;\n"
+    "    float NdotH = max(dot(N, H), 0.0);\n"
+    "    float NdotH2 = NdotH * NdotH;\n"
+    "    float denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+    "    return a2 / (PI * denom * denom + 0.00001);\n"
+    "}\n"
+    "float geometry_schlick_ggx(float NdotV, float roughness) {\n"
+    "    float r = (roughness + 1.0);\n"
+    "    float k = (r * r) / 8.0;\n"
+    "    return NdotV / (NdotV * (1.0 - k) + k + 0.00001);\n"
+    "}\n"
+    "float geometry_smith(float3 N, float3 V, float3 L, float roughness) {\n"
+    "    float NdotV = max(dot(N, V), 0.0001);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float ggx2 = geometry_schlick_ggx(NdotV, roughness);\n"
+    "    float ggx1 = geometry_schlick_ggx(NdotL, roughness);\n"
+    "    return ggx1 * ggx2;\n"
+    "}\n"
+    "float3 fresnel_schlick(float cos_theta, float3 F0) {\n"
+    "    return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);\n"
+    "}\n"
     "float4 main(ps_in inp) : SV_Target0 {\n"
     "    float2 uv = inp.uv * material_params.zw + material_uv_offset.xy;\n"
     "    float4 tex_sample = tex_albedo.Sample(smp_albedo, uv);\n"
     "    float3 albedo = tex_sample.rgb * inp.color.rgb * material_color.rgb;\n"
+    "    float alpha = tex_sample.a * inp.color.a * material_color.a * extra_params.z;\n"
+    "    if (emissive_params.w >= 0.0 && alpha < emissive_params.w) discard;\n"
+    "    float mat_type = extra_params.x;\n"
+    "    if (mat_type > 0.5 && mat_type < 1.5) {\n"
+    "        float3 unlit_color = albedo;\n"
+    "        if (texture_flags.z > 0.5) unlit_color += tex_emissive.Sample(smp_emissive, uv).rgb * emissive_params.xyz;\n"
+    "        else unlit_color += emissive_params.xyz;\n"
+    "        return float4(unlit_color, alpha);\n"
+    "    }\n"
+    "    float3 N = normalize(inp.normal);\n"
+    "    if (texture_flags.x > 0.5) {\n"
+    "        float3 norm_map = tex_normal.Sample(smp_normal, uv).rgb * 2.0 - 1.0;\n"
+    "        norm_map.xy *= material_uv_offset.z;\n"
+    "        norm_map = normalize(norm_map);\n"
+    "        float3 T = normalize(inp.tangent);\n"
+    "        float3 B = normalize(inp.bitangent);\n"
+    "        N = normalize(norm_map.x * T + norm_map.y * B + norm_map.z * N);\n"
+    "    }\n"
     "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
     "    float metallic = clamp(material_params.y, 0.0, 1.0);\n"
-    "    float3 N = normalize(inp.normal);\n"
-    "    float3 L = normalize(-light_dir.xyz);\n"
-    "    float3 V = normalize(eye_pos.xyz - inp.world_pos);\n"
-    "    float3 H = normalize(L + V);\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float NdotH = max(dot(N, H), 0.0);\n"
-    "    float VdotH = max(dot(V, H), 0.0);\n"
-    "    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);\n"
-    "    float3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);\n"
-    "    float shininess = 2.0 / (pow(roughness, 4.0) + 0.0001) - 2.0;\n"
-    "    shininess = clamp(shininess, 2.0, 512.0);\n"
-    "    float3 specular = float3(0.0, 0.0, 0.0);\n"
-    "    if (NdotL > 0.0) {\n"
-    "        float spec_factor = pow(NdotH, shininess);\n"
-    "        specular = F * spec_factor * light_color.rgb * light_dir.w;\n"
+    "    if (texture_flags.y > 0.5) {\n"
+    "        float4 mr_sample = tex_metallic_roughness.Sample(smp_metallic_roughness, uv);\n"
+    "        roughness = clamp(roughness * mr_sample.g, 0.04, 1.0);\n"
+    "        metallic = clamp(metallic * mr_sample.b, 0.0, 1.0);\n"
     "    }\n"
-    "    float3 kD = (1.0 - metallic) * (float3(1.0, 1.0, 1.0) - F);\n"
-    "    float3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
+    "    float3 emissive = emissive_params.xyz;\n"
+    "    if (texture_flags.z > 0.5) emissive *= tex_emissive.Sample(smp_emissive, uv).rgb;\n"
+    "    float ao = 1.0;\n"
+    "    if (texture_flags.w > 0.5) {\n"
+    "        float ao_sample = tex_ao.Sample(smp_ao, uv).r;\n"
+    "        ao = lerp(1.0, ao_sample, material_uv_offset.w);\n"
+    "    }\n"
+    "    float3 V = normalize(eye_pos.xyz - inp.world_pos);\n"
     "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
-    "    float3 ambient_light = lerp(hemi_ground.rgb, hemi_sky.rgb, hemi);\n"
-    "    float3 ambient = ambient_light * albedo * (1.0 - 0.5 * metallic);\n"
-    "    float shadow = sample_shadow(inp.light_pos, N, L);\n"
-    "    float3 final_color = ambient + (diffuse + specular) * shadow;\n"
-    "    // Atmospheric Depth Fog\n"
+    "    float3 hemi_light = lerp(hemi_ground.rgb, hemi_sky.rgb * hemi_sky.w, hemi);\n"
+    "    float3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic);\n"
+    "    float3 direct_lighting = float3(0.0, 0.0, 0.0);\n"
+    "    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);\n"
+    "    int num_dirs = (int)ambient_and_count.w;\n"
+    "    int num_points = (int)light_counts.x;\n"
+    "    int num_spots = (int)light_counts.y;\n"
+    "    [loop]\n"
+    "    for (int i = 0; i < num_dirs && i < 4; ++i) {\n"
+    "        float3 L = normalize(-dir_lights[i].direction_and_cast_shadow.xyz);\n"
+    "        float3 H = normalize(V + L);\n"
+    "        float NdotL = max(dot(N, L), 0.0);\n"
+    "        if (NdotL > 0.0) {\n"
+    "            float shadow = 1.0;\n"
+    "            if (i == 0 && dir_lights[i].direction_and_cast_shadow.w > 0.5) {\n"
+    "                shadow = sample_shadow(inp.light_pos, N, L);\n"
+    "            }\n"
+    "            float3 light_rad = dir_lights[i].color_and_intensity.rgb * dir_lights[i].color_and_intensity.w;\n"
+    "            if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                direct_lighting += albedo * NdotL * light_rad * shadow;\n"
+    "            } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                float shininess = max(extra_params.y, 1.0);\n"
+    "                float NdotH = max(dot(N, H), 0.0);\n"
+    "                float spec = pow(NdotH, shininess);\n"
+    "                direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad * shadow;\n"
+    "            } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                float steps = max(extra_params.y, 2.0);\n"
+    "                float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                float NdotH = max(dot(N, H), 0.0);\n"
+    "                float toon_spec = (pow(NdotH, 32.0) > 0.5) ? 0.6 : 0.0;\n"
+    "                direct_lighting += (albedo * toon_diff + toon_spec) * light_rad * shadow;\n"
+    "            } else {\n"
+    "                float NDF = distribution_ggx(N, H, roughness);\n"
+    "                float G = geometry_smith(N, V, L, roughness);\n"
+    "                float3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                float3 numerator = NDF * G * F;\n"
+    "                float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                float3 specular = numerator / denominator;\n"
+    "                float3 kD = (float3(1.0, 1.0, 1.0) - F) * (1.0 - metallic);\n"
+    "                direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL * shadow;\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    [loop]\n"
+    "    for (int p = 0; p < num_points && p < 16; ++p) {\n"
+    "        float3 to_light = point_lights[p].position_and_range.xyz - inp.world_pos;\n"
+    "        float dist = length(to_light);\n"
+    "        float range = point_lights[p].position_and_range.w;\n"
+    "        if (range <= 0.0 || dist < range) {\n"
+    "            float3 L = to_light / max(dist, 0.0001);\n"
+    "            float3 H = normalize(V + L);\n"
+    "            float NdotL = max(dot(N, L), 0.0);\n"
+    "            if (NdotL > 0.0) {\n"
+    "                float att = 1.0 / max(dist * dist, 0.01);\n"
+    "                if (range > 0.0) {\n"
+    "                    float win = saturate(1.0 - pow(dist / range, 4.0));\n"
+    "                    att *= win * win;\n"
+    "                }\n"
+    "                float3 light_rad = point_lights[p].color_and_intensity.rgb * point_lights[p].color_and_intensity.w * att;\n"
+    "                if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                    direct_lighting += albedo * NdotL * light_rad;\n"
+    "                } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                    float shininess = max(extra_params.y, 1.0);\n"
+    "                    float NdotH = max(dot(N, H), 0.0);\n"
+    "                    float spec = pow(NdotH, shininess);\n"
+    "                    direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad;\n"
+    "                } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                    float steps = max(extra_params.y, 2.0);\n"
+    "                    float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                    direct_lighting += albedo * toon_diff * light_rad;\n"
+    "                } else {\n"
+    "                    float NDF = distribution_ggx(N, H, roughness);\n"
+    "                    float G = geometry_smith(N, V, L, roughness);\n"
+    "                    float3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                    float3 numerator = NDF * G * F;\n"
+    "                    float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                    float3 specular = numerator / denominator;\n"
+    "                    float3 kD = (float3(1.0, 1.0, 1.0) - F) * (1.0 - metallic);\n"
+    "                    direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL;\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    [loop]\n"
+    "    for (int s = 0; s < num_spots && s < 8; ++s) {\n"
+    "        float3 to_light = spot_lights[s].position_and_range.xyz - inp.world_pos;\n"
+    "        float dist = length(to_light);\n"
+    "        float range = spot_lights[s].position_and_range.w;\n"
+    "        if (range <= 0.0 || dist < range) {\n"
+    "            float3 L = to_light / max(dist, 0.0001);\n"
+    "            float3 spot_dir = normalize(spot_lights[s].direction_and_cast_shadow.xyz);\n"
+    "            float cos_theta = dot(-L, spot_dir);\n"
+    "            float cos_inner = spot_lights[s].cone_params.x;\n"
+    "            float cos_outer = spot_lights[s].cone_params.y;\n"
+    "            float spot_factor = saturate((cos_theta - cos_outer) / max(cos_inner - cos_outer, 0.0001));\n"
+    "            if (spot_factor > 0.0) {\n"
+    "                float3 H = normalize(V + L);\n"
+    "                float NdotL = max(dot(N, L), 0.0);\n"
+    "                if (NdotL > 0.0) {\n"
+    "                    float att = 1.0 / max(dist * dist, 0.01);\n"
+    "                    if (range > 0.0) {\n"
+    "                        float win = saturate(1.0 - pow(dist / range, 4.0));\n"
+    "                        att *= win * win;\n"
+    "                    }\n"
+    "                    float3 light_rad = spot_lights[s].color_and_intensity.rgb * spot_lights[s].color_and_intensity.w * att * spot_factor;\n"
+    "                    if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                        direct_lighting += albedo * NdotL * light_rad;\n"
+    "                    } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                        float shininess = max(extra_params.y, 1.0);\n"
+    "                        float NdotH = max(dot(N, H), 0.0);\n"
+    "                        float spec = pow(NdotH, shininess);\n"
+    "                        direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad;\n"
+    "                    } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                        float steps = max(extra_params.y, 2.0);\n"
+    "                        float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                        direct_lighting += albedo * toon_diff * light_rad;\n"
+    "                    } else {\n"
+    "                        float NDF = distribution_ggx(N, H, roughness);\n"
+    "                        float G = geometry_smith(N, V, L, roughness);\n"
+    "                        float3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                        float3 numerator = NDF * G * F;\n"
+    "                        float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                        float3 specular = numerator / denominator;\n"
+    "                        float3 kD = (float3(1.0, 1.0, 1.0) - F) * (1.0 - metallic);\n"
+    "                        direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL;\n"
+    "                    }\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    float3 final_color = ambient + direct_lighting + emissive;\n"
     "    float fog_type = fog_params.x;\n"
     "    if (fog_type > 0.5) {\n"
     "        float dist = length(inp.world_pos - eye_pos.xyz);\n"
@@ -311,11 +513,10 @@ static const char* hlsl_fs =
     "        }\n"
     "        final_color = lerp(fog_color.rgb, final_color, fog_factor);\n"
     "    }\n"
-    "    // ACES Filmic Tone Mapping\n"
     "    if (fog_color.w > 0.5) {\n"
     "        final_color = apply_aces_filmic(final_color);\n"
     "    }\n"
-    "    return float4(final_color, tex_sample.a * inp.color.a * material_color.a);\n"
+    "    return float4(final_color, alpha);\n"
     "}\n";
 
 // Shadow Pass Shaders
@@ -328,6 +529,7 @@ static const char* hlsl_shadow_vs =
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float4 color : COLOR0;\n"
+    "    float4 tangent : TANGENT;\n"
     "};\n"
     "struct vs_shadow_out {\n"
     "    float4 pos : SV_Position;\n"
@@ -418,6 +620,7 @@ static const char* hlsl_inst_vs =
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float4 color : COLOR0;\n"
+    "    float4 tangent : TANGENT;\n"
     "    float4 i_model0 : TEXCOORD3;\n"
     "    float4 i_model1 : TEXCOORD4;\n"
     "    float4 i_model2 : TEXCOORD5;\n"
@@ -430,6 +633,8 @@ static const char* hlsl_inst_vs =
     "    float2 uv : TEXCOORD0;\n"
     "    float3 world_pos : TEXCOORD1;\n"
     "    float4 light_pos : TEXCOORD2;\n"
+    "    float3 tangent : TEXCOORD3;\n"
+    "    float3 bitangent : TEXCOORD4;\n"
     "    float4 pos : SV_Position;\n"
     "};\n"
     "vs_out main(vs_inst_in inp) {\n"
@@ -438,10 +643,17 @@ static const char* hlsl_inst_vs =
     "    float4 world_pos = mul(model, float4(inp.pos, 1.0));\n"
     "    outp.pos = mul(view_proj, world_pos);\n"
     "    outp.world_pos = world_pos.xyz;\n"
-    "    outp.normal = mul((float3x3)model, inp.normal);\n"
+    "    float3x3 nmat = (float3x3)model;\n"
+    "    float3 N = normalize(mul(nmat, inp.normal));\n"
+    "    float3 T = normalize(mul(nmat, inp.tangent.xyz));\n"
+    "    T = normalize(T - dot(T, N) * N);\n"
+    "    float3 B = cross(N, T) * inp.tangent.w;\n"
+    "    outp.normal = N;\n"
+    "    outp.tangent = T;\n"
+    "    outp.bitangent = B;\n"
     "    outp.uv = inp.uv;\n"
     "    outp.color = inp.color * inp.i_color;\n"
-    "    float3 normal_bias_offset = normalize(outp.normal) * 0.04;\n"
+    "    float3 normal_bias_offset = N * 0.04;\n"
     "    outp.light_pos = mul(light_vp, float4(world_pos.xyz + normal_bias_offset, 1.0));\n"
     "    return outp;\n"
     "}\n";
@@ -455,6 +667,7 @@ static const char* hlsl_inst_shadow_vs =
     "    float3 normal : NORMAL;\n"
     "    float2 uv : TEXCOORD0;\n"
     "    float4 color : COLOR0;\n"
+    "    float4 tangent : TANGENT;\n"
     "    float4 i_model0 : TEXCOORD3;\n"
     "    float4 i_model1 : TEXCOORD4;\n"
     "    float4 i_model2 : TEXCOORD5;\n"
@@ -481,6 +694,7 @@ static const char* glsl_vs =
     "layout(location = 1) in vec3 normal;\n"
     "layout(location = 2) in vec2 uv;\n"
     "layout(location = 3) in vec4 color;\n"
+    "layout(location = 4) in vec4 tangent;\n"
     "uniform mat4 mvp;\n"
     "uniform mat4 model;\n"
     "uniform mat4 normal_mat;\n"
@@ -490,37 +704,77 @@ static const char* glsl_vs =
     "out vec2 v_uv;\n"
     "out vec3 v_world_pos;\n"
     "out vec4 v_light_pos;\n"
+    "out vec3 v_tangent;\n"
+    "out vec3 v_bitangent;\n"
     "void main() {\n"
     "    gl_Position = mvp * vec4(pos, 1.0);\n"
-    "    v_world_pos = (model * vec4(pos, 1.0)).xyz;\n"
-    "    v_normal = mat3(normal_mat) * normal;\n"
+    "    vec4 wpos = model * vec4(pos, 1.0);\n"
+    "    v_world_pos = wpos.xyz;\n"
+    "    vec3 N = normalize(mat3(normal_mat) * normal);\n"
+    "    vec3 T = normalize(mat3(normal_mat) * tangent.xyz);\n"
+    "    T = normalize(T - dot(T, N) * N);\n"
+    "    vec3 B = cross(N, T) * tangent.w;\n"
+    "    v_normal = N;\n"
+    "    v_tangent = T;\n"
+    "    v_bitangent = B;\n"
     "    v_uv = uv;\n"
     "    v_color = color;\n"
-    "    vec3 normal_bias_offset = normal * 0.04;\n"
+    "    vec3 normal_bias_offset = N * 0.04;\n"
     "    v_light_pos = light_mvp * vec4(pos + normal_bias_offset, 1.0);\n"
     "}\n";
 
 static const char* glsl_fs =
     "#version 330\n"
-    "uniform vec4 light_dir;\n"
-    "uniform vec4 light_color;\n"
-    "uniform vec4 ambient_color;\n"
-    "uniform vec4 eye_pos;\n"
-    "uniform vec4 material_color;\n"
-    "uniform vec4 material_params;\n"
-    "uniform vec4 material_uv_offset;\n"
-    "uniform vec4 hemi_sky;\n"
-    "uniform vec4 hemi_ground;\n"
-    "uniform vec4 fog_color;\n"
-    "uniform vec4 fog_params;\n"
+    "struct GPUDirectionalLight {\n"
+    "    vec4 direction_and_cast_shadow;\n"
+    "    vec4 color_and_intensity;\n"
+    "};\n"
+    "struct GPUPointLight {\n"
+    "    vec4 position_and_range;\n"
+    "    vec4 color_and_intensity;\n"
+    "    vec4 params;\n"
+    "};\n"
+    "struct GPUSpotLight {\n"
+    "    vec4 position_and_range;\n"
+    "    vec4 direction_and_cast_shadow;\n"
+    "    vec4 color_and_intensity;\n"
+    "    vec4 cone_params;\n"
+    "};\n"
+    "layout(std140) uniform fs_params {\n"
+    "    vec4 eye_pos;\n"
+    "    vec4 material_color;\n"
+    "    vec4 material_params;\n"
+    "    vec4 material_uv_offset;\n"
+    "    vec4 emissive_params;\n"
+    "    vec4 texture_flags;\n"
+    "    vec4 fog_color;\n"
+    "    vec4 fog_params;\n"
+    "    vec4 extra_params;\n"
+    "};\n"
+    "layout(std140) uniform light_params {\n"
+    "    vec4 ambient_and_count;\n"
+    "    vec4 light_counts;\n"
+    "    vec4 hemi_sky;\n"
+    "    vec4 hemi_ground;\n"
+    "    GPUDirectionalLight dir_lights[4];\n"
+    "    GPUPointLight point_lights[16];\n"
+    "    GPUSpotLight spot_lights[8];\n"
+    "};\n"
     "uniform sampler2D tex_albedo;\n"
     "uniform sampler2D tex_shadow;\n"
+    "uniform sampler2D tex_normal;\n"
+    "uniform sampler2D tex_metallic_roughness;\n"
+    "uniform sampler2D tex_emissive;\n"
+    "uniform sampler2D tex_ao;\n"
     "in vec4 v_color;\n"
     "in vec3 v_normal;\n"
     "in vec2 v_uv;\n"
     "in vec3 v_world_pos;\n"
     "in vec4 v_light_pos;\n"
+    "in vec3 v_tangent;\n"
+    "in vec3 v_bitangent;\n"
     "out vec4 frag_color;\n"
+    "const float PI = 3.14159265359;\n"
     "vec3 apply_aces_filmic(vec3 x) {\n"
     "    float a = 2.51;\n"
     "    float b = 0.03;\n"
@@ -549,35 +803,194 @@ static const char* glsl_fs =
     "    float edge_fade = clamp(min(border.x, border.y) * 15.0, 0.0, 1.0);\n"
     "    return mix(1.0, shadow, edge_fade);\n"
     "}\n"
+    "float distribution_ggx(vec3 N, vec3 H, float roughness) {\n"
+    "    float a = roughness * roughness;\n"
+    "    float a2 = a * a;\n"
+    "    float NdotH = max(dot(N, H), 0.0);\n"
+    "    float NdotH2 = NdotH * NdotH;\n"
+    "    float denom = (NdotH2 * (a2 - 1.0) + 1.0);\n"
+    "    return a2 / (PI * denom * denom + 0.00001);\n"
+    "}\n"
+    "float geometry_schlick_ggx(float NdotV, float roughness) {\n"
+    "    float r = (roughness + 1.0);\n"
+    "    float k = (r * r) / 8.0;\n"
+    "    return NdotV / (NdotV * (1.0 - k) + k + 0.00001);\n"
+    "}\n"
+    "float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness) {\n"
+    "    float NdotV = max(dot(N, V), 0.0001);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float ggx2 = geometry_schlick_ggx(NdotV, roughness);\n"
+    "    float ggx1 = geometry_schlick_ggx(NdotL, roughness);\n"
+    "    return ggx1 * ggx2;\n"
+    "}\n"
+    "vec3 fresnel_schlick(float cos_theta, vec3 F0) {\n"
+    "    return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);\n"
+    "}\n"
     "void main() {\n"
     "    vec2 uv = v_uv * material_params.zw + material_uv_offset.xy;\n"
     "    vec4 tex_sample = texture(tex_albedo, uv);\n"
     "    vec3 albedo = tex_sample.rgb * v_color.rgb * material_color.rgb;\n"
+    "    float alpha = tex_sample.a * v_color.a * material_color.a * extra_params.z;\n"
+    "    if (emissive_params.w >= 0.0 && alpha < emissive_params.w) discard;\n"
+    "    float mat_type = extra_params.x;\n"
+    "    if (mat_type > 0.5 && mat_type < 1.5) {\n"
+    "        vec3 unlit_color = albedo;\n"
+    "        if (texture_flags.z > 0.5) unlit_color += texture(tex_emissive, uv).rgb * emissive_params.xyz;\n"
+    "        else unlit_color += emissive_params.xyz;\n"
+    "        frag_color = vec4(unlit_color, alpha);\n"
+    "        return;\n"
+    "    }\n"
+    "    vec3 N = normalize(v_normal);\n"
+    "    if (texture_flags.x > 0.5) {\n"
+    "        vec3 norm_map = texture(tex_normal, uv).rgb * 2.0 - 1.0;\n"
+    "        norm_map.xy *= material_uv_offset.z;\n"
+    "        norm_map = normalize(norm_map);\n"
+    "        vec3 T = normalize(v_tangent);\n"
+    "        vec3 B = normalize(v_bitangent);\n"
+    "        N = normalize(norm_map.x * T + norm_map.y * B + norm_map.z * N);\n"
+    "    }\n"
     "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
     "    float metallic = clamp(material_params.y, 0.0, 1.0);\n"
-    "    vec3 N = normalize(v_normal);\n"
-    "    vec3 L = normalize(-light_dir.xyz);\n"
-    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
-    "    vec3 H = normalize(L + V);\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float NdotH = max(dot(N, H), 0.0);\n"
-    "    float VdotH = max(dot(V, H), 0.0);\n"
-    "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
-    "    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);\n"
-    "    float shininess = 2.0 / (pow(roughness, 4.0) + 0.0001) - 2.0;\n"
-    "    shininess = clamp(shininess, 2.0, 512.0);\n"
-    "    vec3 specular = vec3(0.0);\n"
-    "    if (NdotL > 0.0) {\n"
-    "        float spec_factor = pow(NdotH, shininess);\n"
-    "        specular = F * spec_factor * light_color.rgb * light_dir.w;\n"
+    "    if (texture_flags.y > 0.5) {\n"
+    "        vec4 mr_sample = texture(tex_metallic_roughness, uv);\n"
+    "        roughness = clamp(roughness * mr_sample.g, 0.04, 1.0);\n"
+    "        metallic = clamp(metallic * mr_sample.b, 0.0, 1.0);\n"
     "    }\n"
-    "    vec3 kD = (1.0 - metallic) * (vec3(1.0) - F);\n"
-    "    vec3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
+    "    vec3 emissive = emissive_params.xyz;\n"
+    "    if (texture_flags.z > 0.5) emissive *= texture(tex_emissive, uv).rgb;\n"
+    "    float ao = 1.0;\n"
+    "    if (texture_flags.w > 0.5) {\n"
+    "        float ao_sample = texture(tex_ao, uv).r;\n"
+    "        ao = mix(1.0, ao_sample, material_uv_offset.w);\n"
+    "    }\n"
+    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
     "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
-    "    vec3 ambient_light = mix(hemi_ground.rgb, hemi_sky.rgb, hemi);\n"
-    "    vec3 ambient = ambient_light * albedo * (1.0 - 0.5 * metallic);\n"
-    "    float shadow = sample_shadow(v_light_pos, N, L);\n"
-    "    vec3 final_color = ambient + (diffuse + specular) * shadow;\n"
+    "    vec3 hemi_light = mix(hemi_ground.rgb, hemi_sky.rgb * hemi_sky.w, hemi);\n"
+    "    vec3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic);\n"
+    "    vec3 direct_lighting = vec3(0.0);\n"
+    "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
+    "    int num_dirs = int(ambient_and_count.w);\n"
+    "    int num_points = int(light_counts.x);\n"
+    "    int num_spots = int(light_counts.y);\n"
+    "    for (int i = 0; i < num_dirs && i < 4; ++i) {\n"
+    "        vec3 L = normalize(-dir_lights[i].direction_and_cast_shadow.xyz);\n"
+    "        vec3 H = normalize(V + L);\n"
+    "        float NdotL = max(dot(N, L), 0.0);\n"
+    "        if (NdotL > 0.0) {\n"
+    "            float shadow = 1.0;\n"
+    "            if (i == 0 && dir_lights[i].direction_and_cast_shadow.w > 0.5) shadow = sample_shadow(v_light_pos, N, L);\n"
+    "            vec3 light_rad = dir_lights[i].color_and_intensity.rgb * dir_lights[i].color_and_intensity.w;\n"
+    "            if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                direct_lighting += albedo * NdotL * light_rad * shadow;\n"
+    "            } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                float shininess = max(extra_params.y, 1.0);\n"
+    "                float NdotH = max(dot(N, H), 0.0);\n"
+    "                float spec = pow(NdotH, shininess);\n"
+    "                direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad * shadow;\n"
+    "            } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                float steps = max(extra_params.y, 2.0);\n"
+    "                float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                float NdotH = max(dot(N, H), 0.0);\n"
+    "                float toon_spec = (pow(NdotH, 32.0) > 0.5) ? 0.6 : 0.0;\n"
+    "                direct_lighting += (albedo * toon_diff + toon_spec) * light_rad * shadow;\n"
+    "            } else {\n"
+    "                float NDF = distribution_ggx(N, H, roughness);\n"
+    "                float G = geometry_smith(N, V, L, roughness);\n"
+    "                vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                vec3 numerator = NDF * G * F;\n"
+    "                float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                vec3 specular = numerator / denominator;\n"
+    "                vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);\n"
+    "                direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL * shadow;\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    for (int p = 0; p < num_points && p < 16; ++p) {\n"
+    "        vec3 to_light = point_lights[p].position_and_range.xyz - v_world_pos;\n"
+    "        float dist = length(to_light);\n"
+    "        float range = point_lights[p].position_and_range.w;\n"
+    "        if (range <= 0.0 || dist < range) {\n"
+    "            vec3 L = to_light / max(dist, 0.0001);\n"
+    "            vec3 H = normalize(V + L);\n"
+    "            float NdotL = max(dot(N, L), 0.0);\n"
+    "            if (NdotL > 0.0) {\n"
+    "                float att = 1.0 / max(dist * dist, 0.01);\n"
+    "                if (range > 0.0) {\n"
+    "                    float win = clamp(1.0 - pow(dist / range, 4.0), 0.0, 1.0);\n"
+    "                    att *= win * win;\n"
+    "                }\n"
+    "                vec3 light_rad = point_lights[p].color_and_intensity.rgb * point_lights[p].color_and_intensity.w * att;\n"
+    "                if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                    direct_lighting += albedo * NdotL * light_rad;\n"
+    "                } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                    float shininess = max(extra_params.y, 1.0);\n"
+    "                    float NdotH = max(dot(N, H), 0.0);\n"
+    "                    float spec = pow(NdotH, shininess);\n"
+    "                    direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad;\n"
+    "                } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                    float steps = max(extra_params.y, 2.0);\n"
+    "                    float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                    direct_lighting += albedo * toon_diff * light_rad;\n"
+    "                } else {\n"
+    "                    float NDF = distribution_ggx(N, H, roughness);\n"
+    "                    float G = geometry_smith(N, V, L, roughness);\n"
+    "                    vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                    vec3 numerator = NDF * G * F;\n"
+    "                    float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                    vec3 specular = numerator / denominator;\n"
+    "                    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);\n"
+    "                    direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL;\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    for (int s = 0; s < num_spots && s < 8; ++s) {\n"
+    "        vec3 to_light = spot_lights[s].position_and_range.xyz - v_world_pos;\n"
+    "        float dist = length(to_light);\n"
+    "        float range = spot_lights[s].position_and_range.w;\n"
+    "        if (range <= 0.0 || dist < range) {\n"
+    "            vec3 L = to_light / max(dist, 0.0001);\n"
+    "            vec3 spot_dir = normalize(spot_lights[s].direction_and_cast_shadow.xyz);\n"
+    "            float cos_theta = dot(-L, spot_dir);\n"
+    "            float cos_inner = spot_lights[s].cone_params.x;\n"
+    "            float cos_outer = spot_lights[s].cone_params.y;\n"
+    "            float spot_factor = clamp((cos_theta - cos_outer) / max(cos_inner - cos_outer, 0.0001), 0.0, 1.0);\n"
+    "            if (spot_factor > 0.0) {\n"
+    "                vec3 H = normalize(V + L);\n"
+    "                float NdotL = max(dot(N, L), 0.0);\n"
+    "                if (NdotL > 0.0) {\n"
+    "                    float att = 1.0 / max(dist * dist, 0.01);\n"
+    "                    if (range > 0.0) {\n"
+    "                        float win = clamp(1.0 - pow(dist / range, 4.0), 0.0, 1.0);\n"
+    "                        att *= win * win;\n"
+    "                    }\n"
+    "                    vec3 light_rad = spot_lights[s].color_and_intensity.rgb * spot_lights[s].color_and_intensity.w * att * spot_factor;\n"
+    "                    if (mat_type > 1.5 && mat_type < 2.5) {\n"
+    "                        direct_lighting += albedo * NdotL * light_rad;\n"
+    "                    } else if (mat_type > 2.5 && mat_type < 3.5) {\n"
+    "                        float shininess = max(extra_params.y, 1.0);\n"
+    "                        float NdotH = max(dot(N, H), 0.0);\n"
+    "                        float spec = pow(NdotH, shininess);\n"
+    "                        direct_lighting += (albedo * NdotL + spec * 0.5) * light_rad;\n"
+    "                    } else if (mat_type > 3.5 && mat_type < 4.5) {\n"
+    "                        float steps = max(extra_params.y, 2.0);\n"
+    "                        float toon_diff = floor(NdotL * steps) / steps;\n"
+    "                        direct_lighting += albedo * toon_diff * light_rad;\n"
+    "                    } else {\n"
+    "                        float NDF = distribution_ggx(N, H, roughness);\n"
+    "                        float G = geometry_smith(N, V, L, roughness);\n"
+    "                        vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);\n"
+    "                        vec3 numerator = NDF * G * F;\n"
+    "                        float denominator = 4.0 * max(dot(N, V), 0.0001) * NdotL + 0.0001;\n"
+    "                        vec3 specular = numerator / denominator;\n"
+    "                        vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);\n"
+    "                        direct_lighting += (kD * albedo / PI + specular) * light_rad * NdotL;\n"
+    "                    }\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    vec3 final_color = ambient + direct_lighting + emissive;\n"
     "    float fog_type = fog_params.x;\n"
     "    if (fog_type > 0.5) {\n"
     "        float dist = length(v_world_pos - eye_pos.xyz);\n"
@@ -593,10 +1006,8 @@ static const char* glsl_fs =
     "        }\n"
     "        final_color = mix(fog_color.rgb, final_color, fog_factor);\n"
     "    }\n"
-    "    if (fog_color.w > 0.5) {\n"
-    "        final_color = apply_aces_filmic(final_color);\n"
-    "    }\n"
-    "    frag_color = vec4(final_color, tex_sample.a * v_color.a * material_color.a);\n"
+    "    if (fog_color.w > 0.5) final_color = apply_aces_filmic(final_color);\n"
+    "    frag_color = vec4(final_color, alpha);\n"
     "}\n";
 
 static const char* glsl_shadow_vs =
@@ -605,6 +1016,7 @@ static const char* glsl_shadow_vs =
     "layout(location = 1) in vec3 normal;\n"
     "layout(location = 2) in vec2 uv;\n"
     "layout(location = 3) in vec4 color;\n"
+    "layout(location = 4) in vec4 tangent;\n"
     "uniform mat4 light_mvp;\n"
     "out float v_depth;\n"
     "void main() {\n"
@@ -665,11 +1077,12 @@ static const char* glsl_inst_vs =
     "layout(location = 1) in vec3 normal;\n"
     "layout(location = 2) in vec2 uv;\n"
     "layout(location = 3) in vec4 color;\n"
-    "layout(location = 4) in vec4 i_model0;\n"
-    "layout(location = 5) in vec4 i_model1;\n"
-    "layout(location = 6) in vec4 i_model2;\n"
-    "layout(location = 7) in vec4 i_model3;\n"
-    "layout(location = 8) in vec4 i_color;\n"
+    "layout(location = 4) in vec4 tangent;\n"
+    "layout(location = 5) in vec4 i_model0;\n"
+    "layout(location = 6) in vec4 i_model1;\n"
+    "layout(location = 7) in vec4 i_model2;\n"
+    "layout(location = 8) in vec4 i_model3;\n"
+    "layout(location = 9) in vec4 i_color;\n"
     "uniform mat4 view_proj;\n"
     "uniform mat4 light_vp;\n"
     "out vec4 v_color;\n"
@@ -677,15 +1090,24 @@ static const char* glsl_inst_vs =
     "out vec2 v_uv;\n"
     "out vec3 v_world_pos;\n"
     "out vec4 v_light_pos;\n"
+    "out vec3 v_tangent;\n"
+    "out vec3 v_bitangent;\n"
     "void main() {\n"
     "    mat4 model = mat4(i_model0, i_model1, i_model2, i_model3);\n"
     "    vec4 world_pos = model * vec4(pos, 1.0);\n"
     "    gl_Position = view_proj * world_pos;\n"
     "    v_world_pos = world_pos.xyz;\n"
-    "    v_normal = mat3(model) * normal;\n"
+    "    mat3 nmat = mat3(model);\n"
+    "    vec3 N = normalize(nmat * normal);\n"
+    "    vec3 T = normalize(nmat * tangent.xyz);\n"
+    "    T = normalize(T - dot(T, N) * N);\n"
+    "    vec3 B = cross(N, T) * tangent.w;\n"
+    "    v_normal = N;\n"
+    "    v_tangent = T;\n"
+    "    v_bitangent = B;\n"
     "    v_uv = uv;\n"
     "    v_color = color * i_color;\n"
-    "    vec3 normal_bias_offset = normalize(v_normal) * 0.04;\n"
+    "    vec3 normal_bias_offset = N * 0.04;\n"
     "    v_light_pos = light_vp * vec4(world_pos.xyz + normal_bias_offset, 1.0);\n"
     "}\n";
 
@@ -695,11 +1117,12 @@ static const char* glsl_inst_shadow_vs =
     "layout(location = 1) in vec3 normal;\n"
     "layout(location = 2) in vec2 uv;\n"
     "layout(location = 3) in vec4 color;\n"
-    "layout(location = 4) in vec4 i_model0;\n"
-    "layout(location = 5) in vec4 i_model1;\n"
-    "layout(location = 6) in vec4 i_model2;\n"
-    "layout(location = 7) in vec4 i_model3;\n"
-    "layout(location = 8) in vec4 i_color;\n"
+    "layout(location = 4) in vec4 tangent;\n"
+    "layout(location = 5) in vec4 i_model0;\n"
+    "layout(location = 6) in vec4 i_model1;\n"
+    "layout(location = 7) in vec4 i_model2;\n"
+    "layout(location = 8) in vec4 i_model3;\n"
+    "layout(location = 9) in vec4 i_color;\n"
     "uniform mat4 light_vp;\n"
     "out float v_depth;\n"
     "void main() {\n"
@@ -824,6 +1247,8 @@ void EngineApp::init_shadow_pipeline() {
     shd_desc.attrs[2].hlsl_sem_index = 0;
     shd_desc.attrs[3].hlsl_sem_name = "COLOR";
     shd_desc.attrs[3].hlsl_sem_index = 0;
+    shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    shd_desc.attrs[4].hlsl_sem_index = 0;
 
     shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
     shd_desc.uniform_blocks[0].size = sizeof(ShadowVSParams);
@@ -836,9 +1261,15 @@ void EngineApp::init_shadow_pipeline() {
     sg_pipeline_desc pip_desc{};
     pip_desc.layout.buffers[0].stride = sizeof(Vertex);
     pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[0].offset = offsetof(Vertex, position);
     pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[1].offset = offsetof(Vertex, normal);
     pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[2].offset = offsetof(Vertex, uv);
     pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
+    pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.layout.attrs[4].offset = offsetof(Vertex, tangent);
     pip_desc.shader = shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
@@ -867,16 +1298,18 @@ void EngineApp::init_shadow_pipeline() {
     inst_shd_desc.attrs[2].hlsl_sem_index = 0;
     inst_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
     inst_shd_desc.attrs[3].hlsl_sem_index = 0;
-    inst_shd_desc.attrs[4].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[4].hlsl_sem_index = 3;
+    inst_shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    inst_shd_desc.attrs[4].hlsl_sem_index = 0;
     inst_shd_desc.attrs[5].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[5].hlsl_sem_index = 4;
+    inst_shd_desc.attrs[5].hlsl_sem_index = 3;
     inst_shd_desc.attrs[6].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[6].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[6].hlsl_sem_index = 4;
     inst_shd_desc.attrs[7].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[7].hlsl_sem_index = 6;
-    inst_shd_desc.attrs[8].hlsl_sem_name = "COLOR";
-    inst_shd_desc.attrs[8].hlsl_sem_index = 1;
+    inst_shd_desc.attrs[7].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[8].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[8].hlsl_sem_index = 6;
+    inst_shd_desc.attrs[9].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[9].hlsl_sem_index = 1;
 
     inst_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
     inst_shd_desc.uniform_blocks[0].size = sizeof(ShadowVSParams);
@@ -908,22 +1341,25 @@ void EngineApp::init_shadow_pipeline() {
     inst_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[3].buffer_index = 0;
     inst_pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
-
     inst_pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
-    inst_pip_desc.layout.attrs[4].buffer_index = 1;
-    inst_pip_desc.layout.attrs[4].offset = 0;
+    inst_pip_desc.layout.attrs[4].buffer_index = 0;
+    inst_pip_desc.layout.attrs[4].offset = offsetof(Vertex, tangent);
+
     inst_pip_desc.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[5].buffer_index = 1;
-    inst_pip_desc.layout.attrs[5].offset = 16;
+    inst_pip_desc.layout.attrs[5].offset = 0;
     inst_pip_desc.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[6].buffer_index = 1;
-    inst_pip_desc.layout.attrs[6].offset = 32;
+    inst_pip_desc.layout.attrs[6].offset = 16;
     inst_pip_desc.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[7].buffer_index = 1;
-    inst_pip_desc.layout.attrs[7].offset = 48;
+    inst_pip_desc.layout.attrs[7].offset = 32;
     inst_pip_desc.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[8].buffer_index = 1;
-    inst_pip_desc.layout.attrs[8].offset = 64;
+    inst_pip_desc.layout.attrs[8].offset = 48;
+    inst_pip_desc.layout.attrs[9].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[9].buffer_index = 1;
+    inst_pip_desc.layout.attrs[9].offset = 64;
 
     inst_pip_desc.shader = inst_shd;
     inst_pip_desc.index_type = SG_INDEXTYPE_UINT16;
@@ -1047,6 +1483,8 @@ void EngineApp::init_pipeline_and_shaders() {
     shd_desc.attrs[2].hlsl_sem_index = 0;
     shd_desc.attrs[3].hlsl_sem_name = "COLOR";
     shd_desc.attrs[3].hlsl_sem_index = 0;
+    shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    shd_desc.attrs[4].hlsl_sem_index = 0;
 
     shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
     shd_desc.uniform_blocks[0].size = sizeof(VSParams);
@@ -1056,25 +1494,23 @@ void EngineApp::init_pipeline_and_shaders() {
     shd_desc.uniform_blocks[1].size = sizeof(FSParams);
     shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
 
-    // Slot 0: Albedo Texture & Sampler
-    shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-    shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    shd_desc.uniform_blocks[2].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.uniform_blocks[2].size = sizeof(LightParamsUBO);
+    shd_desc.uniform_blocks[2].hlsl_register_b_n = 2;
 
-    shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    shd_desc.samplers[0].hlsl_register_s_n = 0;
+    for (int i = 0; i < 6; ++i) {
+        shd_desc.views[i].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        shd_desc.views[i].texture.image_type = SG_IMAGETYPE_2D;
+        shd_desc.views[i].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        shd_desc.views[i].texture.hlsl_register_t_n = i;
 
-    // Slot 1: Shadow Map Texture & Sampler
-    shd_desc.views[1].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.views[1].texture.image_type = SG_IMAGETYPE_2D;
-    shd_desc.views[1].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    shd_desc.views[1].texture.hlsl_register_t_n = 1;
-
-    shd_desc.samplers[1].stage = SG_SHADERSTAGE_FRAGMENT;
-    shd_desc.samplers[1].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    shd_desc.samplers[1].hlsl_register_s_n = 1;
+        shd_desc.samplers[i].stage = SG_SHADERSTAGE_FRAGMENT;
+        shd_desc.samplers[i].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        shd_desc.samplers[i].hlsl_register_s_n = i;
+    }
+#else
+    shd_desc.vertex_func.source = glsl_vs;
+    shd_desc.fragment_func.source = glsl_fs;
 #endif
     shd_desc.label = "pbr-daylight-shader";
     sg_shader shd = sg_make_shader(&shd_desc);
@@ -1084,9 +1520,15 @@ void EngineApp::init_pipeline_and_shaders() {
     sg_pipeline_desc pip_desc{};
     pip_desc.layout.buffers[0].stride = sizeof(Vertex);
     pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[0].offset = offsetof(Vertex, position);
     pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[1].offset = offsetof(Vertex, normal);
     pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.layout.attrs[2].offset = offsetof(Vertex, uv);
     pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
+    pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+    pip_desc.layout.attrs[4].offset = offsetof(Vertex, tangent);
     pip_desc.shader = shd;
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
@@ -1114,16 +1556,18 @@ void EngineApp::init_pipeline_and_shaders() {
     inst_shd_desc.attrs[2].hlsl_sem_index = 0;
     inst_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
     inst_shd_desc.attrs[3].hlsl_sem_index = 0;
-    inst_shd_desc.attrs[4].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[4].hlsl_sem_index = 3;
+    inst_shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    inst_shd_desc.attrs[4].hlsl_sem_index = 0;
     inst_shd_desc.attrs[5].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[5].hlsl_sem_index = 4;
+    inst_shd_desc.attrs[5].hlsl_sem_index = 3;
     inst_shd_desc.attrs[6].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[6].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[6].hlsl_sem_index = 4;
     inst_shd_desc.attrs[7].hlsl_sem_name = "TEXCOORD";
-    inst_shd_desc.attrs[7].hlsl_sem_index = 6;
-    inst_shd_desc.attrs[8].hlsl_sem_name = "COLOR";
-    inst_shd_desc.attrs[8].hlsl_sem_index = 1;
+    inst_shd_desc.attrs[7].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[8].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[8].hlsl_sem_index = 6;
+    inst_shd_desc.attrs[9].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[9].hlsl_sem_index = 1;
 
     inst_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
     inst_shd_desc.uniform_blocks[0].size = sizeof(InstancedVSParams);
@@ -1133,25 +1577,20 @@ void EngineApp::init_pipeline_and_shaders() {
     inst_shd_desc.uniform_blocks[1].size = sizeof(FSParams);
     inst_shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
 
-    // Slot 0: Albedo Texture & Sampler
-    inst_shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    inst_shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-    inst_shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    inst_shd_desc.views[0].texture.hlsl_register_t_n = 0;
+    inst_shd_desc.uniform_blocks[2].stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.uniform_blocks[2].size = sizeof(LightParamsUBO);
+    inst_shd_desc.uniform_blocks[2].hlsl_register_b_n = 2;
 
-    inst_shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-    inst_shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    inst_shd_desc.samplers[0].hlsl_register_s_n = 0;
+    for (int i = 0; i < 6; ++i) {
+        inst_shd_desc.views[i].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        inst_shd_desc.views[i].texture.image_type = SG_IMAGETYPE_2D;
+        inst_shd_desc.views[i].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        inst_shd_desc.views[i].texture.hlsl_register_t_n = i;
 
-    // Slot 1: Shadow Map Texture & Sampler
-    inst_shd_desc.views[1].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-    inst_shd_desc.views[1].texture.image_type = SG_IMAGETYPE_2D;
-    inst_shd_desc.views[1].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    inst_shd_desc.views[1].texture.hlsl_register_t_n = 1;
-
-    inst_shd_desc.samplers[1].stage = SG_SHADERSTAGE_FRAGMENT;
-    inst_shd_desc.samplers[1].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    inst_shd_desc.samplers[1].hlsl_register_s_n = 1;
+        inst_shd_desc.samplers[i].stage = SG_SHADERSTAGE_FRAGMENT;
+        inst_shd_desc.samplers[i].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        inst_shd_desc.samplers[i].hlsl_register_s_n = i;
+    }
 #else
     inst_shd_desc.vertex_func.source = glsl_inst_vs;
     inst_shd_desc.fragment_func.source = glsl_fs;
@@ -1179,22 +1618,25 @@ void EngineApp::init_pipeline_and_shaders() {
     inst_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[3].buffer_index = 0;
     inst_pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
-
     inst_pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
-    inst_pip_desc.layout.attrs[4].buffer_index = 1;
-    inst_pip_desc.layout.attrs[4].offset = 0;
+    inst_pip_desc.layout.attrs[4].buffer_index = 0;
+    inst_pip_desc.layout.attrs[4].offset = offsetof(Vertex, tangent);
+
     inst_pip_desc.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[5].buffer_index = 1;
-    inst_pip_desc.layout.attrs[5].offset = 16;
+    inst_pip_desc.layout.attrs[5].offset = 0;
     inst_pip_desc.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[6].buffer_index = 1;
-    inst_pip_desc.layout.attrs[6].offset = 32;
+    inst_pip_desc.layout.attrs[6].offset = 16;
     inst_pip_desc.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[7].buffer_index = 1;
-    inst_pip_desc.layout.attrs[7].offset = 48;
+    inst_pip_desc.layout.attrs[7].offset = 32;
     inst_pip_desc.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT4;
     inst_pip_desc.layout.attrs[8].buffer_index = 1;
-    inst_pip_desc.layout.attrs[8].offset = 64;
+    inst_pip_desc.layout.attrs[8].offset = 48;
+    inst_pip_desc.layout.attrs[9].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[9].buffer_index = 1;
+    inst_pip_desc.layout.attrs[9].offset = 64;
 
     inst_pip_desc.shader = inst_shd;
     inst_pip_desc.index_type = SG_INDEXTYPE_UINT16;
@@ -1206,6 +1648,16 @@ void EngineApp::init_pipeline_and_shaders() {
     inst_pip_desc.label = "instanced-scene-pipeline";
     sg_pipeline inst_pip = sg_make_pipeline(&inst_pip_desc);
     instanced_pip_id_ = inst_pip.id;
+
+    // Initialize Default PBR Textures
+    default_white_tex_ = Texture::create_solid_color(255, 255, 255, 255);
+    default_white_tex_->ensure_gpu_resources();
+
+    default_black_tex_ = Texture::create_solid_color(0, 0, 0, 255);
+    default_black_tex_->ensure_gpu_resources();
+
+    default_flat_normal_tex_ = Texture::create_solid_color(128, 128, 255, 255);
+    default_flat_normal_tex_->ensure_gpu_resources();
 
     init_shadow_pipeline();
     init_hud_and_line_pipelines();
@@ -1624,17 +2076,84 @@ void EngineApp::on_frame() {
     sg_begin_pass(&pass);
 
     if (pip_id_ != 0) {
-        sg_pipeline pip{pip_id_};
-        sg_apply_pipeline(pip);
+        // 1. Gather lights from scene into LightParamsUBO
+        LightParamsUBO light_ubo{};
+        light_ubo.hemi_sky = glm::vec4(scene_.light.ambient_sky, 1.0f);
+        light_ubo.hemi_ground = glm::vec4(scene_.light.ambient_ground, 1.0f);
+        light_ubo.ambient_and_count = glm::vec4(scene_.light.ambient, 0.0f);
 
-        // Prepare lighting uniform
+        int num_dirs = 0;
+        int num_points = 0;
+        int num_spots = 0;
+
+        for (const auto& l : scene_.lights()) {
+            if (!l) continue;
+            switch (l->type) {
+                case LightType::Ambient:
+                    light_ubo.ambient_and_count.r += l->color.r * l->intensity;
+                    light_ubo.ambient_and_count.g += l->color.g * l->intensity;
+                    light_ubo.ambient_and_count.b += l->color.b * l->intensity;
+                    break;
+                case LightType::Hemisphere: {
+                    auto hl = std::dynamic_pointer_cast<HemisphereLight>(l);
+                    if (hl) {
+                        light_ubo.hemi_sky = glm::vec4(hl->sky_color, hl->intensity);
+                        light_ubo.hemi_ground = glm::vec4(hl->ground_color, 1.0f);
+                    }
+                    break;
+                }
+                case LightType::Directional: {
+                    if (num_dirs < 4) {
+                        auto dl = std::dynamic_pointer_cast<DirectionalLight>(l);
+                        bool cast_shd = dl ? dl->cast_shadow : true;
+                        light_ubo.dir_lights[num_dirs].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), cast_shd ? 1.0f : 0.0f);
+                        light_ubo.dir_lights[num_dirs].color_and_intensity = glm::vec4(l->color, l->intensity);
+                        num_dirs++;
+                    }
+                    break;
+                }
+                case LightType::Point: {
+                    if (num_points < 16) {
+                        auto pl = std::dynamic_pointer_cast<PointLight>(l);
+                        light_ubo.point_lights[num_points].position_and_range = glm::vec4(l->get_world_position(), l->range);
+                        light_ubo.point_lights[num_points].color_and_intensity = glm::vec4(l->color, l->intensity);
+                        light_ubo.point_lights[num_points].params = glm::vec4(pl ? pl->decay : 2.0f, 0.0f, 0.0f, 0.0f);
+                        num_points++;
+                    }
+                    break;
+                }
+                case LightType::Spot: {
+                    if (num_spots < 8) {
+                        auto sl = std::dynamic_pointer_cast<SpotLight>(l);
+                        light_ubo.spot_lights[num_spots].position_and_range = glm::vec4(l->get_world_position(), l->range);
+                        light_ubo.spot_lights[num_spots].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), (sl && sl->cast_shadow) ? 1.0f : 0.0f);
+                        light_ubo.spot_lights[num_spots].color_and_intensity = glm::vec4(l->color, l->intensity);
+                        float inner = sl ? sl->inner_cone_angle : 0.349f;
+                        float outer = sl ? sl->outer_cone_angle : 0.523f;
+                        float penumbra = sl ? sl->penumbra : 0.0f;
+                        light_ubo.spot_lights[num_spots].cone_params = glm::vec4(std::cos(inner), std::cos(outer), penumbra, 0.0f);
+                        num_spots++;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        if (num_dirs == 0) {
+            light_ubo.dir_lights[0].direction_and_cast_shadow = glm::vec4(scene_.light.direction, 1.0f);
+            light_ubo.dir_lights[0].color_and_intensity = glm::vec4(scene_.light.color, scene_.light.intensity);
+            num_dirs = 1;
+        }
+
+        light_ubo.ambient_and_count.w = static_cast<float>(num_dirs);
+        light_ubo.light_counts.x = static_cast<float>(num_points);
+        light_ubo.light_counts.y = static_cast<float>(num_spots);
+
+        // Prepare base lighting uniform
         FSParams fs_params{};
-        fs_params.light_dir = glm::vec4(scene_.light.direction, scene_.light.intensity);
-        fs_params.light_color = glm::vec4(scene_.light.color, 1.0f);
-        fs_params.ambient_color = glm::vec4(scene_.light.ambient, 1.0f);
         fs_params.eye_pos = glm::vec4(camera_.position, 1.0f);
-        fs_params.hemi_sky = glm::vec4(scene_.light.ambient_sky, 1.0f);
-        fs_params.hemi_ground = glm::vec4(scene_.light.ambient_ground, 1.0f);
         fs_params.fog_color = glm::vec4(fog_color_, tone_mapping_enabled_ ? 1.0f : 0.0f);
         fs_params.fog_params = glm::vec4(
             fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
@@ -1643,33 +2162,25 @@ void EngineApp::on_frame() {
             fog_density_
         );
 
-        auto default_white = scene_.default_white_texture();
-        if (default_white) {
-            default_white->ensure_gpu_resources();
-        }
         auto default_mat = scene_.default_material();
-
-        glm::vec4 last_mat_color{-999.0f};
-        glm::vec4 last_mat_params{-999.0f};
-        glm::vec4 last_mat_uv_offset{-999.0f};
-        bool fs_applied = false;
 
         // Compute camera frustum for culling
         Frustum camera_frustum;
         camera_frustum.set_from_projection_matrix(camera_.view_projection_matrix());
 
-        // Draw all visible entities in Scene
+        // Split visible entities into opaque and transparent queues
+        struct RenderItem {
+            std::shared_ptr<Entity> entity;
+            float dist_sq;
+        };
+
+        std::vector<RenderItem> opaque_queue;
+        std::vector<RenderItem> transparent_queue;
+
         for (const auto& entity : scene_.entities()) {
-            if (!entity || !entity->visible || !entity->mesh) {
-                continue;
-            }
+            if (!entity || !entity->visible || !entity->mesh) continue;
+            if ((camera_.layers & entity->layers) == 0) continue;
 
-            // Layer mask check
-            if ((camera_.layers & entity->layers) == 0) {
-                continue;
-            }
-
-            // Frustum Culling
             AABB aabb = entity->world_aabb();
             if (aabb.is_valid()) {
                 if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
@@ -1678,62 +2189,183 @@ void EngineApp::on_frame() {
                 }
             }
 
-            if (!entity->mesh->ensure_gpu_buffers()) {
-                continue;
-            }
+            if (!entity->mesh->ensure_gpu_buffers()) continue;
 
-            // Material resolution
+            glm::vec3 wpos = entity->world_position();
+            glm::vec3 diff = camera_.position - wpos;
+            float d2 = glm::dot(diff, diff);
+
             auto mat = entity->material ? entity->material : default_mat;
-            auto tex = (mat && mat->albedo_map) ? mat->albedo_map : default_white;
-            if (tex) {
-                tex->ensure_gpu_resources();
+            bool is_trans = mat && (mat->transparent || mat->opacity < 0.999f || mat->blend_mode != BlendMode::Opaque);
+            if (is_trans) {
+                transparent_queue.push_back({ entity, d2 });
+            } else {
+                opaque_queue.push_back({ entity, d2 });
             }
-            if (!tex || !tex->is_valid()) {
-                tex = default_white;
-            }
-            if (!tex || !tex->is_valid()) {
-                continue;
-            }
-
-            // Compute MVP, Normal, and Light MVP matrices
-            glm::mat4 model = entity->world_model_matrix();
-            glm::mat4 normal_mat = entity->world_normal_matrix();
-            glm::mat4 mvp = vp * model;
-            glm::mat4 l_mvp = light_vp_ * model;
-
-            VSParams vs_params{ mvp, model, normal_mat, l_mvp };
-
-            sg_bindings bind{};
-            bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
-            bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
-            // Slot 0: Albedo Texture
-            bind.views[0] = sg_view{ tex->view_id };
-            bind.samplers[0] = sg_sampler{ tex->sampler_id };
-            // Slot 1: Shadow Texture
-            bind.views[1] = sg_view{ shadow_tex_view_id_ };
-            bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
-            sg_apply_bindings(&bind);
-
-            sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
-
-            glm::vec4 cur_mat_color = mat->base_color * entity->color;
-            glm::vec4 cur_mat_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
-            glm::vec4 cur_mat_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, 0.0f, 0.0f);
-            if (!fs_applied || cur_mat_color != last_mat_color || cur_mat_params != last_mat_params || cur_mat_uv_offset != last_mat_uv_offset) {
-                fs_params.material_color = cur_mat_color;
-                fs_params.material_params = cur_mat_params;
-                fs_params.material_uv_offset = cur_mat_uv_offset;
-                sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
-                last_mat_color = cur_mat_color;
-                last_mat_params = cur_mat_params;
-                last_mat_uv_offset = cur_mat_uv_offset;
-                fs_applied = true;
-            }
-
-            sg_draw(0, entity->mesh->num_indices, 1);
-            stats_.draw_calls++;
-            stats_.total_triangles += entity->mesh->num_indices / 3;
         }
+
+        // Sort opaque front-to-back (ascending distance)
+        std::sort(opaque_queue.begin(), opaque_queue.end(), [](const RenderItem& a, const RenderItem& b) {
+            return a.dist_sq < b.dist_sq;
+        });
+
+        // Sort transparent back-to-front (descending distance)
+        std::sort(transparent_queue.begin(), transparent_queue.end(), [](const RenderItem& a, const RenderItem& b) {
+            return a.dist_sq > b.dist_sq;
+        });
+
+        uint64_t current_pip_key = 0;
+
+        auto render_entities = [&](const std::vector<RenderItem>& queue, bool is_transparent_pass) {
+            for (const auto& item : queue) {
+                const auto& entity = item.entity;
+                auto mat = entity->material ? entity->material : default_mat;
+
+                SideMode side = mat ? mat->side : SideMode::Front;
+                bool depth_write = is_transparent_pass ? false : (mat ? mat->depth_write : true);
+                bool depth_test = mat ? mat->depth_test : true;
+                BlendMode blend = is_transparent_pass ? (mat ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
+                bool wireframe = mat ? mat->wireframe : false;
+                int samples = sapp_sample_count();
+
+                uint64_t pip_key = PipelineManager::make_key(shd_id_, side, depth_write, depth_test, blend, wireframe, false, samples);
+                if (pip_key != current_pip_key) {
+                    sg_pipeline_desc pdesc{};
+                    pdesc.layout.buffers[0].stride = sizeof(Vertex);
+                    pdesc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+                    pdesc.layout.attrs[0].offset = offsetof(Vertex, position);
+                    pdesc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+                    pdesc.layout.attrs[1].offset = offsetof(Vertex, normal);
+                    pdesc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+                    pdesc.layout.attrs[2].offset = offsetof(Vertex, uv);
+                    pdesc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+                    pdesc.layout.attrs[3].offset = offsetof(Vertex, color);
+                    pdesc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+                    pdesc.layout.attrs[4].offset = offsetof(Vertex, tangent);
+                    pdesc.shader = sg_shader{ shd_id_ };
+                    pdesc.index_type = SG_INDEXTYPE_UINT16;
+                    pdesc.depth.compare = depth_test ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+                    pdesc.depth.write_enabled = depth_write;
+                    pdesc.face_winding = SG_FACEWINDING_CCW;
+                    pdesc.cull_mode = (side == SideMode::Double) ? SG_CULLMODE_NONE : ((side == SideMode::Back) ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK);
+                    pdesc.sample_count = samples;
+                    pdesc.primitive_type = wireframe ? SG_PRIMITIVETYPE_LINES : SG_PRIMITIVETYPE_TRIANGLES;
+
+                    if (blend == BlendMode::Alpha) {
+                        pdesc.colors[0].blend.enabled = true;
+                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+                    } else if (blend == BlendMode::Additive) {
+                        pdesc.colors[0].blend.enabled = true;
+                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE;
+                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+                    } else if (blend == BlendMode::Multiply) {
+                        pdesc.colors[0].blend.enabled = true;
+                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
+                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+                    }
+
+                    sg_pipeline pip = PipelineManager::instance().get_or_create(pip_key, pdesc);
+                    sg_apply_pipeline(pip);
+                    current_pip_key = pip_key;
+                    sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
+                }
+
+                auto tex_alb = (mat && mat->albedo_map) ? mat->albedo_map : default_white_tex_;
+                if (tex_alb) tex_alb->ensure_gpu_resources();
+                if (!tex_alb || !tex_alb->is_valid()) tex_alb = default_white_tex_;
+
+                auto tex_norm = (mat && mat->normal_map) ? mat->normal_map : default_flat_normal_tex_;
+                if (tex_norm) tex_norm->ensure_gpu_resources();
+                if (!tex_norm || !tex_norm->is_valid()) tex_norm = default_flat_normal_tex_;
+
+                auto tex_mr = (mat && mat->metallic_roughness_map) ? mat->metallic_roughness_map : default_white_tex_;
+                if (tex_mr) tex_mr->ensure_gpu_resources();
+                if (!tex_mr || !tex_mr->is_valid()) tex_mr = default_white_tex_;
+
+                auto tex_em = (mat && mat->emissive_map) ? mat->emissive_map : default_black_tex_;
+                if (tex_em) tex_em->ensure_gpu_resources();
+                if (!tex_em || !tex_em->is_valid()) tex_em = default_black_tex_;
+
+                auto tex_ao_tex = (mat && mat->ao_map) ? mat->ao_map : ((mat && mat->occlusion_map) ? mat->occlusion_map : default_white_tex_);
+                if (tex_ao_tex) tex_ao_tex->ensure_gpu_resources();
+                if (!tex_ao_tex || !tex_ao_tex->is_valid()) tex_ao_tex = default_white_tex_;
+
+                glm::mat4 model = entity->world_model_matrix();
+                glm::mat4 normal_mat = entity->world_normal_matrix();
+                glm::mat4 mvp = vp * model;
+                glm::mat4 l_mvp = light_vp_ * model;
+
+                VSParams vs_params{ mvp, model, normal_mat, l_mvp };
+
+                sg_bindings bind{};
+                bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
+                bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+                bind.views[0] = sg_view{ tex_alb ? tex_alb->view_id : 0 };
+                bind.samplers[0] = sg_sampler{ tex_alb ? tex_alb->sampler_id : 0 };
+                bind.views[1] = sg_view{ shadow_tex_view_id_ };
+                bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
+                bind.views[2] = sg_view{ tex_norm ? tex_norm->view_id : 0 };
+                bind.samplers[2] = sg_sampler{ tex_norm ? tex_norm->sampler_id : 0 };
+                bind.views[3] = sg_view{ tex_mr ? tex_mr->view_id : 0 };
+                bind.samplers[3] = sg_sampler{ tex_mr ? tex_mr->sampler_id : 0 };
+                bind.views[4] = sg_view{ tex_em ? tex_em->view_id : 0 };
+                bind.samplers[4] = sg_sampler{ tex_em ? tex_em->sampler_id : 0 };
+                bind.views[5] = sg_view{ tex_ao_tex ? tex_ao_tex->view_id : 0 };
+                bind.samplers[5] = sg_sampler{ tex_ao_tex ? tex_ao_tex->sampler_id : 0 };
+
+                sg_apply_bindings(&bind);
+                sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
+
+                FSParams ent_fs = fs_params;
+                ent_fs.material_color = (mat ? mat->base_color : glm::vec4(1.0f)) * entity->color;
+                ent_fs.material_params = glm::vec4(mat ? mat->roughness : 0.5f, mat ? mat->metallic : 0.0f, mat ? mat->uv_scale.x : 1.0f, mat ? mat->uv_scale.y : 1.0f);
+                ent_fs.material_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, mat ? mat->normal_scale : 1.0f, mat ? mat->ao_intensity : 1.0f);
+                ent_fs.emissive_params = glm::vec4(mat ? (mat->emissive_color * mat->emissive_intensity) : glm::vec3(0.0f), (mat && mat->alpha_test) ? mat->alpha_cutoff : -1.0f);
+                ent_fs.texture_flags = glm::vec4(
+                    (mat && mat->normal_map) ? 1.0f : 0.0f,
+                    (mat && mat->metallic_roughness_map) ? 1.0f : 0.0f,
+                    (mat && mat->emissive_map) ? 1.0f : 0.0f,
+                    (mat && (mat->ao_map || mat->occlusion_map)) ? 1.0f : 0.0f
+                );
+                float mtype = 0.0f;
+                float extra_val = 0.0f;
+                if (mat) {
+                    switch (mat->type()) {
+                        case MaterialType::Unlit: mtype = 1.0f; break;
+                        case MaterialType::Lambert: mtype = 2.0f; break;
+                        case MaterialType::Phong: {
+                            mtype = 3.0f;
+                            auto pm = std::dynamic_pointer_cast<PhongMaterial>(mat);
+                            extra_val = pm ? pm->shininess : 32.0f;
+                            break;
+                        }
+                        case MaterialType::Toon: {
+                            mtype = 4.0f;
+                            auto tm = std::dynamic_pointer_cast<ToonMaterial>(mat);
+                            extra_val = tm ? static_cast<float>(tm->num_steps) : 4.0f;
+                            break;
+                        }
+                        default: mtype = 0.0f; break;
+                    }
+                }
+                ent_fs.extra_params = glm::vec4(mtype, extra_val, mat ? mat->opacity : 1.0f, is_transparent_pass ? 1.0f : 0.0f);
+                sg_apply_uniforms(1, SG_RANGE_REF(ent_fs));
+
+                sg_draw(0, entity->mesh->num_indices, 1);
+                stats_.draw_calls++;
+                stats_.total_triangles += entity->mesh->num_indices / 3;
+            }
+        };
+
+        // Render opaque first
+        render_entities(opaque_queue, false);
 
         // Draw instanced meshes in Scene
         if (instanced_pip_id_ != 0 && !scene_.instanced_meshes().empty()) {
@@ -1745,15 +2377,19 @@ void EngineApp::on_frame() {
 
             fs_params.material_color = glm::vec4(1.0f);
             fs_params.material_params = glm::vec4(0.5f, 0.0f, 1.0f, 1.0f);
-            fs_params.material_uv_offset = glm::vec4(0.0f);
+            fs_params.material_uv_offset = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+            fs_params.emissive_params = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
+            fs_params.texture_flags = glm::vec4(0.0f);
+            fs_params.extra_params = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
             sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
+            sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
 
             for (const auto& inst_mesh : scene_.instanced_meshes()) {
                 if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
                 if ((camera_.layers & inst_mesh->layers) == 0) continue;
                 if (!inst_mesh->ensure_gpu_buffers()) continue;
 
-                auto tex = default_white;
+                auto tex = default_white_tex_;
                 sg_bindings bind{};
                 bind.vertex_buffers[0] = sg_buffer{ inst_mesh->mesh->vbuf_id };
                 bind.vertex_buffers[1] = sg_buffer{ inst_mesh->inst_vbuf_id };
@@ -1762,6 +2398,14 @@ void EngineApp::on_frame() {
                 bind.samplers[0] = sg_sampler{ tex ? tex->sampler_id : 0 };
                 bind.views[1] = sg_view{ shadow_tex_view_id_ };
                 bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
+                bind.views[2] = sg_view{ default_flat_normal_tex_ ? default_flat_normal_tex_->view_id : 0 };
+                bind.samplers[2] = sg_sampler{ default_flat_normal_tex_ ? default_flat_normal_tex_->sampler_id : 0 };
+                bind.views[3] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
+                bind.samplers[3] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
+                bind.views[4] = sg_view{ default_black_tex_ ? default_black_tex_->view_id : 0 };
+                bind.samplers[4] = sg_sampler{ default_black_tex_ ? default_black_tex_->sampler_id : 0 };
+                bind.views[5] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
+                bind.samplers[5] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
                 sg_apply_bindings(&bind);
 
                 sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
@@ -1770,6 +2414,9 @@ void EngineApp::on_frame() {
                 stats_.total_triangles += static_cast<uint32_t>((inst_mesh->mesh->num_indices / 3) * inst_mesh->instance_count());
             }
         }
+
+        // Render transparent entities second
+        render_entities(transparent_queue, true);
     }
 
     // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
@@ -1798,6 +2445,21 @@ void EngineApp::on_cleanup() {
     update_callback_ = nullptr;
     scene_.clear();
     audio_.shutdown();
+
+    PipelineManager::instance().release_all();
+
+    if (default_white_tex_) {
+        default_white_tex_->destroy();
+        default_white_tex_ = nullptr;
+    }
+    if (default_black_tex_) {
+        default_black_tex_->destroy();
+        default_black_tex_ = nullptr;
+    }
+    if (default_flat_normal_tex_) {
+        default_flat_normal_tex_->destroy();
+        default_flat_normal_tex_ = nullptr;
+    }
 
     if (pip_id_ != 0) {
         sg_destroy_pipeline(sg_pipeline{pip_id_});
