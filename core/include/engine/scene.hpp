@@ -7,6 +7,9 @@
 #include "engine/texture.hpp"
 #include "engine/material.hpp"
 #include "engine/model.hpp"
+#include "engine/cube_texture.hpp"
+#include "engine/sky.hpp"
+#include "contracts/phase4_environment_contracts.h"
 #include <vector>
 #include <memory>
 #include <string>
@@ -53,11 +56,50 @@ public:
     std::shared_ptr<Texture> default_white_texture();
     std::shared_ptr<Material> default_material();
 
+    // Background and Environment (Phase 4)
+    BackgroundType background_type() const { return background_type_; }
+    void set_background_type(BackgroundType type) { background_type_ = type; }
+
+    std::shared_ptr<CubeTexture> background_cube() const { return background_cube_; }
+    void set_background_cube(std::shared_ptr<CubeTexture> cube) {
+        background_cube_ = cube;
+        background_type_ = BackgroundType::CubeMap;
+    }
+
+    std::shared_ptr<ProceduralSky> procedural_sky() const { return procedural_sky_; }
+    void set_procedural_sky(std::shared_ptr<ProceduralSky> sky) {
+        procedural_sky_ = sky;
+        background_type_ = BackgroundType::ProceduralSky;
+    }
+
+    glm::vec4 background_color() const { return background_color_; }
+    void set_background_color(const glm::vec4& color) {
+        background_color_ = color;
+        background_type_ = BackgroundType::Color;
+    }
+
+    std::shared_ptr<CubeTexture> environment() const { return environment_; }
+    void set_environment(std::shared_ptr<CubeTexture> env, float intensity = 1.0f) {
+        environment_ = env;
+        environment_intensity_ = intensity;
+    }
+
+    float environment_intensity() const { return environment_intensity_; }
+    void set_environment_intensity(float val) { environment_intensity_ = val; }
+
 private:
     std::shared_ptr<Group> root_node_{nullptr};
     std::vector<std::shared_ptr<Entity>> entities_;
     std::vector<std::shared_ptr<InstancedMesh>> instanced_meshes_;
     std::vector<std::shared_ptr<Light>> lights_;
+
+    BackgroundType background_type_{BackgroundType::Color};
+    std::shared_ptr<CubeTexture> background_cube_{nullptr};
+    std::shared_ptr<ProceduralSky> procedural_sky_{nullptr};
+    glm::vec4 background_color_{0.43137f, 0.62745f, 0.82353f, 1.0f};
+
+    std::shared_ptr<CubeTexture> environment_{nullptr};
+    float environment_intensity_{1.0f};
 
     uint32_t next_id_{1};
     std::shared_ptr<Mesh> default_cube_mesh_{nullptr};

@@ -14,11 +14,16 @@
 #include "engine/input.hpp"
 #include "engine/audio.hpp"
 #include "engine/editor.hpp"
+#include "engine/cube_texture.hpp"
+#include "engine/sky.hpp"
+#include "contracts/phase4_environment_contracts.h"
 
 namespace engine {
 
 class RenderTarget;
 class EffectComposer;
+class CubeRenderTarget;
+class CubeCamera;
 
 // ---------------------------------------------------------------------------
 // UI Command Contract for Phase 0.1
@@ -154,6 +159,20 @@ public:
     void set_composer(std::shared_ptr<EffectComposer> composer);
     std::shared_ptr<EffectComposer> composer() const { return composer_; }
 
+    // Shadows v2 Configuration
+    const ShadowSettings& shadow_settings() const { return shadow_settings_; }
+    ShadowSettings& shadow_settings() { return shadow_settings_; }
+    void set_shadow_settings(const ShadowSettings& settings);
+    void set_shadow_resolution(int res);
+    void set_shadow_bias(float b) { shadow_settings_.bias = b; }
+    void set_shadow_normal_bias(float nb) { shadow_settings_.normal_bias = nb; }
+    void set_shadow_ortho_size(float size) { shadow_settings_.ortho_size = size; }
+    void set_shadow_pcf_16_tap(bool enable) { shadow_settings_.pcf_16_tap = enable; }
+    void set_shadow_texel_snapping(bool enable) { shadow_settings_.texel_snapping = enable; }
+
+    // CubeCamera rendering
+    void render_cube_camera(Scene& scene, CubeCamera& cam);
+
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
@@ -175,9 +194,11 @@ public:
 private:
     void init_pipeline_and_shaders();
     void init_shadow_pipeline();
+    void init_sky_pipelines();
     void init_hud_and_line_pipelines();
     void render_shadow_pass();
-    void render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen);
+    void render_background_pass(Scene& scene, Camera& camera, bool is_offscreen = false, uint32_t color_format = 0);
+    void render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen, uint32_t color_format = 0);
     void render_debug_hitboxes(const glm::mat4& vp);
     void render_hud(float screen_w, float screen_h, float fps);
 
@@ -211,7 +232,7 @@ private:
     std::vector<UICommand> custom_ui_commands_;
 
     // Shadow Mapping resources
-    static constexpr int SHADOW_MAP_SIZE = 1024;
+    ShadowSettings shadow_settings_{};
     uint32_t shadow_color_img_id_{0};
     uint32_t shadow_depth_img_id_{0};
     uint32_t shadow_color_view_id_{0};
@@ -221,6 +242,18 @@ private:
     uint32_t shadow_pip_id_{0};
     uint32_t shadow_shd_id_{0};
     glm::mat4 light_vp_{1.0f};
+
+    // Skybox and Procedural Sky resources
+    uint32_t skybox_pip_id_{0};
+    uint32_t skybox_offscreen_pip_id_{0};
+    uint32_t skybox_rgba8_pip_id_{0};
+    uint32_t skybox_shd_id_{0};
+    uint32_t proc_sky_pip_id_{0};
+    uint32_t proc_sky_offscreen_pip_id_{0};
+    uint32_t proc_sky_rgba8_pip_id_{0};
+    uint32_t proc_sky_shd_id_{0};
+    std::shared_ptr<Mesh> sky_cube_mesh_{nullptr};
+    std::shared_ptr<CubeTexture> default_env_cube_{nullptr};
 
     // Line & HUD rendering
     uint32_t line_pip_id_{0};

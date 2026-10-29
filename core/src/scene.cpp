@@ -67,6 +67,10 @@ void Scene::add(std::shared_ptr<Node3D> node) {
                 instanced_meshes_.push_back(im);
             }
         }
+        auto sky = std::dynamic_pointer_cast<ProceduralSky>(n);
+        if (sky) {
+            set_procedural_sky(sky);
+        }
         for (const auto& child : n->children()) {
             collect(child);
         }
@@ -191,6 +195,9 @@ void Scene::clear() {
     entities_.clear();
     instanced_meshes_.clear();
     lights_.clear();
+    procedural_sky_ = nullptr;
+    background_cube_ = nullptr;
+    environment_ = nullptr;
     if (default_cube_mesh_) {
         default_cube_mesh_->destroy();
         default_cube_mesh_ = nullptr;

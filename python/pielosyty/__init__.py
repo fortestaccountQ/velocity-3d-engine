@@ -109,6 +109,15 @@ VignetteChromaticPass = getattr(_core, "VignetteChromaticPass", None)
 ColorGradingPass = getattr(_core, "ColorGradingPass", None)
 EffectComposer = getattr(_core, "EffectComposer", None)
 
+# Phase 4: Environment, Skybox, HDR/IBL & Advanced Shadows v2
+BackgroundType = getattr(_core, "BackgroundType", None)
+ShadowSettings = getattr(_core, "ShadowSettings", None)
+SkyParams = getattr(_core, "SkyParams", None)
+CubeTexture = getattr(_core, "CubeTexture", None)
+ProceduralSky = getattr(_core, "ProceduralSky", None)
+CubeRenderTarget = getattr(_core, "CubeRenderTarget", None)
+CubeCamera = getattr(_core, "CubeCamera", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -380,4 +389,12 @@ __all__ = [
     "VignetteChromaticPass",
     "ColorGradingPass",
     "EffectComposer",
+    # Phase 4: Environment, Skybox, HDR/IBL & Advanced Shadows v2
+    "BackgroundType",
+    "ShadowSettings",
+    "SkyParams",
+    "CubeTexture",
+    "ProceduralSky",
+    "CubeRenderTarget",
+    "CubeCamera",
 ]

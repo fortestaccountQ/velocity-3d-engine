@@ -1,6 +1,9 @@
 #include "engine/app.hpp"
 #include "engine/render_target.hpp"
 #include "engine/post_process.hpp"
+#include "engine/cube_texture.hpp"
+#include "engine/sky.hpp"
+#include "engine/cube_camera.hpp"
 
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -72,6 +75,17 @@ struct HUDVertex {
 
 struct HUDVSParams {
     glm::mat4 ortho_proj;
+};
+
+struct SkyboxVSParams {
+    glm::mat4 view_proj;
+};
+
+struct alignas(16) ProcSkyFSParams {
+    glm::vec4 sun_dir_turbidity; // xyz = sun_dir, w = turbidity
+    glm::vec4 rayleigh_params;   // rgb = rayleigh_color, w = rayleigh
+    glm::vec4 mie_params;        // rgb = mie_color, w = mie_coefficient
+    glm::vec4 sky_misc;          // x = mie_directional_g, y = time_of_day, zw = unused
 };
 
 // ---------------------------------------------------------------------------
@@ -270,6 +284,8 @@ static const char* hlsl_fs =
     "SamplerState smp_emissive : register(s4);\n"
     "Texture2D tex_ao : register(t5);\n"
     "SamplerState smp_ao : register(s5);\n"
+    "TextureCube tex_env : register(t6);\n"
+    "SamplerState smp_env : register(s6);\n"
     "struct ps_in {\n"
     "    float4 color : COLOR0;\n"
     "    float3 normal : NORMAL;\n"
@@ -280,6 +296,24 @@ static const char* hlsl_fs =
     "    float3 bitangent : TEXCOORD4;\n"
     "};\n"
     "static const float PI = 3.14159265359;\n"
+    "static const float2 POISSON_DISK_16[16] = {\n"
+    "    float2(-0.94201624, -0.39906216),\n"
+    "    float2( 0.94558609, -0.76890725),\n"
+    "    float2(-0.09418410, -0.92938870),\n"
+    "    float2( 0.34495938,  0.29387760),\n"
+    "    float2(-0.91588581,  0.45771432),\n"
+    "    float2(-0.81544232, -0.87912464),\n"
+    "    float2(-0.38277543,  0.27676845),\n"
+    "    float2( 0.97484398,  0.75648379),\n"
+    "    float2( 0.44323325, -0.97511554),\n"
+    "    float2( 0.53742981, -0.47373420),\n"
+    "    float2(-0.26496911, -0.41893023),\n"
+    "    float2( 0.79197514,  0.19090188),\n"
+    "    float2(-0.24188840,  0.99706507),\n"
+    "    float2(-0.81409955,  0.91437590),\n"
+    "    float2( 0.19984126,  0.78641367),\n"
+    "    float2( 0.14383161, -0.14100790)\n"
+    "};\n"
     "float3 apply_aces_filmic(float3 x) {\n"
     "    float a = 2.51;\n"
     "    float b = 0.03;\n"
@@ -298,12 +332,25 @@ static const char* hlsl_fs =
     "    }\n"
     "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
     "    float current_depth = proj.z - depth_bias;\n"
-    "    float texel = 1.0 / 1024.0;\n"
-    "    float s0 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s1 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s2 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s3 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
+    "    float shadow_res = max(light_counts.z, 512.0);\n"
+    "    float texel = 1.0 / shadow_res;\n"
+    "    float shadow = 0.0;\n"
+    "    if (light_counts.w > 0.5) {\n"
+    "        float filter_radius = 2.5 * texel;\n"
+    "        [unroll]\n"
+    "        for (int tap = 0; tap < 16; ++tap) {\n"
+    "            float2 offset = POISSON_DISK_16[tap] * filter_radius;\n"
+    "            float d = tex_shadow.Sample(smp_shadow, uv + offset).r;\n"
+    "            shadow += (current_depth <= d) ? 1.0 : 0.0;\n"
+    "        }\n"
+    "        shadow *= 0.0625;\n"
+    "    } else {\n"
+    "        float s0 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s1 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s2 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s3 = (current_depth <= tex_shadow.Sample(smp_shadow, uv + float2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
+    "    }\n"
     "    float2 border = min(uv, 1.0 - uv);\n"
     "    float edge_fade = saturate(min(border.x, border.y) * 15.0);\n"
     "    return lerp(1.0, shadow, edge_fade);\n"
@@ -370,9 +417,19 @@ static const char* hlsl_fs =
     "    float3 V = normalize(eye_pos.xyz - inp.world_pos);\n"
     "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
     "    float3 hemi_light = lerp(hemi_ground.rgb, hemi_sky.rgb * hemi_sky.w, hemi);\n"
-    "    float3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic);\n"
-    "    float3 direct_lighting = float3(0.0, 0.0, 0.0);\n"
     "    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);\n"
+    "    float3 R = reflect(-V, N);\n"
+    "    float env_lod = roughness * 7.0;\n"
+    "    float3 env_spec = tex_env.SampleLevel(smp_env, R, env_lod).rgb;\n"
+    "    float3 F_env = fresnel_schlick(max(dot(N, V), 0.0), F0);\n"
+    "    float env_intensity = eye_pos.w;\n"
+    "    float3 ibl_specular = env_spec * F_env * env_intensity;\n"
+    "    float3 kS = F_env;\n"
+    "    float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);\n"
+    "    float3 env_diff = tex_env.SampleLevel(smp_env, N, 7.0).rgb;\n"
+    "    float3 ibl_diffuse = kD * env_diff * albedo * ao * env_intensity;\n"
+    "    float3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic) + ibl_diffuse + ibl_specular;\n"
+    "    float3 direct_lighting = float3(0.0, 0.0, 0.0);\n"
     "    int num_dirs = (int)ambient_and_count.w;\n"
     "    int num_points = (int)light_counts.x;\n"
     "    int num_spots = (int)light_counts.y;\n"
@@ -689,6 +746,92 @@ static const char* hlsl_inst_shadow_vs =
     "    return outp;\n"
     "}\n";
 
+// Skybox & Procedural Sky Shaders (HLSL)
+static const char* hlsl_skybox_vs =
+    "cbuffer skybox_vs_params : register(b0) {\n"
+    "    float4x4 view_proj;\n"
+    "};\n"
+    "struct vs_sky_in {\n"
+    "    float3 pos : POSITION;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float2 uv : TEXCOORD0;\n"
+    "    float4 color : COLOR0;\n"
+    "    float4 tangent : TANGENT;\n"
+    "};\n"
+    "struct vs_sky_out {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float3 dir : TEXCOORD0;\n"
+    "};\n"
+    "vs_sky_out main(vs_sky_in inp) {\n"
+    "    vs_sky_out outp;\n"
+    "    float4 p = mul(view_proj, float4(inp.pos, 1.0));\n"
+    "    outp.pos = p.xyww;\n"
+    "    outp.dir = inp.pos;\n"
+    "    return outp;\n"
+    "}\n";
+
+static const char* hlsl_skybox_fs =
+    "TextureCube tex_sky : register(t0);\n"
+    "SamplerState smp_sky : register(s0);\n"
+    "struct ps_sky_in {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float3 dir : TEXCOORD0;\n"
+    "};\n"
+    "float4 main(ps_sky_in inp) : SV_Target0 {\n"
+    "    float3 dir = normalize(inp.dir);\n"
+    "    float3 col = tex_sky.Sample(smp_sky, dir).rgb;\n"
+    "    return float4(col, 1.0);\n"
+    "}\n";
+
+static const char* hlsl_proc_sky_vs = hlsl_skybox_vs;
+
+static const char* hlsl_proc_sky_fs =
+    "cbuffer proc_sky_fs_params : register(b1) {\n"
+    "    float4 sun_dir_turbidity;\n"
+    "    float4 rayleigh_params;\n"
+    "    float4 mie_params;\n"
+    "    float4 sky_misc;\n"
+    "};\n"
+    "struct ps_proc_sky_in {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float3 dir : TEXCOORD0;\n"
+    "};\n"
+    "static const float PI = 3.14159265359;\n"
+    "float3 apply_aces_filmic_sky(float3 x) {\n"
+    "    float a = 2.51;\n"
+    "    float b = 0.03;\n"
+    "    float c = 2.43;\n"
+    "    float d = 0.59;\n"
+    "    float e = 0.14;\n"
+    "    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));\n"
+    "}\n"
+    "float4 main(ps_proc_sky_in inp) : SV_Target0 {\n"
+    "    float3 V = normalize(inp.dir);\n"
+    "    float3 S = normalize(sun_dir_turbidity.xyz);\n"
+    "    float cos_gamma = clamp(dot(V, S), -1.0, 1.0);\n"
+    "    float phase_r = (3.0 / (16.0 * PI)) * (1.0 + cos_gamma * cos_gamma);\n"
+    "    float g = sky_misc.x;\n"
+    "    float g2 = g * g;\n"
+    "    float denom = pow(max(1.0 + g2 - 2.0 * g * cos_gamma, 0.0001), 1.5);\n"
+    "    float phase_m = (1.0 / (4.0 * PI)) * (1.0 - g2) / denom;\n"
+    "    float3 beta_r = rayleigh_params.rgb * rayleigh_params.w * 0.08;\n"
+    "    float3 beta_m = mie_params.rgb * mie_params.w * sun_dir_turbidity.w * 0.04;\n"
+    "    float zenith_V = max(V.y, 0.03);\n"
+    "    float zenith_S = max(S.y, 0.03);\n"
+    "    float3 T = exp(-(beta_r + beta_m) * (1.0 / zenith_V + 1.0 / zenith_S) * 0.8);\n"
+    "    float3 inscatter = (beta_r * phase_r + beta_m * phase_m) * (float3(1.0, 1.0, 1.0) - T) * 12.0;\n"
+    "    float sun_disk = smoothstep(0.9992, 0.9998, cos_gamma) * 25.0;\n"
+    "    float3 sun_color = sun_disk * T * mie_params.rgb;\n"
+    "    float3 sky = inscatter + sun_color;\n"
+    "    if (V.y < 0.0) {\n"
+    "        float3 ground = mie_params.rgb * 0.15 * max(S.y, 0.1);\n"
+    "        sky = lerp(sky, ground, saturate(-V.y * 6.0));\n"
+    "    }\n"
+    "    sky = max(sky, float3(0.015, 0.02, 0.035));\n"
+    "    sky = apply_aces_filmic_sky(sky);\n"
+    "    return float4(sky, 1.0);\n"
+    "}\n";
+
 #else // Full GLSL #version 330
 static const char* glsl_vs =
     "#version 330\n"
@@ -768,6 +911,7 @@ static const char* glsl_fs =
     "uniform sampler2D tex_metallic_roughness;\n"
     "uniform sampler2D tex_emissive;\n"
     "uniform sampler2D tex_ao;\n"
+    "uniform samplerCube tex_env;\n"
     "in vec4 v_color;\n"
     "in vec3 v_normal;\n"
     "in vec2 v_uv;\n"
@@ -777,6 +921,24 @@ static const char* glsl_fs =
     "in vec3 v_bitangent;\n"
     "out vec4 frag_color;\n"
     "const float PI = 3.14159265359;\n"
+    "const vec2 POISSON_DISK_16[16] = vec2[](\n"
+    "    vec2(-0.94201624, -0.39906216),\n"
+    "    vec2( 0.94558609, -0.76890725),\n"
+    "    vec2(-0.09418410, -0.92938870),\n"
+    "    vec2( 0.34495938,  0.29387760),\n"
+    "    vec2(-0.91588581,  0.45771432),\n"
+    "    vec2(-0.81544232, -0.87912464),\n"
+    "    vec2(-0.38277543,  0.27676845),\n"
+    "    vec2( 0.97484398,  0.75648379),\n"
+    "    vec2( 0.44323325, -0.97511554),\n"
+    "    vec2( 0.53742981, -0.47373420),\n"
+    "    vec2(-0.26496911, -0.41893023),\n"
+    "    vec2( 0.79197514,  0.19090188),\n"
+    "    vec2(-0.24188840,  0.99706507),\n"
+    "    vec2(-0.81409955,  0.91437590),\n"
+    "    vec2( 0.19984126,  0.78641367),\n"
+    "    vec2( 0.14383161, -0.14100790)\n"
+    ");\n"
     "vec3 apply_aces_filmic(vec3 x) {\n"
     "    float a = 2.51;\n"
     "    float b = 0.03;\n"
@@ -795,12 +957,24 @@ static const char* glsl_fs =
     "    }\n"
     "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
     "    float current_depth = proj.z - depth_bias;\n"
-    "    float texel = 1.0 / 1024.0;\n"
-    "    float s0 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s1 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s2 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float s3 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
-    "    float shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
+    "    float shadow_res = max(light_counts.z, 512.0);\n"
+    "    float texel = 1.0 / shadow_res;\n"
+    "    float shadow = 0.0;\n"
+    "    if (light_counts.w > 0.5) {\n"
+    "        float filter_radius = 2.5 * texel;\n"
+    "        for (int tap = 0; tap < 16; ++tap) {\n"
+    "            vec2 offset = POISSON_DISK_16[tap] * filter_radius;\n"
+    "            float d = texture(tex_shadow, uv + offset).r;\n"
+    "            shadow += (current_depth <= d) ? 1.0 : 0.0;\n"
+    "        }\n"
+    "        shadow *= 0.0625;\n"
+    "    } else {\n"
+    "        float s0 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s1 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s2 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        float s3 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "        shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
+    "    }\n"
     "    vec2 border = min(uv, 1.0 - uv);\n"
     "    float edge_fade = clamp(min(border.x, border.y) * 15.0, 0.0, 1.0);\n"
     "    return mix(1.0, shadow, edge_fade);\n"
@@ -868,9 +1042,19 @@ static const char* glsl_fs =
     "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
     "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
     "    vec3 hemi_light = mix(hemi_ground.rgb, hemi_sky.rgb * hemi_sky.w, hemi);\n"
-    "    vec3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic);\n"
-    "    vec3 direct_lighting = vec3(0.0);\n"
     "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
+    "    vec3 R = reflect(-V, N);\n"
+    "    float env_lod = roughness * 7.0;\n"
+    "    vec3 env_spec = textureLod(tex_env, R, env_lod).rgb;\n"
+    "    vec3 F_env = fresnel_schlick(max(dot(N, V), 0.0), F0);\n"
+    "    float env_intensity = eye_pos.w;\n"
+    "    vec3 ibl_specular = env_spec * F_env * env_intensity;\n"
+    "    vec3 kS = F_env;\n"
+    "    vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);\n"
+    "    vec3 env_diff = textureLod(tex_env, N, 7.0).rgb;\n"
+    "    vec3 ibl_diffuse = kD * env_diff * albedo * ao * env_intensity;\n"
+    "    vec3 ambient = (ambient_and_count.rgb + hemi_light) * albedo * ao * (1.0 - 0.5 * metallic) + ibl_diffuse + ibl_specular;\n"
+    "    vec3 direct_lighting = vec3(0.0);\n"
     "    int num_dirs = int(ambient_and_count.w);\n"
     "    int num_points = int(light_counts.x);\n"
     "    int num_spots = int(light_counts.y);\n"
@@ -1134,6 +1318,79 @@ static const char* glsl_inst_shadow_vs =
     "    gl_Position = p;\n"
     "    v_depth = p.z / p.w;\n"
     "}\n";
+
+// Skybox & Procedural Sky Shaders (GLSL)
+static const char* glsl_skybox_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(std140) uniform skybox_vs_params {\n"
+    "    mat4 view_proj;\n"
+    "};\n"
+    "out vec3 v_dir;\n"
+    "void main() {\n"
+    "    vec4 p = view_proj * vec4(pos, 1.0);\n"
+    "    gl_Position = p.xyww;\n"
+    "    v_dir = pos;\n"
+    "}\n";
+
+static const char* glsl_skybox_fs =
+    "#version 330\n"
+    "uniform samplerCube tex_sky;\n"
+    "in vec3 v_dir;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    vec3 dir = normalize(v_dir);\n"
+    "    vec3 col = texture(tex_sky, dir).rgb;\n"
+    "    frag_color = vec4(col, 1.0);\n"
+    "}\n";
+
+static const char* glsl_proc_sky_vs = glsl_skybox_vs;
+
+static const char* glsl_proc_sky_fs =
+    "#version 330\n"
+    "layout(std140) uniform proc_sky_fs_params {\n"
+    "    vec4 sun_dir_turbidity;\n"
+    "    vec4 rayleigh_params;\n"
+    "    vec4 mie_params;\n"
+    "    vec4 sky_misc;\n"
+    "};\n"
+    "in vec3 v_dir;\n"
+    "out vec4 frag_color;\n"
+    "const float PI = 3.14159265359;\n"
+    "vec3 apply_aces_filmic_sky(vec3 x) {\n"
+    "    float a = 2.51;\n"
+    "    float b = 0.03;\n"
+    "    float c = 2.43;\n"
+    "    float d = 0.59;\n"
+    "    float e = 0.14;\n"
+    "    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);\n"
+    "}\n"
+    "void main() {\n"
+    "    vec3 V = normalize(v_dir);\n"
+    "    vec3 S = normalize(sun_dir_turbidity.xyz);\n"
+    "    float cos_gamma = clamp(dot(V, S), -1.0, 1.0);\n"
+    "    float phase_r = (3.0 / (16.0 * PI)) * (1.0 + cos_gamma * cos_gamma);\n"
+    "    float g = sky_misc.x;\n"
+    "    float g2 = g * g;\n"
+    "    float denom = pow(max(1.0 + g2 - 2.0 * g * cos_gamma, 0.0001), 1.5);\n"
+    "    float phase_m = (1.0 / (4.0 * PI)) * (1.0 - g2) / denom;\n"
+    "    vec3 beta_r = rayleigh_params.rgb * rayleigh_params.w * 0.08;\n"
+    "    vec3 beta_m = mie_params.rgb * mie_params.w * sun_dir_turbidity.w * 0.04;\n"
+    "    float zenith_V = max(V.y, 0.03);\n"
+    "    float zenith_S = max(S.y, 0.03);\n"
+    "    vec3 T = exp(-(beta_r + beta_m) * (1.0 / zenith_V + 1.0 / zenith_S) * 0.8);\n"
+    "    vec3 inscatter = (beta_r * phase_r + beta_m * phase_m) * (vec3(1.0) - T) * 12.0;\n"
+    "    float sun_disk = smoothstep(0.9992, 0.9998, cos_gamma) * 25.0;\n"
+    "    vec3 sun_color = sun_disk * T * mie_params.rgb;\n"
+    "    vec3 sky = inscatter + sun_color;\n"
+    "    if (V.y < 0.0) {\n"
+    "        vec3 ground = mie_params.rgb * 0.15 * max(S.y, 0.1);\n"
+    "        sky = mix(sky, ground, clamp(-V.y * 6.0, 0.0, 1.0));\n"
+    "    }\n"
+    "    sky = max(sky, vec3(0.015, 0.02, 0.035));\n"
+    "    sky = apply_aces_filmic_sky(sky);\n"
+    "    frag_color = vec4(sky, 1.0);\n"
+    "}\n";
 #endif
 
 // ---------------------------------------------------------------------------
@@ -1181,12 +1438,55 @@ bool EngineApp::is_mouse_locked() const {
     return sapp_mouse_locked();
 }
 
+void EngineApp::set_shadow_settings(const ShadowSettings& settings) {
+    bool res_changed = (settings.resolution != shadow_settings_.resolution);
+    shadow_settings_ = settings;
+    if (res_changed && shadow_pip_id_ != 0) {
+        init_shadow_pipeline();
+    }
+}
+
+void EngineApp::set_shadow_resolution(int res) {
+    if (res == shadow_settings_.resolution) return;
+    shadow_settings_.resolution = res;
+    if (shadow_pip_id_ != 0) {
+        init_shadow_pipeline();
+    }
+}
+
 void EngineApp::init_shadow_pipeline() {
+    int res = shadow_settings_.resolution > 0 ? shadow_settings_.resolution : 2048;
+
+    if (shadow_color_view_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_view(sg_view{ shadow_color_view_id_ });
+        shadow_color_view_id_ = 0;
+    }
+    if (shadow_depth_view_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_view(sg_view{ shadow_depth_view_id_ });
+        shadow_depth_view_id_ = 0;
+    }
+    if (shadow_tex_view_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_view(sg_view{ shadow_tex_view_id_ });
+        shadow_tex_view_id_ = 0;
+    }
+    if (shadow_sampler_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_sampler(sg_sampler{ shadow_sampler_id_ });
+        shadow_sampler_id_ = 0;
+    }
+    if (shadow_color_img_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_image(sg_image{ shadow_color_img_id_ });
+        shadow_color_img_id_ = 0;
+    }
+    if (shadow_depth_img_id_ != 0) {
+        if (sg_isvalid()) sg_destroy_image(sg_image{ shadow_depth_img_id_ });
+        shadow_depth_img_id_ = 0;
+    }
+
     // 1. Color attachment image to store depth map
     sg_image_desc col_desc{};
     col_desc.usage.color_attachment = true;
-    col_desc.width = SHADOW_MAP_SIZE;
-    col_desc.height = SHADOW_MAP_SIZE;
+    col_desc.width = res;
+    col_desc.height = res;
     col_desc.pixel_format = SG_PIXELFORMAT_R32F;
     col_desc.sample_count = 1;
     col_desc.label = "shadow-color-map";
@@ -1196,8 +1496,8 @@ void EngineApp::init_shadow_pipeline() {
     // 2. Depth stencil attachment image for shadow pass
     sg_image_desc depth_desc{};
     depth_desc.usage.depth_stencil_attachment = true;
-    depth_desc.width = SHADOW_MAP_SIZE;
-    depth_desc.height = SHADOW_MAP_SIZE;
+    depth_desc.width = res;
+    depth_desc.height = res;
     depth_desc.pixel_format = SG_PIXELFORMAT_DEPTH;
     depth_desc.sample_count = 1;
     depth_desc.label = "shadow-depth-map";
@@ -1232,6 +1532,10 @@ void EngineApp::init_shadow_pipeline() {
     smp_desc.label = "shadow-sampler";
     sg_sampler smp = sg_make_sampler(&smp_desc);
     shadow_sampler_id_ = smp.id;
+
+    if (shadow_pip_id_ != 0) {
+        return;
+    }
 
     // 5. Shader & Pipeline
     sg_shader_desc shd_desc{};
@@ -1510,6 +1814,14 @@ void EngineApp::init_pipeline_and_shaders() {
         shd_desc.samplers[i].sampler_type = SG_SAMPLERTYPE_FILTERING;
         shd_desc.samplers[i].hlsl_register_s_n = i;
     }
+    shd_desc.views[6].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.views[6].texture.image_type = SG_IMAGETYPE_CUBE;
+    shd_desc.views[6].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    shd_desc.views[6].texture.hlsl_register_t_n = 6;
+
+    shd_desc.samplers[6].stage = SG_SHADERSTAGE_FRAGMENT;
+    shd_desc.samplers[6].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    shd_desc.samplers[6].hlsl_register_s_n = 6;
 #else
     shd_desc.vertex_func.source = glsl_vs;
     shd_desc.fragment_func.source = glsl_fs;
@@ -1593,6 +1905,14 @@ void EngineApp::init_pipeline_and_shaders() {
         inst_shd_desc.samplers[i].sampler_type = SG_SAMPLERTYPE_FILTERING;
         inst_shd_desc.samplers[i].hlsl_register_s_n = i;
     }
+    inst_shd_desc.views[6].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.views[6].texture.image_type = SG_IMAGETYPE_CUBE;
+    inst_shd_desc.views[6].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    inst_shd_desc.views[6].texture.hlsl_register_t_n = 6;
+
+    inst_shd_desc.samplers[6].stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.samplers[6].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    inst_shd_desc.samplers[6].hlsl_register_s_n = 6;
 #else
     inst_shd_desc.vertex_func.source = glsl_inst_vs;
     inst_shd_desc.fragment_func.source = glsl_fs;
@@ -1663,6 +1983,7 @@ void EngineApp::init_pipeline_and_shaders() {
 
     init_shadow_pipeline();
     init_hud_and_line_pipelines();
+    init_sky_pipelines();
 }
 
 void EngineApp::on_init() {
@@ -1679,18 +2000,332 @@ void EngineApp::on_init() {
     editor_.init();
 }
 
+void EngineApp::init_sky_pipelines() {
+    if (!sg_isvalid()) return;
+
+    // 1. Sky cube mesh and default environment cubemap
+    if (!sky_cube_mesh_) {
+        sky_cube_mesh_ = Mesh::create_box(2.0f, 2.0f, 2.0f);
+    }
+    sky_cube_mesh_->ensure_gpu_buffers();
+
+    if (!default_env_cube_) {
+        default_env_cube_ = CubeTexture::create_default();
+    }
+    default_env_cube_->ensure_gpu_resources();
+
+    // 2. Skybox Shader & Pipelines
+    sg_shader_desc sky_shd_desc{};
+#if defined(SOKOL_D3D11)
+    sky_shd_desc.vertex_func.source = hlsl_skybox_vs;
+    sky_shd_desc.vertex_func.entry = "main";
+    sky_shd_desc.vertex_func.d3d11_target = "vs_4_0";
+    sky_shd_desc.fragment_func.source = hlsl_skybox_fs;
+    sky_shd_desc.fragment_func.entry = "main";
+    sky_shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    sky_shd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    sky_shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    sky_shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
+    sky_shd_desc.attrs[2].hlsl_sem_index = 0;
+    sky_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
+    sky_shd_desc.attrs[3].hlsl_sem_index = 0;
+    sky_shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    sky_shd_desc.attrs[4].hlsl_sem_index = 0;
+
+    sky_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    sky_shd_desc.uniform_blocks[0].size = sizeof(SkyboxVSParams);
+    sky_shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+
+    sky_shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    sky_shd_desc.views[0].texture.image_type = SG_IMAGETYPE_CUBE;
+    sky_shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    sky_shd_desc.views[0].texture.hlsl_register_t_n = 0;
+
+    sky_shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    sky_shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    sky_shd_desc.samplers[0].hlsl_register_s_n = 0;
+#else
+    sky_shd_desc.vertex_func.source = glsl_skybox_vs;
+    sky_shd_desc.fragment_func.source = glsl_skybox_fs;
+#endif
+    sky_shd_desc.label = "skybox-shader";
+    sg_shader sky_shd = sg_make_shader(&sky_shd_desc);
+    skybox_shd_id_ = sky_shd.id;
+
+    // Window swapchain pipeline
+    sg_pipeline_desc sky_pip_desc{};
+    sky_pip_desc.layout.buffers[0].stride = sizeof(Vertex);
+    sky_pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    sky_pip_desc.layout.attrs[0].offset = offsetof(Vertex, position);
+    sky_pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    sky_pip_desc.layout.attrs[1].offset = offsetof(Vertex, normal);
+    sky_pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    sky_pip_desc.layout.attrs[2].offset = offsetof(Vertex, uv);
+    sky_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    sky_pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
+    sky_pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+    sky_pip_desc.layout.attrs[4].offset = offsetof(Vertex, tangent);
+    sky_pip_desc.shader = sky_shd;
+    sky_pip_desc.index_type = SG_INDEXTYPE_UINT16;
+    sky_pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    sky_pip_desc.depth.write_enabled = false;
+    sky_pip_desc.face_winding = SG_FACEWINDING_CCW;
+    sky_pip_desc.cull_mode = SG_CULLMODE_FRONT;
+    sky_pip_desc.sample_count = sapp_sample_count();
+    sky_pip_desc.label = "skybox-pipeline";
+    sg_pipeline sky_pip = sg_make_pipeline(&sky_pip_desc);
+    skybox_pip_id_ = sky_pip.id;
+
+    // Offscreen RGBA16F pipeline
+    sg_pipeline_desc sky_off_desc = sky_pip_desc;
+    sky_off_desc.sample_count = 1;
+    sky_off_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA16F;
+    sky_off_desc.label = "skybox-offscreen-pipeline";
+    skybox_offscreen_pip_id_ = sg_make_pipeline(&sky_off_desc).id;
+
+    // Cubemap RGBA8 pipeline
+    sg_pipeline_desc sky_cube_desc = sky_pip_desc;
+    sky_cube_desc.sample_count = 1;
+    sky_cube_desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    sky_cube_desc.label = "skybox-rgba8-pipeline";
+    skybox_rgba8_pip_id_ = sg_make_pipeline(&sky_cube_desc).id;
+
+    // 3. Procedural Sky Shader & Pipelines
+    sg_shader_desc psky_shd_desc{};
+#if defined(SOKOL_D3D11)
+    psky_shd_desc.vertex_func.source = hlsl_proc_sky_vs;
+    psky_shd_desc.vertex_func.entry = "main";
+    psky_shd_desc.vertex_func.d3d11_target = "vs_4_0";
+    psky_shd_desc.fragment_func.source = hlsl_proc_sky_fs;
+    psky_shd_desc.fragment_func.entry = "main";
+    psky_shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    psky_shd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    psky_shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    psky_shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
+    psky_shd_desc.attrs[2].hlsl_sem_index = 0;
+    psky_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
+    psky_shd_desc.attrs[3].hlsl_sem_index = 0;
+    psky_shd_desc.attrs[4].hlsl_sem_name = "TANGENT";
+    psky_shd_desc.attrs[4].hlsl_sem_index = 0;
+
+    psky_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    psky_shd_desc.uniform_blocks[0].size = sizeof(SkyboxVSParams);
+    psky_shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+
+    psky_shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    psky_shd_desc.uniform_blocks[1].size = sizeof(ProcSkyFSParams);
+    psky_shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
+#else
+    psky_shd_desc.vertex_func.source = glsl_proc_sky_vs;
+    psky_shd_desc.fragment_func.source = glsl_proc_sky_fs;
+#endif
+    psky_shd_desc.label = "proc-sky-shader";
+    sg_shader psky_shd = sg_make_shader(&psky_shd_desc);
+    proc_sky_shd_id_ = psky_shd.id;
+
+    sg_pipeline_desc psky_pip_desc = sky_pip_desc;
+    psky_pip_desc.shader = psky_shd;
+    psky_pip_desc.label = "proc-sky-pipeline";
+    proc_sky_pip_id_ = sg_make_pipeline(&psky_pip_desc).id;
+
+    sg_pipeline_desc psky_off_desc = sky_off_desc;
+    psky_off_desc.shader = psky_shd;
+    psky_off_desc.label = "proc-sky-offscreen-pipeline";
+    proc_sky_offscreen_pip_id_ = sg_make_pipeline(&psky_off_desc).id;
+
+    sg_pipeline_desc psky_cube_desc = sky_cube_desc;
+    psky_cube_desc.shader = psky_shd;
+    psky_cube_desc.label = "proc-sky-rgba8-pipeline";
+    proc_sky_rgba8_pip_id_ = sg_make_pipeline(&psky_cube_desc).id;
+}
+
+void EngineApp::render_background_pass(Scene& scene, Camera& camera, bool is_offscreen, uint32_t color_format) {
+    uint32_t sky_pip = skybox_pip_id_;
+    uint32_t psky_pip = proc_sky_pip_id_;
+
+    if (is_offscreen) {
+        if (color_format == static_cast<uint32_t>(SG_PIXELFORMAT_RGBA8)) {
+            sky_pip = skybox_rgba8_pip_id_;
+            psky_pip = proc_sky_rgba8_pip_id_;
+        } else {
+            sky_pip = skybox_offscreen_pip_id_;
+            psky_pip = proc_sky_offscreen_pip_id_;
+        }
+    }
+
+    if (scene.background_type() == BackgroundType::CubeMap && scene.background_cube()) {
+        if (sky_pip == 0 || !sky_cube_mesh_ || !sky_cube_mesh_->ensure_gpu_buffers()) return;
+        auto cube = scene.background_cube();
+        if (!cube->ensure_gpu_resources() || !cube->is_valid()) return;
+
+        sg_pipeline pip{ sky_pip };
+        sg_apply_pipeline(pip);
+
+        glm::mat4 view_no_trans = glm::mat4(glm::mat3(camera.view_matrix()));
+        glm::mat4 vp = camera.projection_matrix() * view_no_trans;
+        SkyboxVSParams vs{ vp };
+        sg_apply_uniforms(0, SG_RANGE_REF(vs));
+
+        sg_bindings bind{};
+        bind.vertex_buffers[0] = sg_buffer{ sky_cube_mesh_->vbuf_id };
+        bind.index_buffer = sg_buffer{ sky_cube_mesh_->ibuf_id };
+        bind.views[0] = sg_view{ cube->view_id };
+        bind.samplers[0] = sg_sampler{ cube->sampler_id };
+        sg_apply_bindings(&bind);
+
+        sg_draw(0, sky_cube_mesh_->num_indices, 1);
+        stats_.draw_calls++;
+        stats_.total_triangles += sky_cube_mesh_->num_indices / 3;
+    } else if (scene.background_type() == BackgroundType::ProceduralSky && scene.procedural_sky()) {
+        if (psky_pip == 0 || !sky_cube_mesh_ || !sky_cube_mesh_->ensure_gpu_buffers()) return;
+        auto sky = scene.procedural_sky();
+
+        sg_pipeline pip{ psky_pip };
+        sg_apply_pipeline(pip);
+
+        glm::mat4 view_no_trans = glm::mat4(glm::mat3(camera.view_matrix()));
+        glm::mat4 vp = camera.projection_matrix() * view_no_trans;
+        SkyboxVSParams vs{ vp };
+        sg_apply_uniforms(0, SG_RANGE_REF(vs));
+
+        ProcSkyFSParams fs{};
+        fs.sun_dir_turbidity = glm::vec4(sky->sun_direction(), sky->turbidity());
+        fs.rayleigh_params = glm::vec4(sky->rayleigh_color(), sky->rayleigh());
+        fs.mie_params = glm::vec4(sky->mie_color(), sky->mie_coefficient());
+        fs.sky_misc = glm::vec4(sky->mie_directional_g(), sky->time_of_day(), 0.0f, 0.0f);
+        sg_apply_uniforms(1, SG_RANGE_REF(fs));
+
+        sg_bindings bind{};
+        bind.vertex_buffers[0] = sg_buffer{ sky_cube_mesh_->vbuf_id };
+        bind.index_buffer = sg_buffer{ sky_cube_mesh_->ibuf_id };
+        sg_apply_bindings(&bind);
+
+        sg_draw(0, sky_cube_mesh_->num_indices, 1);
+        stats_.draw_calls++;
+        stats_.total_triangles += sky_cube_mesh_->num_indices / 3;
+    }
+}
+
+void EngineApp::render_cube_camera(Scene& scene, CubeCamera& cam) {
+    auto rt = cam.render_target();
+    if (!rt) return;
+
+    glm::vec3 pos = cam.world_position();
+
+    static const glm::vec3 targets[6] = {
+        glm::vec3( 1.0f,  0.0f,  0.0f), // +X
+        glm::vec3(-1.0f,  0.0f,  0.0f), // -X
+        glm::vec3( 0.0f,  1.0f,  0.0f), // +Y
+        glm::vec3( 0.0f, -1.0f,  0.0f), // -Y
+        glm::vec3( 0.0f,  0.0f,  1.0f), // +Z
+        glm::vec3( 0.0f,  0.0f, -1.0f)  // -Z
+    };
+    static const glm::vec3 ups[6] = {
+        glm::vec3( 0.0f, -1.0f,  0.0f), // +X
+        glm::vec3( 0.0f, -1.0f,  0.0f), // -X
+        glm::vec3( 0.0f,  0.0f,  1.0f), // +Y
+        glm::vec3( 0.0f,  0.0f, -1.0f), // -Y
+        glm::vec3( 0.0f, -1.0f,  0.0f), // +Z
+        glm::vec3( 0.0f, -1.0f,  0.0f)  // -Z
+    };
+
+    int res = rt->resolution();
+    Camera face_cam;
+    face_cam.type = CameraType::Perspective;
+    face_cam.fov = 90.0f;
+    face_cam.aspect = 1.0f;
+    face_cam.near_plane = cam.near_plane();
+    face_cam.far_plane = cam.far_plane();
+    face_cam.position = pos;
+
+    for (int f = 0; f < 6; ++f) {
+        face_cam.target = pos + targets[f];
+        face_cam.up = ups[f];
+
+        sg_pass pass{};
+        pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+        pass.action.colors[0].clear_value = { 0.1f, 0.1f, 0.1f, 1.0f };
+        pass.action.depth.load_action = SG_LOADACTION_CLEAR;
+        pass.action.depth.clear_value = 1.0f;
+        pass.attachments.colors[0] = sg_view{ rt->face_view_id(f) };
+        pass.attachments.depth_stencil = sg_view{ rt->depth_view_id() };
+        pass.label = "cubecamera-face-pass";
+
+        sg_begin_pass(&pass);
+        render_scene_pass(scene, face_cam, res, res, true, static_cast<uint32_t>(SG_PIXELFORMAT_RGBA8));
+        sg_end_pass();
+    }
+}
+
 void EngineApp::render_shadow_pass() {
     if (shadow_pip_id_ == 0 || shadow_color_view_id_ == 0 || shadow_depth_view_id_ == 0) {
         return;
     }
 
-    // 1. Calculate Light Projection and View
-    glm::vec3 sun_dir = glm::normalize(scene_.light.direction);
-    glm::vec3 center = glm::vec3(camera_.target.x, 0.0f, camera_.target.z);
-    glm::vec3 light_pos = center - sun_dir * 35.0f;
-    glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 light_proj = glm::ortho(-32.0f, 32.0f, -32.0f, 32.0f, 2.0f, 85.0f);
-    light_vp_ = light_proj * light_view;
+    // 1. Check for SpotLight casting shadows
+    std::shared_ptr<SpotLight> casting_spot = nullptr;
+    for (const auto& l : scene_.lights()) {
+        if (!l) continue;
+        if (l->type == LightType::Spot) {
+            auto sl = std::dynamic_pointer_cast<SpotLight>(l);
+            if (sl && sl->cast_shadow) {
+                casting_spot = sl;
+                break;
+            }
+        }
+    }
+
+    if (casting_spot) {
+        glm::vec3 light_pos = casting_spot->get_world_position();
+        glm::vec3 light_dir = glm::normalize(casting_spot->get_world_direction());
+        glm::vec3 up = std::abs(light_dir.y) > 0.99f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::mat4 light_view = glm::lookAt(light_pos, light_pos + light_dir, up);
+        float fov_rad = casting_spot->outer_cone_angle * 2.0f;
+        float near_z = 0.5f;
+        float far_z = std::max(casting_spot->range, 25.0f);
+        glm::mat4 light_proj = glm::perspective(fov_rad, 1.0f, near_z, far_z);
+        light_vp_ = light_proj * light_view;
+    } else {
+        // Directional Light with camera-following shadow box and texel snapping
+        std::shared_ptr<DirectionalLight> casting_dir = nullptr;
+        for (const auto& l : scene_.lights()) {
+            if (!l) continue;
+            if (l->type == LightType::Directional) {
+                auto dl = std::dynamic_pointer_cast<DirectionalLight>(l);
+                if (dl && dl->cast_shadow) {
+                    casting_dir = dl;
+                    break;
+                }
+            }
+        }
+        glm::vec3 sun_dir = casting_dir ? glm::normalize(casting_dir->get_world_direction()) : glm::normalize(scene_.light.direction);
+        if (glm::length(sun_dir) < 0.001f) {
+            sun_dir = glm::vec3(0.4f, -0.8f, 0.4f);
+        }
+
+        glm::vec3 center = camera_.position;
+        glm::vec3 light_up = std::abs(sun_dir.y) > 0.99f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        float dist = shadow_settings_.far_z * 0.5f;
+        glm::vec3 light_pos = center - sun_dir * dist;
+        glm::mat4 light_view = glm::lookAt(light_pos, center, light_up);
+
+        if (shadow_settings_.texel_snapping && shadow_settings_.resolution > 0) {
+            glm::vec4 center_ls = light_view * glm::vec4(center, 1.0f);
+            float texel_size = (2.0f * shadow_settings_.ortho_size) / static_cast<float>(shadow_settings_.resolution);
+            center_ls.x = std::floor(center_ls.x / texel_size) * texel_size;
+            center_ls.y = std::floor(center_ls.y / texel_size) * texel_size;
+            glm::vec4 snapped_center_ws = glm::inverse(light_view) * center_ls;
+            glm::vec3 snapped_center = glm::vec3(snapped_center_ws);
+            light_pos = snapped_center - sun_dir * dist;
+            light_view = glm::lookAt(light_pos, snapped_center, light_up);
+        }
+
+        float o = shadow_settings_.ortho_size;
+        glm::mat4 light_proj = glm::ortho(-o, o, -o, o, shadow_settings_.near_z, shadow_settings_.far_z);
+        light_vp_ = light_proj * light_view;
+    }
 
     // 2. Begin Shadow Render Pass
     sg_pass pass{};
@@ -2051,7 +2686,7 @@ static void apply_camera_viewport_and_scissor(const Camera& cam, int target_w, i
     }
 }
 
-void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen) {
+void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen, uint32_t color_format) {
     if (pip_id_ == 0) return;
 
     apply_camera_viewport_and_scissor(camera, target_w, target_h);
@@ -2135,10 +2770,12 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
     light_ubo.ambient_and_count.w = static_cast<float>(num_dirs);
     light_ubo.light_counts.x = static_cast<float>(num_points);
     light_ubo.light_counts.y = static_cast<float>(num_spots);
+    light_ubo.light_counts.z = static_cast<float>(shadow_settings_.resolution);
+    light_ubo.light_counts.w = shadow_settings_.pcf_16_tap ? 1.0f : 0.0f;
 
     // Prepare base lighting uniform
     FSParams fs_params{};
-    fs_params.eye_pos = glm::vec4(camera.position, 1.0f);
+    fs_params.eye_pos = glm::vec4(camera.position, scene.environment_intensity());
     fs_params.fog_color = glm::vec4(fog_color_, (tone_mapping_enabled_ && !composer_) ? 1.0f : 0.0f);
     fs_params.fog_params = glm::vec4(
         fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
@@ -2212,7 +2849,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             BlendMode blend = is_transparent_pass ? (mat ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
             bool wireframe = mat ? mat->wireframe : false;
             int samples = is_offscreen ? 1 : sapp_sample_count();
-            uint32_t target_fmt = is_offscreen ? static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F) : 0;
+            uint32_t target_fmt = is_offscreen ? ((color_format != 0) ? color_format : static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F)) : 0;
 
             uint64_t pip_key = PipelineManager::make_key(shd_id_, side, depth_write, depth_test, blend, wireframe, false, samples, target_fmt);
             if (pip_key != current_pip_key) {
@@ -2236,7 +2873,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
                 pdesc.cull_mode = (side == SideMode::Double) ? SG_CULLMODE_NONE : ((side == SideMode::Back) ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK);
                 pdesc.sample_count = samples;
                 pdesc.primitive_type = wireframe ? SG_PRIMITIVETYPE_LINES : SG_PRIMITIVETYPE_TRIANGLES;
-                pdesc.colors[0].pixel_format = is_offscreen ? SG_PIXELFORMAT_RGBA16F : _SG_PIXELFORMAT_DEFAULT;
+                pdesc.colors[0].pixel_format = is_offscreen ? static_cast<sg_pixel_format>(target_fmt) : _SG_PIXELFORMAT_DEFAULT;
 
                 if (blend == BlendMode::Alpha) {
                     pdesc.colors[0].blend.enabled = true;
@@ -2307,6 +2944,13 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             bind.views[5] = sg_view{ tex_ao_tex ? tex_ao_tex->view_id : 0 };
             bind.samplers[5] = sg_sampler{ tex_ao_tex ? tex_ao_tex->sampler_id : 0 };
 
+            auto env_cube = scene.environment() ? scene.environment() : default_env_cube_;
+            if (env_cube) env_cube->ensure_gpu_resources();
+            uint32_t env_v = (env_cube && env_cube->is_valid()) ? env_cube->view_id : (default_env_cube_ ? default_env_cube_->view_id : 0);
+            uint32_t env_s = (env_cube && env_cube->is_valid()) ? env_cube->sampler_id : (default_env_cube_ ? default_env_cube_->sampler_id : 0);
+            bind.views[6] = sg_view{ env_v };
+            bind.samplers[6] = sg_sampler{ env_s };
+
             sg_apply_bindings(&bind);
             sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
 
@@ -2356,6 +3000,9 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
         }
     };
 
+    // Render background pass (Skybox or Procedural Sky) before opaque geometry
+    render_background_pass(scene, camera, is_offscreen, is_offscreen ? ((color_format != 0) ? color_format : static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F)) : 0);
+
     // Render opaque entities first
     render_entities(opaque_queue, false);
 
@@ -2387,6 +3034,14 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             bind.samplers[4] = sg_sampler{ default_black_tex_ ? default_black_tex_->sampler_id : 0 };
             bind.views[5] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
             bind.samplers[5] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
+
+            auto env_cube = scene.environment() ? scene.environment() : default_env_cube_;
+            if (env_cube) env_cube->ensure_gpu_resources();
+            uint32_t env_v = (env_cube && env_cube->is_valid()) ? env_cube->view_id : (default_env_cube_ ? default_env_cube_->view_id : 0);
+            uint32_t env_s = (env_cube && env_cube->is_valid()) ? env_cube->sampler_id : (default_env_cube_ ? default_env_cube_->sampler_id : 0);
+            bind.views[6] = sg_view{ env_v };
+            bind.samplers[6] = sg_sampler{ env_s };
+
             sg_apply_bindings(&bind);
 
             sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
@@ -2407,11 +3062,12 @@ void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target
 
     sg_pass pass{};
     pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+    glm::vec4 clr = (scene.background_type() == BackgroundType::Color) ? scene.background_color() : camera.clear_color;
     pass.action.colors[0].clear_value = {
-        camera.clear_color.r,
-        camera.clear_color.g,
-        camera.clear_color.b,
-        camera.clear_color.a
+        clr.r,
+        clr.g,
+        clr.b,
+        clr.a
     };
     if (target.has_depth()) {
         pass.action.depth.load_action = SG_LOADACTION_CLEAR;
@@ -2421,8 +3077,12 @@ void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target
     pass.attachments.colors[0] = sg_view{ target.color_view_id() };
     pass.label = "rendertarget-scene-pass";
 
+    uint32_t target_fmt = (target.format() == RenderTargetFormat::RGBA16F)
+        ? static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F)
+        : static_cast<uint32_t>(SG_PIXELFORMAT_RGBA8);
+
     sg_begin_pass(&pass);
-    render_scene_pass(scene, camera, target.width(), target.height(), true);
+    render_scene_pass(scene, camera, target.width(), target.height(), true, target_fmt);
     sg_end_pass();
 }
 
@@ -2539,11 +3199,14 @@ void EngineApp::on_frame() {
     } else {
         sg_pass pass{};
         pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+        glm::vec4 bg_clr = (scene_.background_type() == BackgroundType::Color)
+            ? scene_.background_color()
+            : glm::vec4(config_.clear_color[0], config_.clear_color[1], config_.clear_color[2], config_.clear_color[3]);
         pass.action.colors[0].clear_value = {
-            config_.clear_color[0],
-            config_.clear_color[1],
-            config_.clear_color[2],
-            config_.clear_color[3]
+            bg_clr.r,
+            bg_clr.g,
+            bg_clr.b,
+            bg_clr.a
         };
         pass.action.depth.load_action = SG_LOADACTION_CLEAR;
         pass.action.depth.clear_value = 1.0f;
@@ -2551,7 +3214,7 @@ void EngineApp::on_frame() {
 
         sg_begin_pass(&pass);
 
-        render_scene_pass(scene_, camera_, static_cast<int>(w), static_cast<int>(h), false);
+        render_scene_pass(scene_, camera_, static_cast<int>(w), static_cast<int>(h), false, 0);
 
         // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
         if (show_debug_hitboxes_ || mode_ == EngineMode::EDITOR) {
@@ -2677,6 +3340,47 @@ void EngineApp::on_cleanup() {
     if (hud_vbuf_id_ != 0) {
         sg_destroy_buffer(sg_buffer{hud_vbuf_id_});
         hud_vbuf_id_ = 0;
+    }
+
+    if (skybox_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{skybox_pip_id_});
+        skybox_pip_id_ = 0;
+    }
+    if (skybox_offscreen_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{skybox_offscreen_pip_id_});
+        skybox_offscreen_pip_id_ = 0;
+    }
+    if (skybox_rgba8_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{skybox_rgba8_pip_id_});
+        skybox_rgba8_pip_id_ = 0;
+    }
+    if (skybox_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{skybox_shd_id_});
+        skybox_shd_id_ = 0;
+    }
+    if (proc_sky_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{proc_sky_pip_id_});
+        proc_sky_pip_id_ = 0;
+    }
+    if (proc_sky_offscreen_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{proc_sky_offscreen_pip_id_});
+        proc_sky_offscreen_pip_id_ = 0;
+    }
+    if (proc_sky_rgba8_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{proc_sky_rgba8_pip_id_});
+        proc_sky_rgba8_pip_id_ = 0;
+    }
+    if (proc_sky_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{proc_sky_shd_id_});
+        proc_sky_shd_id_ = 0;
+    }
+    if (sky_cube_mesh_) {
+        sky_cube_mesh_->destroy();
+        sky_cube_mesh_ = nullptr;
+    }
+    if (default_env_cube_) {
+        default_env_cube_->destroy();
+        default_env_cube_ = nullptr;
     }
 
     editor_.shutdown();

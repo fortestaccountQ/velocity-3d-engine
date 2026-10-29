@@ -263,3 +263,64 @@ def patch_scene() -> None:
     _core.Scene.create_cylinder = lambda self, radius=0.5, height=2.0, segments=32, position=(0.0, 0.0, 0.0), color=WHITE, **kwargs: create_cylinder(self, radius, height, segments, position, color, **kwargs)
     _core.Scene.create_grid = lambda self, size=50.0, step=1.0, color=GRAY: create_grid(self, size, step, color)
     _core.Scene.set_sun = lambda self, direction=(-1.0, -2.0, -1.0), color=WARM_WHITE, intensity=1.0: set_sun(self, direction, color, intensity)
+
+    orig_env_fget = getattr(_core.Scene.environment, "fget", None) if hasattr(_core.Scene, "environment") else None
+
+    def _scene_get_environment(self: Any) -> Any:
+        if orig_env_fget is not None:
+            return orig_env_fget(self)
+        return None
+
+    def _scene_set_environment(self: Any, val: Any) -> None:
+        if val is None:
+            if hasattr(self, "set_environment"):
+                try:
+                    self.set_environment(None, getattr(self, "environment_intensity", 1.0))
+                except Exception:
+                    pass
+        else:
+            if hasattr(self, "set_environment"):
+                self.set_environment(val, getattr(self, "environment_intensity", 1.0))
+
+    _core.Scene.environment = property(_scene_get_environment, _scene_set_environment)
+
+    def _scene_get_background(self: Any) -> Any:
+        bg_type = getattr(self, "background_type", None)
+        if bg_type is not None and hasattr(_core, "BackgroundType"):
+            if bg_type == _core.BackgroundType.ProceduralSky:
+                return self.procedural_sky
+            elif bg_type == _core.BackgroundType.CubeMap:
+                return self.background_cube
+            elif bg_type == _core.BackgroundType.Color:
+                return self.background_color
+        return getattr(self, "background_color", None)
+
+    def _scene_set_background(self: Any, val: Any) -> None:
+        if val is None:
+            if hasattr(self, "set_background_color"):
+                self.set_background_color(0.43137, 0.62745, 0.82353, 1.0)
+            return
+        if hasattr(_core, "ProceduralSky") and isinstance(val, _core.ProceduralSky):
+            if hasattr(self, "set_procedural_sky"):
+                self.set_procedural_sky(val)
+            return
+        if hasattr(_core, "CubeTexture") and isinstance(val, _core.CubeTexture):
+            if hasattr(self, "set_background_cube"):
+                self.set_background_cube(val)
+            return
+        if isinstance(val, (tuple, list)):
+            if len(val) >= 4:
+                self.set_background_color(float(val[0]), float(val[1]), float(val[2]), float(val[3]))
+            elif len(val) == 3:
+                self.set_background_color(float(val[0]), float(val[1]), float(val[2]), 1.0)
+            return
+        if hasattr(val, "r") and hasattr(val, "g") and hasattr(val, "b"):
+            a = getattr(val, "a", 1.0)
+            self.set_background_color(float(val.r), float(val.g), float(val.b), float(a))
+            return
+        if hasattr(val, "x") and hasattr(val, "y") and hasattr(val, "z"):
+            w = getattr(val, "w", 1.0)
+            self.set_background_color(float(val.x), float(val.y), float(val.z), float(w))
+            return
+
+    _core.Scene.background = property(_scene_get_background, _scene_set_background)

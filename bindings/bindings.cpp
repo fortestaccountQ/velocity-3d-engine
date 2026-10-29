@@ -28,6 +28,10 @@
 #include "engine/editor.hpp"
 #include "engine/render_target.hpp"
 #include "engine/post_process.hpp"
+#include "engine/cube_texture.hpp"
+#include "engine/sky.hpp"
+#include "engine/cube_camera.hpp"
+#include "contracts/phase4_environment_contracts.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -689,6 +693,133 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("__call__", [](std::shared_ptr<engine::Texture> self) { return self; });
 
     // -----------------------------------------------------------------------
+    // CubeTexture (Phase 4.1)
+    // -----------------------------------------------------------------------
+    nb::class_<engine::CubeTexture>(m, "CubeTexture")
+        .def(nb::init<>())
+        .def_static("load_from_files", &engine::CubeTexture::load_from_files,
+            "right"_a, "left"_a, "top"_a, "bottom"_a, "front"_a, "back"_a)
+        .def_static("load_from_hdr", &engine::CubeTexture::load_from_hdr,
+            "filepath"_a, "cube_size"_a = 512)
+        .def_static("create_default", &engine::CubeTexture::create_default, "resolution"_a = 256)
+        .def_static("create_gradient", &engine::CubeTexture::create_gradient,
+            "top_color"_a = glm::vec3(0.25f, 0.55f, 0.95f),
+            "horizon_color"_a = glm::vec3(0.7f, 0.8f, 0.95f),
+            "bottom_color"_a = glm::vec3(0.2f, 0.22f, 0.25f),
+            "size"_a = 256)
+        .def_ro("size", &engine::CubeTexture::size)
+        .def("is_valid", &engine::CubeTexture::is_valid)
+        .def_prop_ro("is_valid_prop", &engine::CubeTexture::is_valid)
+        .def("destroy", &engine::CubeTexture::destroy)
+        .def("__call__", [](std::shared_ptr<engine::CubeTexture> self) { return self; });
+
+    // -----------------------------------------------------------------------
+    // Phase 4 Environment Enums & Structs
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::BackgroundType>(m, "BackgroundType")
+        .value("Color", engine::BackgroundType::Color)
+        .value("Texture2D", engine::BackgroundType::Texture2D)
+        .value("CubeMap", engine::BackgroundType::CubeMap)
+        .value("ProceduralSky", engine::BackgroundType::ProceduralSky)
+        .export_values();
+
+    nb::class_<engine::ShadowSettings>(m, "ShadowSettings")
+        .def(nb::init<>())
+        .def_rw("resolution", &engine::ShadowSettings::resolution)
+        .def_rw("bias", &engine::ShadowSettings::bias)
+        .def_rw("normal_bias", &engine::ShadowSettings::normal_bias)
+        .def_rw("ortho_size", &engine::ShadowSettings::ortho_size)
+        .def_rw("near_z", &engine::ShadowSettings::near_z)
+        .def_rw("far_z", &engine::ShadowSettings::far_z)
+        .def_rw("texel_snapping", &engine::ShadowSettings::texel_snapping)
+        .def_rw("pcf_16_tap", &engine::ShadowSettings::pcf_16_tap);
+
+    nb::class_<engine::SkyParams>(m, "SkyParams")
+        .def(nb::init<>())
+        .def_prop_rw("sun_direction",
+            [](engine::SkyParams& p) -> glm::vec3& { return p.sun_direction; },
+            [](engine::SkyParams& p, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) p.sun_direction = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto s = nb::cast<std::vector<float>>(val);
+                    if (s.size() >= 3) p.sun_direction = { s[0], s[1], s[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("rayleigh_color",
+            [](engine::SkyParams& p) -> glm::vec3& { return p.rayleigh_color; },
+            [](engine::SkyParams& p, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) p.rayleigh_color = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto s = nb::cast<std::vector<float>>(val);
+                    if (s.size() >= 3) p.rayleigh_color = { s[0], s[1], s[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("mie_color",
+            [](engine::SkyParams& p) -> glm::vec3& { return p.mie_color; },
+            [](engine::SkyParams& p, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) p.mie_color = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto s = nb::cast<std::vector<float>>(val);
+                    if (s.size() >= 3) p.mie_color = { s[0], s[1], s[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("turbidity", &engine::SkyParams::turbidity)
+        .def_rw("rayleigh", &engine::SkyParams::rayleigh)
+        .def_rw("mie_coefficient", &engine::SkyParams::mie_coefficient)
+        .def_rw("mie_directional_g", &engine::SkyParams::mie_directional_g)
+        .def_rw("time_of_day", &engine::SkyParams::time_of_day);
+
+    nb::class_<engine::ProceduralSky, engine::Node3D>(m, "ProceduralSky")
+        .def(nb::init<>())
+        .def(nb::init<const std::string&>(), "name"_a = "ProceduralSky")
+        .def_rw("params", &engine::ProceduralSky::params)
+        .def_prop_rw("sun_direction",
+            &engine::ProceduralSky::sun_direction,
+            [](engine::ProceduralSky& s, const glm::vec3& v) { s.set_sun_direction(v); })
+        .def_prop_rw("rayleigh_color",
+            &engine::ProceduralSky::rayleigh_color,
+            [](engine::ProceduralSky& s, const glm::vec3& v) { s.set_rayleigh_color(v); })
+        .def_prop_rw("mie_color",
+            &engine::ProceduralSky::mie_color,
+            [](engine::ProceduralSky& s, const glm::vec3& v) { s.set_mie_color(v); })
+        .def_prop_rw("turbidity", &engine::ProceduralSky::turbidity, &engine::ProceduralSky::set_turbidity)
+        .def_prop_rw("rayleigh", &engine::ProceduralSky::rayleigh, &engine::ProceduralSky::set_rayleigh)
+        .def_prop_rw("mie_coefficient", &engine::ProceduralSky::mie_coefficient, &engine::ProceduralSky::set_mie_coefficient)
+        .def_prop_rw("mie_directional_g", &engine::ProceduralSky::mie_directional_g, &engine::ProceduralSky::set_mie_directional_g)
+        .def_prop_rw("time_of_day", &engine::ProceduralSky::time_of_day, &engine::ProceduralSky::set_time_of_day)
+        .def("set_sun_direction", [](engine::ProceduralSky& s, float x, float y, float z) {
+            s.set_sun_direction(x, y, z);
+        }, "x"_a, "y"_a, "z"_a)
+        .def("set_rayleigh_color", [](engine::ProceduralSky& s, float r, float g, float b) {
+            s.set_rayleigh_color(r, g, b);
+        }, "r"_a, "g"_a, "b"_a)
+        .def("set_mie_color", [](engine::ProceduralSky& s, float r, float g, float b) {
+            s.set_mie_color(r, g, b);
+        }, "r"_a, "g"_a, "b"_a)
+        .def("set_turbidity", &engine::ProceduralSky::set_turbidity, "val"_a)
+        .def("set_rayleigh", &engine::ProceduralSky::set_rayleigh, "val"_a)
+        .def("set_mie_coefficient", &engine::ProceduralSky::set_mie_coefficient, "val"_a)
+        .def("set_mie_directional_g", &engine::ProceduralSky::set_mie_directional_g, "val"_a)
+        .def("set_time_of_day", &engine::ProceduralSky::set_time_of_day, "hours"_a);
+
+    nb::class_<engine::CubeRenderTarget>(m, "CubeRenderTarget")
+        .def(nb::init<int>(), "resolution"_a = 256)
+        .def_prop_ro("resolution", &engine::CubeRenderTarget::resolution)
+        .def_prop_ro("cube_texture", &engine::CubeRenderTarget::cube_texture)
+        .def("destroy", &engine::CubeRenderTarget::destroy);
+
+    nb::class_<engine::CubeCamera, engine::Node3D>(m, "CubeCamera")
+        .def(nb::init<float, float, int>(), "near_p"_a = 0.1f, "far_p"_a = 100.0f, "resolution"_a = 256)
+        .def_prop_rw("near_plane", &engine::CubeCamera::near_plane, &engine::CubeCamera::set_near_plane)
+        .def_prop_rw("far_plane", &engine::CubeCamera::far_plane, &engine::CubeCamera::set_far_plane)
+        .def("set_near_plane", &engine::CubeCamera::set_near_plane, "near_p"_a)
+        .def("set_far_plane", &engine::CubeCamera::set_far_plane, "far_p"_a)
+        .def_prop_ro("resolution", &engine::CubeCamera::resolution)
+        .def_prop_ro("render_target", &engine::CubeCamera::render_target)
+        .def_prop_ro("cube_texture", &engine::CubeCamera::cube_texture)
+        .def("update", &engine::CubeCamera::update, "app"_a, "scene"_a);
+
+    // -----------------------------------------------------------------------
     // Material Enums
     // -----------------------------------------------------------------------
     nb::enum_<engine::SideMode>(m, "SideMode")
@@ -1283,6 +1414,10 @@ NB_MODULE(_VelocityEngine_core, m) {
                 s.add_instanced_mesh(nb::cast<std::shared_ptr<engine::InstancedMesh>>(obj));
             } else if (nb::isinstance<std::shared_ptr<engine::Light>>(obj)) {
                 s.add_light(nb::cast<std::shared_ptr<engine::Light>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::ProceduralSky>>(obj)) {
+                s.set_procedural_sky(nb::cast<std::shared_ptr<engine::ProceduralSky>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::CubeCamera>>(obj)) {
+                s.add(nb::cast<std::shared_ptr<engine::Node3D>>(obj));
             }
         }, "obj"_a)
         .def("remove", [](engine::Scene& s, nb::handle obj) {
@@ -1295,7 +1430,79 @@ NB_MODULE(_VelocityEngine_core, m) {
             } else if (nb::isinstance<std::shared_ptr<engine::Light>>(obj)) {
                 s.remove_light(nb::cast<std::shared_ptr<engine::Light>>(obj));
             }
-        }, "obj"_a);
+        }, "obj"_a)
+        .def_prop_rw("environment",
+            &engine::Scene::environment,
+            [](engine::Scene& s, std::optional<std::shared_ptr<engine::CubeTexture>> val) {
+                s.set_environment(val.value_or(nullptr), s.environment_intensity());
+            })
+        .def_prop_rw("environment_intensity", &engine::Scene::environment_intensity, &engine::Scene::set_environment_intensity)
+        .def_prop_rw("background_type", &engine::Scene::background_type, &engine::Scene::set_background_type)
+        .def_prop_rw("background_cube",
+            &engine::Scene::background_cube,
+            [](engine::Scene& s, std::optional<std::shared_ptr<engine::CubeTexture>> val) {
+                s.set_background_cube(val.value_or(nullptr));
+            })
+        .def_prop_rw("procedural_sky",
+            &engine::Scene::procedural_sky,
+            [](engine::Scene& s, std::optional<std::shared_ptr<engine::ProceduralSky>> val) {
+                s.set_procedural_sky(val.value_or(nullptr));
+            })
+        .def_prop_rw("background_color",
+            [](engine::Scene& s) -> glm::vec4 { return s.background_color(); },
+            [](engine::Scene& s, nb::handle val) {
+                if (nb::isinstance<glm::vec4>(val)) s.set_background_color(nb::cast<glm::vec4>(val));
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) s.set_background_color({ seq[0], seq[1], seq[2], seq[3] });
+                    else if (seq.size() == 3) s.set_background_color({ seq[0], seq[1], seq[2], 1.0f });
+                }
+            })
+        .def_prop_rw("background",
+            [](engine::Scene& s) -> nb::object {
+                switch (s.background_type()) {
+                    case engine::BackgroundType::ProceduralSky:
+                        return nb::cast(s.procedural_sky());
+                    case engine::BackgroundType::CubeMap:
+                        return nb::cast(s.background_cube());
+                    case engine::BackgroundType::Color:
+                    default:
+                        return nb::cast(s.background_color());
+                }
+            },
+            [](engine::Scene& s, nb::handle val) {
+                if (!val.is_valid() || val.is_none()) {
+                    s.set_background_color(glm::vec4(0.43137f, 0.62745f, 0.82353f, 1.0f));
+                } else if (nb::isinstance<std::shared_ptr<engine::ProceduralSky>>(val)) {
+                    s.set_procedural_sky(nb::cast<std::shared_ptr<engine::ProceduralSky>>(val));
+                } else if (nb::isinstance<std::shared_ptr<engine::CubeTexture>>(val)) {
+                    s.set_background_cube(nb::cast<std::shared_ptr<engine::CubeTexture>>(val));
+                } else if (nb::isinstance<glm::vec4>(val)) {
+                    s.set_background_color(nb::cast<glm::vec4>(val));
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) s.set_background_color({ seq[0], seq[1], seq[2], seq[3] });
+                    else if (seq.size() == 3) s.set_background_color({ seq[0], seq[1], seq[2], 1.0f });
+                } else if (nb::hasattr(val, "r") && nb::hasattr(val, "g") && nb::hasattr(val, "b")) {
+                    float r = nb::cast<float>(val.attr("r"));
+                    float g = nb::cast<float>(val.attr("g"));
+                    float b = nb::cast<float>(val.attr("b"));
+                    float a = nb::hasattr(val, "a") ? nb::cast<float>(val.attr("a")) : 1.0f;
+                    s.set_background_color({ r, g, b, a });
+                }
+            })
+        .def("set_background_cube", [](engine::Scene& s, std::shared_ptr<engine::CubeTexture> cube) {
+            s.set_background_cube(cube);
+        }, "cube"_a.none() = nb::none())
+        .def("set_procedural_sky", [](engine::Scene& s, std::shared_ptr<engine::ProceduralSky> sky) {
+            s.set_procedural_sky(sky);
+        }, "sky"_a.none() = nb::none())
+        .def("set_background_color", [](engine::Scene& s, float r, float g, float b, float a) {
+            s.set_background_color(glm::vec4(r, g, b, a));
+        }, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
+        .def("set_environment", [](engine::Scene& s, std::shared_ptr<engine::CubeTexture> env, float intensity) {
+            s.set_environment(env, intensity);
+        }, "env"_a.none() = nb::none(), "intensity"_a = 1.0f);
 
     // -----------------------------------------------------------------------
     // Model
@@ -1596,6 +1803,18 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_prop_rw("composer", &engine::EngineApp::composer, &engine::EngineApp::set_composer)
         .def_prop_ro("stats", [](engine::EngineApp& app) -> const engine::RenderStats& {
             return app.stats();
-        }, nb::rv_policy::reference_internal);
+        }, nb::rv_policy::reference_internal)
+        .def_prop_rw("shadow_settings",
+            [](engine::EngineApp& app) -> const engine::ShadowSettings& { return app.shadow_settings(); },
+            [](engine::EngineApp& app, const engine::ShadowSettings& s) { app.set_shadow_settings(s); },
+            nb::rv_policy::reference_internal)
+        .def("set_shadow_settings", &engine::EngineApp::set_shadow_settings, "settings"_a)
+        .def("set_shadow_resolution", &engine::EngineApp::set_shadow_resolution, "res"_a)
+        .def("set_shadow_bias", &engine::EngineApp::set_shadow_bias, "bias"_a)
+        .def("set_shadow_normal_bias", &engine::EngineApp::set_shadow_normal_bias, "normal_bias"_a)
+        .def("set_shadow_ortho_size", &engine::EngineApp::set_shadow_ortho_size, "size"_a)
+        .def("set_shadow_pcf_16_tap", &engine::EngineApp::set_shadow_pcf_16_tap, "enable"_a)
+        .def("set_shadow_texel_snapping", &engine::EngineApp::set_shadow_texel_snapping, "enable"_a)
+        .def("render_cube_camera", &engine::EngineApp::render_cube_camera, "scene"_a, "camera"_a);
 }
 

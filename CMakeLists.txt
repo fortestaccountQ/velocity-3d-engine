@@ -93,6 +93,9 @@ add_library(velocity_engine_core STATIC
     core/src/editor.cpp
     core/src/render_target.cpp
     core/src/post_process.cpp
+    core/src/cube_texture.cpp
+    core/src/sky.cpp
+    core/src/cube_camera.cpp
     core/src/app.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp
@@ -118,6 +121,10 @@ target_link_libraries(velocity_engine_core PUBLIC glm::glm)
 target_compile_features(velocity_engine_core PUBLIC cxx_std_20)
 
 # Platform-specific configurations
+if (MSVC)
+    add_compile_options(/MP /bigobj)
+endif()
+
 if (WIN32)
     target_compile_definitions(velocity_engine_core PUBLIC
         SOKOL_D3D11
