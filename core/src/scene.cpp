@@ -102,8 +102,20 @@ void Scene::remove_entity(std::shared_ptr<Entity> entity) {
     entities_.erase(it, entities_.end());
 }
 
+void Scene::add_instanced_mesh(std::shared_ptr<InstancedMesh> mesh) {
+    if (mesh) {
+        instanced_meshes_.push_back(mesh);
+    }
+}
+
+void Scene::remove_instanced_mesh(std::shared_ptr<InstancedMesh> mesh) {
+    auto it = std::remove(instanced_meshes_.begin(), instanced_meshes_.end(), mesh);
+    instanced_meshes_.erase(it, instanced_meshes_.end());
+}
+
 void Scene::clear() {
     entities_.clear();
+    instanced_meshes_.clear();
     if (default_cube_mesh_) {
         default_cube_mesh_->destroy();
         default_cube_mesh_ = nullptr;

@@ -5,9 +5,15 @@ from __future__ import annotations
 from typing import Callable, Sequence, Optional, Any, List, Union
 
 try:
-    from . import _VelocityEngine_core as _core
+    from . import _pielosyty_core as _core
 except ImportError:
-    import _VelocityEngine_core as _core
+    try:
+        from . import _VelocityEngine_core as _core
+    except ImportError:
+        try:
+            import _pielosyty_core as _core
+        except ImportError:
+            import _VelocityEngine_core as _core
 
 from .color import Color, as_color
 from .tween import TweenManager
@@ -52,8 +58,16 @@ class App:
         if not show_crosshair:
             self._core.show_crosshair = bool(show_crosshair)
 
-        # Hook internal frame update callback
-        self._core.set_update_callback(self._on_internal_frame)
+        # Hook internal frame update callback with weakref proxy to avoid circular reference leaks
+        import weakref
+        weak_self = weakref.ref(self)
+
+        def _proxy_update(dt: float) -> None:
+            s = weak_self()
+            if s is not None:
+                s._on_internal_frame(dt)
+
+        self._core.set_update_callback(_proxy_update)
 
         if mode is not None:
             self.mode = mode
@@ -91,6 +105,10 @@ class App:
         # 4. User update callback
         if self._update_callback is not None:
             self._update_callback(dt)
+
+        # 5. Flush buffered UI overlay commands
+        if self._ui is not None and self._ui.commands:
+            self._ui.flush(self)
 
     def _process_raycast_events(self) -> None:
         """Raycast against scene under mouse cursor and dispatch hover/click events."""
@@ -190,6 +208,25 @@ class App:
         return self._ui
 
     @property
+    def overlay(self) -> UIOverlay:
+        """2D UI overlay for drawing text, shapes, crosshairs, and stats (alias for ui)."""
+        return self._ui
+
+    def submit_ui_commands(self, cmds: Sequence[Any]) -> None:
+        """Submit 2D UI commands to the native renderer."""
+        native_cmds = []
+        for cmd in cmds:
+            if hasattr(cmd, "to_native"):
+                native_cmds.append(cmd.to_native())
+            else:
+                native_cmds.append(cmd)
+        self._core.submit_ui_commands(native_cmds)
+
+    def clear_ui_commands(self) -> None:
+        """Clear all active native UI draw commands."""
+        self._core.clear_ui_commands()
+
+    @property
     def tweens(self) -> TweenManager:
         """Active TweenManager instance."""
         return self._tweens
@@ -269,6 +306,8 @@ class App:
 
     def run(self) -> None:
         """Launch the Sokol native rendering loop (blocks until window is closed)."""
+        if self._ui is not None and self._ui.commands:
+            self._ui.flush(self)
         try:
             self._core.run()
         finally:

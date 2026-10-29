@@ -51,6 +51,11 @@ struct ShadowVSParams {
     glm::mat4 light_mvp;
 };
 
+struct InstancedVSParams {
+    glm::mat4 view_proj;
+    glm::mat4 light_vp;
+};
+
 struct LineVertex {
     glm::vec3 pos;
     glm::vec4 color;
@@ -402,15 +407,308 @@ static const char* hlsl_hud_fs =
     "    return inp.color;\n"
     "}\n";
 
-#else // Fallback GLSL
-static const char* glsl_vs = "#version 330\nvoid main(){}\n";
-static const char* glsl_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
-static const char* glsl_shadow_vs = "#version 330\nvoid main(){}\n";
-static const char* glsl_shadow_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
-static const char* glsl_line_vs = "#version 330\nvoid main(){}\n";
-static const char* glsl_line_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
-static const char* glsl_hud_vs = "#version 330\nvoid main(){}\n";
-static const char* glsl_hud_fs = "#version 330\nout vec4 c;\nvoid main(){c=vec4(1.0);}\n";
+// Instanced Mesh Shaders
+static const char* hlsl_inst_vs =
+    "cbuffer inst_vs_params : register(b0) {\n"
+    "    float4x4 view_proj;\n"
+    "    float4x4 light_vp;\n"
+    "};\n"
+    "struct vs_inst_in {\n"
+    "    float3 pos : POSITION;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float2 uv : TEXCOORD0;\n"
+    "    float4 color : COLOR0;\n"
+    "    float4 i_model0 : TEXCOORD3;\n"
+    "    float4 i_model1 : TEXCOORD4;\n"
+    "    float4 i_model2 : TEXCOORD5;\n"
+    "    float4 i_model3 : TEXCOORD6;\n"
+    "    float4 i_color : COLOR1;\n"
+    "};\n"
+    "struct vs_out {\n"
+    "    float4 color : COLOR0;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float2 uv : TEXCOORD0;\n"
+    "    float3 world_pos : TEXCOORD1;\n"
+    "    float4 light_pos : TEXCOORD2;\n"
+    "    float4 pos : SV_Position;\n"
+    "};\n"
+    "vs_out main(vs_inst_in inp) {\n"
+    "    vs_out outp;\n"
+    "    float4x4 model = transpose(float4x4(inp.i_model0, inp.i_model1, inp.i_model2, inp.i_model3));\n"
+    "    float4 world_pos = mul(model, float4(inp.pos, 1.0));\n"
+    "    outp.pos = mul(view_proj, world_pos);\n"
+    "    outp.world_pos = world_pos.xyz;\n"
+    "    outp.normal = mul((float3x3)model, inp.normal);\n"
+    "    outp.uv = inp.uv;\n"
+    "    outp.color = inp.color * inp.i_color;\n"
+    "    float3 normal_bias_offset = normalize(outp.normal) * 0.04;\n"
+    "    outp.light_pos = mul(light_vp, float4(world_pos.xyz + normal_bias_offset, 1.0));\n"
+    "    return outp;\n"
+    "}\n";
+
+static const char* hlsl_inst_shadow_vs =
+    "cbuffer shadow_vs_params : register(b0) {\n"
+    "    float4x4 light_vp;\n"
+    "};\n"
+    "struct vs_inst_shadow_in {\n"
+    "    float3 pos : POSITION;\n"
+    "    float3 normal : NORMAL;\n"
+    "    float2 uv : TEXCOORD0;\n"
+    "    float4 color : COLOR0;\n"
+    "    float4 i_model0 : TEXCOORD3;\n"
+    "    float4 i_model1 : TEXCOORD4;\n"
+    "    float4 i_model2 : TEXCOORD5;\n"
+    "    float4 i_model3 : TEXCOORD6;\n"
+    "    float4 i_color : COLOR1;\n"
+    "};\n"
+    "struct vs_shadow_out {\n"
+    "    float4 pos : SV_Position;\n"
+    "    float depth : TEXCOORD0;\n"
+    "};\n"
+    "vs_shadow_out main(vs_inst_shadow_in inp) {\n"
+    "    vs_shadow_out outp;\n"
+    "    float4x4 model = transpose(float4x4(inp.i_model0, inp.i_model1, inp.i_model2, inp.i_model3));\n"
+    "    float4 world_pos = mul(model, float4(inp.pos, 1.0));\n"
+    "    outp.pos = mul(light_vp, world_pos);\n"
+    "    outp.depth = outp.pos.z / outp.pos.w;\n"
+    "    return outp;\n"
+    "}\n";
+
+#else // Full GLSL #version 330
+static const char* glsl_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(location = 1) in vec3 normal;\n"
+    "layout(location = 2) in vec2 uv;\n"
+    "layout(location = 3) in vec4 color;\n"
+    "uniform mat4 mvp;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 normal_mat;\n"
+    "uniform mat4 light_mvp;\n"
+    "out vec4 v_color;\n"
+    "out vec3 v_normal;\n"
+    "out vec2 v_uv;\n"
+    "out vec3 v_world_pos;\n"
+    "out vec4 v_light_pos;\n"
+    "void main() {\n"
+    "    gl_Position = mvp * vec4(pos, 1.0);\n"
+    "    v_world_pos = (model * vec4(pos, 1.0)).xyz;\n"
+    "    v_normal = mat3(normal_mat) * normal;\n"
+    "    v_uv = uv;\n"
+    "    v_color = color;\n"
+    "    vec3 normal_bias_offset = normal * 0.04;\n"
+    "    v_light_pos = light_mvp * vec4(pos + normal_bias_offset, 1.0);\n"
+    "}\n";
+
+static const char* glsl_fs =
+    "#version 330\n"
+    "uniform vec4 light_dir;\n"
+    "uniform vec4 light_color;\n"
+    "uniform vec4 ambient_color;\n"
+    "uniform vec4 eye_pos;\n"
+    "uniform vec4 material_color;\n"
+    "uniform vec4 material_params;\n"
+    "uniform vec4 material_uv_offset;\n"
+    "uniform vec4 hemi_sky;\n"
+    "uniform vec4 hemi_ground;\n"
+    "uniform vec4 fog_color;\n"
+    "uniform vec4 fog_params;\n"
+    "uniform sampler2D tex_albedo;\n"
+    "uniform sampler2D tex_shadow;\n"
+    "in vec4 v_color;\n"
+    "in vec3 v_normal;\n"
+    "in vec2 v_uv;\n"
+    "in vec3 v_world_pos;\n"
+    "in vec4 v_light_pos;\n"
+    "out vec4 frag_color;\n"
+    "vec3 apply_aces_filmic(vec3 x) {\n"
+    "    float a = 2.51;\n"
+    "    float b = 0.03;\n"
+    "    float c = 2.43;\n"
+    "    float d = 0.59;\n"
+    "    float e = 0.14;\n"
+    "    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);\n"
+    "}\n"
+    "float sample_shadow(vec4 lpos, vec3 N, vec3 L) {\n"
+    "    float NdotL = dot(N, L);\n"
+    "    if (NdotL <= 0.0) return 0.0;\n"
+    "    vec3 proj = lpos.xyz / lpos.w;\n"
+    "    vec2 uv = vec2(proj.x * 0.5 + 0.5, proj.y * 0.5 + 0.5);\n"
+    "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {\n"
+    "        return 1.0;\n"
+    "    }\n"
+    "    float depth_bias = max(0.0015 * (1.0 - NdotL), 0.0004);\n"
+    "    float current_depth = proj.z - depth_bias;\n"
+    "    float texel = 1.0 / 1024.0;\n"
+    "    float s0 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s1 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5, -0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s2 = (current_depth <= texture(tex_shadow, uv + vec2(-0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float s3 = (current_depth <= texture(tex_shadow, uv + vec2( 0.5,  0.5) * texel).r) ? 1.0 : 0.0;\n"
+    "    float shadow = (s0 + s1 + s2 + s3) * 0.25;\n"
+    "    vec2 border = min(uv, 1.0 - uv);\n"
+    "    float edge_fade = clamp(min(border.x, border.y) * 15.0, 0.0, 1.0);\n"
+    "    return mix(1.0, shadow, edge_fade);\n"
+    "}\n"
+    "void main() {\n"
+    "    vec2 uv = v_uv * material_params.zw + material_uv_offset.xy;\n"
+    "    vec4 tex_sample = texture(tex_albedo, uv);\n"
+    "    vec3 albedo = tex_sample.rgb * v_color.rgb * material_color.rgb;\n"
+    "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
+    "    float metallic = clamp(material_params.y, 0.0, 1.0);\n"
+    "    vec3 N = normalize(v_normal);\n"
+    "    vec3 L = normalize(-light_dir.xyz);\n"
+    "    vec3 V = normalize(eye_pos.xyz - v_world_pos);\n"
+    "    vec3 H = normalize(L + V);\n"
+    "    float NdotL = max(dot(N, L), 0.0);\n"
+    "    float NdotH = max(dot(N, H), 0.0);\n"
+    "    float VdotH = max(dot(V, H), 0.0);\n"
+    "    vec3 F0 = mix(vec3(0.04), albedo, metallic);\n"
+    "    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);\n"
+    "    float shininess = 2.0 / (pow(roughness, 4.0) + 0.0001) - 2.0;\n"
+    "    shininess = clamp(shininess, 2.0, 512.0);\n"
+    "    vec3 specular = vec3(0.0);\n"
+    "    if (NdotL > 0.0) {\n"
+    "        float spec_factor = pow(NdotH, shininess);\n"
+    "        specular = F * spec_factor * light_color.rgb * light_dir.w;\n"
+    "    }\n"
+    "    vec3 kD = (1.0 - metallic) * (vec3(1.0) - F);\n"
+    "    vec3 diffuse = kD * albedo * NdotL * light_color.rgb * light_dir.w;\n"
+    "    float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
+    "    vec3 ambient_light = mix(hemi_ground.rgb, hemi_sky.rgb, hemi);\n"
+    "    vec3 ambient = ambient_light * albedo * (1.0 - 0.5 * metallic);\n"
+    "    float shadow = sample_shadow(v_light_pos, N, L);\n"
+    "    vec3 final_color = ambient + (diffuse + specular) * shadow;\n"
+    "    float fog_type = fog_params.x;\n"
+    "    if (fog_type > 0.5) {\n"
+    "        float dist = length(v_world_pos - eye_pos.xyz);\n"
+    "        float fog_factor = 1.0;\n"
+    "        if (fog_type < 1.5) {\n"
+    "            float near = fog_params.y;\n"
+    "            float far = fog_params.z;\n"
+    "            fog_factor = clamp((far - dist) / max(far - near, 0.0001), 0.0, 1.0);\n"
+    "        } else {\n"
+    "            float density = fog_params.w;\n"
+    "            float d = dist * density;\n"
+    "            fog_factor = clamp(exp(- d * d), 0.0, 1.0);\n"
+    "        }\n"
+    "        final_color = mix(fog_color.rgb, final_color, fog_factor);\n"
+    "    }\n"
+    "    if (fog_color.w > 0.5) {\n"
+    "        final_color = apply_aces_filmic(final_color);\n"
+    "    }\n"
+    "    frag_color = vec4(final_color, tex_sample.a * v_color.a * material_color.a);\n"
+    "}\n";
+
+static const char* glsl_shadow_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(location = 1) in vec3 normal;\n"
+    "layout(location = 2) in vec2 uv;\n"
+    "layout(location = 3) in vec4 color;\n"
+    "uniform mat4 light_mvp;\n"
+    "out float v_depth;\n"
+    "void main() {\n"
+    "    vec4 p = light_mvp * vec4(pos, 1.0);\n"
+    "    gl_Position = p;\n"
+    "    v_depth = p.z / p.w;\n"
+    "}\n";
+
+static const char* glsl_shadow_fs =
+    "#version 330\n"
+    "in float v_depth;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    frag_color = vec4(v_depth, 0.0, 0.0, 1.0);\n"
+    "}\n";
+
+static const char* glsl_line_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(location = 1) in vec4 color;\n"
+    "uniform mat4 mvp;\n"
+    "out vec4 v_color;\n"
+    "void main() {\n"
+    "    gl_Position = mvp * vec4(pos, 1.0);\n"
+    "    v_color = color;\n"
+    "}\n";
+
+static const char* glsl_line_fs =
+    "#version 330\n"
+    "in vec4 v_color;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    frag_color = v_color;\n"
+    "}\n";
+
+static const char* glsl_hud_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec2 pos;\n"
+    "layout(location = 1) in vec4 color;\n"
+    "uniform mat4 ortho_proj;\n"
+    "out vec4 v_color;\n"
+    "void main() {\n"
+    "    gl_Position = ortho_proj * vec4(pos, 0.0, 1.0);\n"
+    "    v_color = color;\n"
+    "}\n";
+
+static const char* glsl_hud_fs =
+    "#version 330\n"
+    "in vec4 v_color;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    frag_color = v_color;\n"
+    "}\n";
+
+static const char* glsl_inst_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(location = 1) in vec3 normal;\n"
+    "layout(location = 2) in vec2 uv;\n"
+    "layout(location = 3) in vec4 color;\n"
+    "layout(location = 4) in vec4 i_model0;\n"
+    "layout(location = 5) in vec4 i_model1;\n"
+    "layout(location = 6) in vec4 i_model2;\n"
+    "layout(location = 7) in vec4 i_model3;\n"
+    "layout(location = 8) in vec4 i_color;\n"
+    "uniform mat4 view_proj;\n"
+    "uniform mat4 light_vp;\n"
+    "out vec4 v_color;\n"
+    "out vec3 v_normal;\n"
+    "out vec2 v_uv;\n"
+    "out vec3 v_world_pos;\n"
+    "out vec4 v_light_pos;\n"
+    "void main() {\n"
+    "    mat4 model = mat4(i_model0, i_model1, i_model2, i_model3);\n"
+    "    vec4 world_pos = model * vec4(pos, 1.0);\n"
+    "    gl_Position = view_proj * world_pos;\n"
+    "    v_world_pos = world_pos.xyz;\n"
+    "    v_normal = mat3(model) * normal;\n"
+    "    v_uv = uv;\n"
+    "    v_color = color * i_color;\n"
+    "    vec3 normal_bias_offset = normalize(v_normal) * 0.04;\n"
+    "    v_light_pos = light_vp * vec4(world_pos.xyz + normal_bias_offset, 1.0);\n"
+    "}\n";
+
+static const char* glsl_inst_shadow_vs =
+    "#version 330\n"
+    "layout(location = 0) in vec3 pos;\n"
+    "layout(location = 1) in vec3 normal;\n"
+    "layout(location = 2) in vec2 uv;\n"
+    "layout(location = 3) in vec4 color;\n"
+    "layout(location = 4) in vec4 i_model0;\n"
+    "layout(location = 5) in vec4 i_model1;\n"
+    "layout(location = 6) in vec4 i_model2;\n"
+    "layout(location = 7) in vec4 i_model3;\n"
+    "layout(location = 8) in vec4 i_color;\n"
+    "uniform mat4 light_vp;\n"
+    "out float v_depth;\n"
+    "void main() {\n"
+    "    mat4 model = mat4(i_model0, i_model1, i_model2, i_model3);\n"
+    "    vec4 world_pos = model * vec4(pos, 1.0);\n"
+    "    vec4 p = light_vp * world_pos;\n"
+    "    gl_Position = p;\n"
+    "    v_depth = p.z / p.w;\n"
+    "}\n";
 #endif
 
 // ---------------------------------------------------------------------------
@@ -552,6 +850,92 @@ void EngineApp::init_shadow_pipeline() {
     pip_desc.label = "shadow-pipeline";
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     shadow_pip_id_ = pip.id;
+
+    // 6. Instanced Shadow Shader & Pipeline
+    sg_shader_desc inst_shd_desc{};
+#if defined(SOKOL_D3D11)
+    inst_shd_desc.vertex_func.source = hlsl_inst_shadow_vs;
+    inst_shd_desc.vertex_func.entry = "main";
+    inst_shd_desc.vertex_func.d3d11_target = "vs_4_0";
+    inst_shd_desc.fragment_func.source = hlsl_shadow_fs;
+    inst_shd_desc.fragment_func.entry = "main";
+    inst_shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    inst_shd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    inst_shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    inst_shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[2].hlsl_sem_index = 0;
+    inst_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[3].hlsl_sem_index = 0;
+    inst_shd_desc.attrs[4].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[4].hlsl_sem_index = 3;
+    inst_shd_desc.attrs[5].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[5].hlsl_sem_index = 4;
+    inst_shd_desc.attrs[6].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[6].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[7].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[7].hlsl_sem_index = 6;
+    inst_shd_desc.attrs[8].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[8].hlsl_sem_index = 1;
+
+    inst_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    inst_shd_desc.uniform_blocks[0].size = sizeof(ShadowVSParams);
+    inst_shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+#else
+    inst_shd_desc.vertex_func.source = glsl_inst_shadow_vs;
+    inst_shd_desc.fragment_func.source = glsl_shadow_fs;
+#endif
+    inst_shd_desc.label = "instanced-shadow-shader";
+    sg_shader inst_shd = sg_make_shader(&inst_shd_desc);
+    instanced_shadow_shd_id_ = inst_shd.id;
+
+    sg_pipeline_desc inst_pip_desc{};
+    inst_pip_desc.layout.buffers[0].stride = sizeof(Vertex);
+    inst_pip_desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    inst_pip_desc.layout.buffers[1].stride = sizeof(InstanceData);
+    inst_pip_desc.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+    inst_pip_desc.layout.buffers[1].step_rate = 1;
+
+    inst_pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    inst_pip_desc.layout.attrs[0].buffer_index = 0;
+    inst_pip_desc.layout.attrs[0].offset = offsetof(Vertex, position);
+    inst_pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    inst_pip_desc.layout.attrs[1].buffer_index = 0;
+    inst_pip_desc.layout.attrs[1].offset = offsetof(Vertex, normal);
+    inst_pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    inst_pip_desc.layout.attrs[2].buffer_index = 0;
+    inst_pip_desc.layout.attrs[2].offset = offsetof(Vertex, uv);
+    inst_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[3].buffer_index = 0;
+    inst_pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
+
+    inst_pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[4].buffer_index = 1;
+    inst_pip_desc.layout.attrs[4].offset = 0;
+    inst_pip_desc.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[5].buffer_index = 1;
+    inst_pip_desc.layout.attrs[5].offset = 16;
+    inst_pip_desc.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[6].buffer_index = 1;
+    inst_pip_desc.layout.attrs[6].offset = 32;
+    inst_pip_desc.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[7].buffer_index = 1;
+    inst_pip_desc.layout.attrs[7].offset = 48;
+    inst_pip_desc.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[8].buffer_index = 1;
+    inst_pip_desc.layout.attrs[8].offset = 64;
+
+    inst_pip_desc.shader = inst_shd;
+    inst_pip_desc.index_type = SG_INDEXTYPE_UINT16;
+    inst_pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    inst_pip_desc.depth.write_enabled = true;
+    inst_pip_desc.face_winding = SG_FACEWINDING_CCW;
+    inst_pip_desc.cull_mode = SG_CULLMODE_FRONT;
+    inst_pip_desc.colors[0].pixel_format = SG_PIXELFORMAT_R32F;
+    inst_pip_desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
+    inst_pip_desc.label = "instanced-shadow-pipeline";
+    sg_pipeline inst_pip = sg_make_pipeline(&inst_pip_desc);
+    instanced_shadow_pip_id_ = inst_pip.id;
 }
 
 void EngineApp::init_hud_and_line_pipelines() {
@@ -714,6 +1098,115 @@ void EngineApp::init_pipeline_and_shaders() {
     sg_pipeline pip = sg_make_pipeline(&pip_desc);
     pip_id_ = pip.id;
 
+    // Instanced Scene Shader & Pipeline
+    sg_shader_desc inst_shd_desc{};
+#if defined(SOKOL_D3D11)
+    inst_shd_desc.vertex_func.source = hlsl_inst_vs;
+    inst_shd_desc.vertex_func.entry = "main";
+    inst_shd_desc.vertex_func.d3d11_target = "vs_4_0";
+    inst_shd_desc.fragment_func.source = hlsl_fs;
+    inst_shd_desc.fragment_func.entry = "main";
+    inst_shd_desc.fragment_func.d3d11_target = "ps_4_0";
+
+    inst_shd_desc.attrs[0].hlsl_sem_name = "POSITION";
+    inst_shd_desc.attrs[1].hlsl_sem_name = "NORMAL";
+    inst_shd_desc.attrs[2].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[2].hlsl_sem_index = 0;
+    inst_shd_desc.attrs[3].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[3].hlsl_sem_index = 0;
+    inst_shd_desc.attrs[4].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[4].hlsl_sem_index = 3;
+    inst_shd_desc.attrs[5].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[5].hlsl_sem_index = 4;
+    inst_shd_desc.attrs[6].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[6].hlsl_sem_index = 5;
+    inst_shd_desc.attrs[7].hlsl_sem_name = "TEXCOORD";
+    inst_shd_desc.attrs[7].hlsl_sem_index = 6;
+    inst_shd_desc.attrs[8].hlsl_sem_name = "COLOR";
+    inst_shd_desc.attrs[8].hlsl_sem_index = 1;
+
+    inst_shd_desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
+    inst_shd_desc.uniform_blocks[0].size = sizeof(InstancedVSParams);
+    inst_shd_desc.uniform_blocks[0].hlsl_register_b_n = 0;
+
+    inst_shd_desc.uniform_blocks[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.uniform_blocks[1].size = sizeof(FSParams);
+    inst_shd_desc.uniform_blocks[1].hlsl_register_b_n = 1;
+
+    // Slot 0: Albedo Texture & Sampler
+    inst_shd_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    inst_shd_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    inst_shd_desc.views[0].texture.hlsl_register_t_n = 0;
+
+    inst_shd_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    inst_shd_desc.samplers[0].hlsl_register_s_n = 0;
+
+    // Slot 1: Shadow Map Texture & Sampler
+    inst_shd_desc.views[1].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.views[1].texture.image_type = SG_IMAGETYPE_2D;
+    inst_shd_desc.views[1].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    inst_shd_desc.views[1].texture.hlsl_register_t_n = 1;
+
+    inst_shd_desc.samplers[1].stage = SG_SHADERSTAGE_FRAGMENT;
+    inst_shd_desc.samplers[1].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    inst_shd_desc.samplers[1].hlsl_register_s_n = 1;
+#else
+    inst_shd_desc.vertex_func.source = glsl_inst_vs;
+    inst_shd_desc.fragment_func.source = glsl_fs;
+#endif
+    inst_shd_desc.label = "instanced-scene-shader";
+    sg_shader inst_shd = sg_make_shader(&inst_shd_desc);
+    instanced_shd_id_ = inst_shd.id;
+
+    sg_pipeline_desc inst_pip_desc{};
+    inst_pip_desc.layout.buffers[0].stride = sizeof(Vertex);
+    inst_pip_desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    inst_pip_desc.layout.buffers[1].stride = sizeof(InstanceData);
+    inst_pip_desc.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+    inst_pip_desc.layout.buffers[1].step_rate = 1;
+
+    inst_pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    inst_pip_desc.layout.attrs[0].buffer_index = 0;
+    inst_pip_desc.layout.attrs[0].offset = offsetof(Vertex, position);
+    inst_pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+    inst_pip_desc.layout.attrs[1].buffer_index = 0;
+    inst_pip_desc.layout.attrs[1].offset = offsetof(Vertex, normal);
+    inst_pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    inst_pip_desc.layout.attrs[2].buffer_index = 0;
+    inst_pip_desc.layout.attrs[2].offset = offsetof(Vertex, uv);
+    inst_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[3].buffer_index = 0;
+    inst_pip_desc.layout.attrs[3].offset = offsetof(Vertex, color);
+
+    inst_pip_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[4].buffer_index = 1;
+    inst_pip_desc.layout.attrs[4].offset = 0;
+    inst_pip_desc.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[5].buffer_index = 1;
+    inst_pip_desc.layout.attrs[5].offset = 16;
+    inst_pip_desc.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[6].buffer_index = 1;
+    inst_pip_desc.layout.attrs[6].offset = 32;
+    inst_pip_desc.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[7].buffer_index = 1;
+    inst_pip_desc.layout.attrs[7].offset = 48;
+    inst_pip_desc.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT4;
+    inst_pip_desc.layout.attrs[8].buffer_index = 1;
+    inst_pip_desc.layout.attrs[8].offset = 64;
+
+    inst_pip_desc.shader = inst_shd;
+    inst_pip_desc.index_type = SG_INDEXTYPE_UINT16;
+    inst_pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    inst_pip_desc.depth.write_enabled = true;
+    inst_pip_desc.face_winding = SG_FACEWINDING_CCW;
+    inst_pip_desc.cull_mode = SG_CULLMODE_BACK;
+    inst_pip_desc.sample_count = sapp_sample_count();
+    inst_pip_desc.label = "instanced-scene-pipeline";
+    sg_pipeline inst_pip = sg_make_pipeline(&inst_pip_desc);
+    instanced_pip_id_ = inst_pip.id;
+
     init_shadow_pipeline();
     init_hud_and_line_pipelines();
 }
@@ -773,6 +1266,27 @@ void EngineApp::render_shadow_pass() {
 
         sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
         sg_draw(0, entity->mesh->num_indices, 1);
+    }
+
+    if (instanced_shadow_pip_id_ != 0 && !scene_.instanced_meshes().empty()) {
+        sg_pipeline inst_pip{ instanced_shadow_pip_id_ };
+        sg_apply_pipeline(inst_pip);
+
+        ShadowVSParams vs_params{ light_vp_ };
+        sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
+
+        for (const auto& inst_mesh : scene_.instanced_meshes()) {
+            if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
+            if (!inst_mesh->ensure_gpu_buffers()) continue;
+
+            sg_bindings bind{};
+            bind.vertex_buffers[0] = sg_buffer{ inst_mesh->mesh->vbuf_id };
+            bind.vertex_buffers[1] = sg_buffer{ inst_mesh->inst_vbuf_id };
+            bind.index_buffer = sg_buffer{ inst_mesh->mesh->ibuf_id };
+            sg_apply_bindings(&bind);
+
+            sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
+        }
     }
 
     sg_end_pass();
@@ -896,49 +1410,91 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     }
 
     // 2. Top-Left HUD Info Card (FPS & Score)
-    char fps_score_buf[256];
-    int top_len = 0;
-    if (!hud_title_.empty()) {
-        top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "%s | FPS: %3.0f   SCORE: %d", hud_title_.c_str(), fps, hud_score_);
-    } else {
-        top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+    if (show_hud_) {
+        char fps_score_buf[256];
+        int top_len = 0;
+        if (!hud_title_.empty()) {
+            top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "%s | FPS: %3.0f   SCORE: %d", hud_title_.c_str(), fps, hud_score_);
+        } else {
+            top_len = std::snprintf(fps_score_buf, sizeof(fps_score_buf), "FPS: %3.0f   SCORE: %d", fps, hud_score_);
+        }
+        float t_scale = 1.8f;
+        float t_char_w = 8.0f * t_scale;
+        float t_width = top_len * t_char_w;
+        float t_pad_x = 16.0f;
+        float t_pad_y = 9.0f;
+        float top_x0 = 16.0f;
+        float top_y0 = 16.0f;
+        float top_x1 = top_x0 + t_width + t_pad_x * 2.0f;
+        float top_y1 = top_y0 + 8.0f * t_scale + t_pad_y * 2.0f;
+
+        // Dark semi-transparent slate card
+        add_rect(verts, top_x0, top_y0, top_x1, top_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
+        // Neon cyan top accent line spanning exact card width
+        add_rect(verts, top_x0, top_y0, top_x1, top_y0 + 3.0f, { 0.25f, 0.65f, 0.95f, 0.95f });
+        // Text inside card
+        add_string(verts, fps_score_buf, top_x0 + t_pad_x, top_y0 + t_pad_y + 2.0f, t_scale, { 1.0f, 0.92f, 0.45f, 1.0f });
+
+        // 3. Bottom Controls Hint Card
+        const char* hint = !hud_hint_.empty() ? hud_hint_.c_str() : "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
+        float b_scale = 1.35f;
+        float b_char_w = 8.0f * b_scale;
+        float b_width = std::strlen(hint) * b_char_w;
+        float b_pad_x = 16.0f;
+        float b_pad_y = 8.0f;
+        float b_h = 8.0f * b_scale + b_pad_y * 2.0f;
+        float b_x0 = 16.0f;
+        float b_y0 = screen_h - b_h - 16.0f;
+        float b_x1 = b_x0 + b_width + b_pad_x * 2.0f;
+        float b_y1 = b_y0 + b_h;
+
+        // Background plate
+        add_rect(verts, b_x0, b_y0, b_x1, b_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
+        // Subtle border/accent
+        add_rect(verts, b_x0, b_y0, b_x1, b_y0 + 2.0f, { 0.35f, 0.50f, 0.70f, 0.85f });
+        // Text inside card
+        add_string(verts, hint, b_x0 + b_pad_x, b_y0 + b_pad_y + 1.0f, b_scale, { 0.90f, 0.93f, 0.98f, 0.95f });
     }
-    float t_scale = 1.8f;
-    float t_char_w = 8.0f * t_scale;
-    float t_width = top_len * t_char_w;
-    float t_pad_x = 16.0f;
-    float t_pad_y = 9.0f;
-    float top_x0 = 16.0f;
-    float top_y0 = 16.0f;
-    float top_x1 = top_x0 + t_width + t_pad_x * 2.0f;
-    float top_y1 = top_y0 + 8.0f * t_scale + t_pad_y * 2.0f;
 
-    // Dark semi-transparent slate card
-    add_rect(verts, top_x0, top_y0, top_x1, top_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
-    // Neon cyan top accent line spanning exact card width
-    add_rect(verts, top_x0, top_y0, top_x1, top_y0 + 3.0f, { 0.25f, 0.65f, 0.95f, 0.95f });
-    // Text inside card
-    add_string(verts, fps_score_buf, top_x0 + t_pad_x, top_y0 + t_pad_y + 2.0f, t_scale, { 1.0f, 0.92f, 0.45f, 1.0f });
-
-    // 3. Bottom Controls Hint Card
-    const char* hint = !hud_hint_.empty() ? hud_hint_.c_str() : "[TAB] Lock Mouse   [F1] Hitboxes   [LMB] Shoot";
-    float b_scale = 1.35f;
-    float b_char_w = 8.0f * b_scale;
-    float b_width = std::strlen(hint) * b_char_w;
-    float b_pad_x = 16.0f;
-    float b_pad_y = 8.0f;
-    float b_h = 8.0f * b_scale + b_pad_y * 2.0f;
-    float b_x0 = 16.0f;
-    float b_y0 = screen_h - b_h - 16.0f;
-    float b_x1 = b_x0 + b_width + b_pad_x * 2.0f;
-    float b_y1 = b_y0 + b_h;
-
-    // Background plate
-    add_rect(verts, b_x0, b_y0, b_x1, b_y1, { 0.05f, 0.08f, 0.14f, 0.82f });
-    // Subtle border/accent
-    add_rect(verts, b_x0, b_y0, b_x1, b_y0 + 2.0f, { 0.35f, 0.50f, 0.70f, 0.85f });
-    // Text inside card
-    add_string(verts, hint, b_x0 + b_pad_x, b_y0 + b_pad_y + 1.0f, b_scale, { 0.90f, 0.93f, 0.98f, 0.95f });
+    // 4. Custom UI Commands Queue
+    for (const auto& cmd : custom_ui_commands_) {
+        switch (cmd.type) {
+            case UICommandType::Rect:
+                add_rect(verts, cmd.pos.x, cmd.pos.y, cmd.pos.x + cmd.size.x, cmd.pos.y + cmd.size.y, cmd.color);
+                break;
+            case UICommandType::Text:
+                add_string(verts, cmd.text.c_str(), cmd.pos.x, cmd.pos.y, cmd.size.y > 0.0f ? cmd.size.y / 8.0f : 1.5f, cmd.color);
+                break;
+            case UICommandType::Crosshair: {
+                float cx = (cmd.pos.x != 0.0f || cmd.pos.y != 0.0f) ? cmd.pos.x : (screen_w * 0.5f);
+                float cy = (cmd.pos.x != 0.0f || cmd.pos.y != 0.0f) ? cmd.pos.y : (screen_h * 0.5f);
+                float s = cmd.size.x > 0.0f ? cmd.size.x : 10.0f;
+                float th = cmd.thickness > 0.0f ? cmd.thickness : 1.0f;
+                float hth = th * 0.5f;
+                add_rect(verts, cx - s, cy - hth, cx + s, cy + hth, cmd.color);
+                add_rect(verts, cx - hth, cy - s, cx + hth, cy + s, cmd.color);
+                break;
+            }
+            case UICommandType::Line: {
+                float th = cmd.thickness > 0.0f ? cmd.thickness : 1.0f;
+                glm::vec2 d = cmd.size;
+                float len = glm::length(d);
+                if (len > 0.0001f) {
+                    glm::vec2 n = glm::vec2(-d.y, d.x) / len * (th * 0.5f);
+                    glm::vec2 p0 = cmd.pos;
+                    glm::vec2 p1 = cmd.pos + cmd.size;
+                    verts.push_back({ p0 + n, cmd.color });
+                    verts.push_back({ p1 + n, cmd.color });
+                    verts.push_back({ p1 - n, cmd.color });
+                    verts.push_back({ p0 + n, cmd.color });
+                    verts.push_back({ p1 - n, cmd.color });
+                    verts.push_back({ p0 - n, cmd.color });
+                }
+                break;
+            }
+        }
+    }
+    custom_ui_commands_.clear();
 
     if (verts.empty()) return;
 
@@ -1120,6 +1676,38 @@ void EngineApp::on_frame() {
 
             sg_draw(0, entity->mesh->num_indices, 1);
         }
+
+        // Draw instanced meshes in Scene
+        if (instanced_pip_id_ != 0 && !scene_.instanced_meshes().empty()) {
+            sg_pipeline inst_pip{ instanced_pip_id_ };
+            sg_apply_pipeline(inst_pip);
+
+            InstancedVSParams inst_vs{ vp, light_vp_ };
+            sg_apply_uniforms(0, SG_RANGE_REF(inst_vs));
+
+            fs_params.material_color = glm::vec4(1.0f);
+            fs_params.material_params = glm::vec4(0.5f, 0.0f, 1.0f, 1.0f);
+            fs_params.material_uv_offset = glm::vec4(0.0f);
+            sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
+
+            for (const auto& inst_mesh : scene_.instanced_meshes()) {
+                if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
+                if (!inst_mesh->ensure_gpu_buffers()) continue;
+
+                auto tex = default_white;
+                sg_bindings bind{};
+                bind.vertex_buffers[0] = sg_buffer{ inst_mesh->mesh->vbuf_id };
+                bind.vertex_buffers[1] = sg_buffer{ inst_mesh->inst_vbuf_id };
+                bind.index_buffer = sg_buffer{ inst_mesh->mesh->ibuf_id };
+                bind.views[0] = sg_view{ tex ? tex->view_id : 0 };
+                bind.samplers[0] = sg_sampler{ tex ? tex->sampler_id : 0 };
+                bind.views[1] = sg_view{ shadow_tex_view_id_ };
+                bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
+                sg_apply_bindings(&bind);
+
+                sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
+            }
+        }
     }
 
     // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
@@ -1128,7 +1716,7 @@ void EngineApp::on_frame() {
     }
 
     // 8. 2D HUD Rendering (only in Game Mode)
-    if (show_hud_ && mode_ == EngineMode::GAME) {
+    if ((show_hud_ || !custom_ui_commands_.empty()) && mode_ == EngineMode::GAME) {
         render_hud(w, h, current_fps_);
     }
 
@@ -1157,6 +1745,14 @@ void EngineApp::on_cleanup() {
         sg_destroy_shader(sg_shader{shd_id_});
         shd_id_ = 0;
     }
+    if (instanced_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{instanced_pip_id_});
+        instanced_pip_id_ = 0;
+    }
+    if (instanced_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{instanced_shd_id_});
+        instanced_shd_id_ = 0;
+    }
     if (shadow_pip_id_ != 0) {
         sg_destroy_pipeline(sg_pipeline{shadow_pip_id_});
         shadow_pip_id_ = 0;
@@ -1164,6 +1760,14 @@ void EngineApp::on_cleanup() {
     if (shadow_shd_id_ != 0) {
         sg_destroy_shader(sg_shader{shadow_shd_id_});
         shadow_shd_id_ = 0;
+    }
+    if (instanced_shadow_pip_id_ != 0) {
+        sg_destroy_pipeline(sg_pipeline{instanced_shadow_pip_id_});
+        instanced_shadow_pip_id_ = 0;
+    }
+    if (instanced_shadow_shd_id_ != 0) {
+        sg_destroy_shader(sg_shader{instanced_shadow_shd_id_});
+        instanced_shadow_shd_id_ = 0;
     }
     if (shadow_color_view_id_ != 0) {
         sg_destroy_view(sg_view{shadow_color_view_id_});

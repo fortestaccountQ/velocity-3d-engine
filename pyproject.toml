@@ -3,9 +3,9 @@ requires = ["scikit-build-core>=0.10", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "engine"
-version = "0.1.0"
-description = "Modular 3D Engine with C++20 core, Sokol GFX, and Nanobind bindings"
+name = "pielosyty"
+version = "0.2.0"
+description = "Pielosyty 3D Engine: High-performance C++20 core, Sokol GFX, and Nanobind bindings"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -16,7 +16,7 @@ authors = [
 cmake.version = ">=3.24"
 ninja.version = ">=1.10"
 build-dir = "build/{wheel_tag}"
-wheel.packages = ["python/engine"]
+wheel.packages = ["python/pielosyty", "python/VelocityEngine"]
 
 [tool.scikit-build.cmake.define]
 CMAKE_BUILD_TYPE = "Release"

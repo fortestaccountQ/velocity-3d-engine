@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/entity.hpp"
+#include "engine/mesh.hpp"
 #include "engine/light.hpp"
 #include "engine/texture.hpp"
 #include "engine/material.hpp"
@@ -26,11 +27,15 @@ public:
 
     void add_entity(std::shared_ptr<Entity> entity);
     void remove_entity(std::shared_ptr<Entity> entity);
+    void add_instanced_mesh(std::shared_ptr<InstancedMesh> mesh);
+    void remove_instanced_mesh(std::shared_ptr<InstancedMesh> mesh);
     void clear();
 
     RaycastHit raycast(const Ray& ray, float max_distance = 1000.0f) const;
 
     const std::vector<std::shared_ptr<Entity>>& entities() const { return entities_; }
+    const std::vector<std::shared_ptr<InstancedMesh>>& instanced_meshes() const { return instanced_meshes_; }
+    std::vector<std::shared_ptr<InstancedMesh>>& instanced_meshes() { return instanced_meshes_; }
     std::shared_ptr<Mesh> default_cube_mesh();
     std::shared_ptr<Texture> default_checker_texture();
     std::shared_ptr<Texture> default_white_texture();
@@ -38,6 +43,7 @@ public:
 
 private:
     std::vector<std::shared_ptr<Entity>> entities_;
+    std::vector<std::shared_ptr<InstancedMesh>> instanced_meshes_;
     uint32_t next_id_{1};
     std::shared_ptr<Mesh> default_cube_mesh_{nullptr};
     std::shared_ptr<Texture> default_checker_texture_{nullptr};

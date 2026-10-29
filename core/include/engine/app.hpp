@@ -16,6 +16,25 @@
 
 namespace engine {
 
+// ---------------------------------------------------------------------------
+// UI Command Contract for Phase 0.1
+// ---------------------------------------------------------------------------
+enum class UICommandType : uint8_t {
+    Text = 0,
+    Rect = 1,
+    Line = 2,
+    Crosshair = 3
+};
+
+struct UICommand {
+    UICommandType type{UICommandType::Rect};
+    std::string text{};
+    glm::vec2 pos{0.0f, 0.0f};      // (x, y) position
+    glm::vec2 size{0.0f, 0.0f};     // (w, h) or (size, scale)
+    glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+    float thickness{1.0f};
+};
+
 struct WindowConfig {
     std::string title = "VelocityEngine v0.2-beta";
     int width = 800;
@@ -123,6 +142,15 @@ public:
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
+    // Custom UI Commands
+    void submit_ui_commands(const std::vector<UICommand>& cmds) {
+        custom_ui_commands_.insert(custom_ui_commands_.end(), cmds.begin(), cmds.end());
+    }
+    void clear_ui_commands() {
+        custom_ui_commands_.clear();
+    }
+    const std::vector<UICommand>& custom_ui_commands() const { return custom_ui_commands_; }
+
     // Internal Sokol callbacks
     void on_init();
     void on_frame();
@@ -156,6 +184,15 @@ private:
     // Sokol graphics pipeline & shader handles
     uint32_t pip_id_{0};
     uint32_t shd_id_{0};
+
+    // Instanced pipeline & shader handles
+    uint32_t instanced_pip_id_{0};
+    uint32_t instanced_shd_id_{0};
+    uint32_t instanced_shadow_pip_id_{0};
+    uint32_t instanced_shadow_shd_id_{0};
+
+    // Custom UI commands queue
+    std::vector<UICommand> custom_ui_commands_;
 
     // Shadow Mapping resources
     static constexpr int SHADOW_MAP_SIZE = 1024;

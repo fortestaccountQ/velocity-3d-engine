@@ -110,6 +110,67 @@ NB_MODULE(_VelocityEngine_core, m) {
     // -----------------------------------------------------------------------
     // GLM Math types (Vec3, Vec4)
     // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // GLM Math types (Vec2, Vec3, Vec4)
+    // -----------------------------------------------------------------------
+    nb::class_<glm::vec2>(m, "Vec2")
+        .def(nb::init<>())
+        .def(nb::init<float, float>(), "x"_a, "y"_a)
+        .def_rw("x", &glm::vec2::x)
+        .def_rw("y", &glm::vec2::y)
+        .def("__len__", [](const glm::vec2&) { return 2; })
+        .def("__getitem__", [](const glm::vec2& v, size_t i) -> float {
+            if (i >= 2) throw nb::index_error();
+            return v[static_cast<glm::length_t>(i)];
+        })
+        .def("__repr__", [](const glm::vec2& v) {
+            return "Vec2(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ")";
+        });
+
+    // -----------------------------------------------------------------------
+    // UI Command Contract (Phase 0.1)
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::UICommandType>(m, "UICommandType")
+        .value("Text", engine::UICommandType::Text)
+        .value("Rect", engine::UICommandType::Rect)
+        .value("Line", engine::UICommandType::Line)
+        .value("Crosshair", engine::UICommandType::Crosshair)
+        .export_values();
+
+    nb::class_<engine::UICommand>(m, "UICommand")
+        .def(nb::init<>())
+        .def_rw("type", &engine::UICommand::type)
+        .def_rw("text", &engine::UICommand::text)
+        .def_prop_rw("pos",
+            [](const engine::UICommand& c) { return c.pos; },
+            [](engine::UICommand& c, const nb::object& o) {
+                if (nb::isinstance<glm::vec2>(o)) c.pos = nb::cast<glm::vec2>(o);
+                else if (nb::isinstance<nb::tuple>(o) || nb::isinstance<nb::list>(o)) {
+                    auto s = nb::cast<std::vector<float>>(o);
+                    if (s.size() >= 2) c.pos = { s[0], s[1] };
+                }
+            })
+        .def_prop_rw("size",
+            [](const engine::UICommand& c) { return c.size; },
+            [](engine::UICommand& c, const nb::object& o) {
+                if (nb::isinstance<glm::vec2>(o)) c.size = nb::cast<glm::vec2>(o);
+                else if (nb::isinstance<nb::tuple>(o) || nb::isinstance<nb::list>(o)) {
+                    auto s = nb::cast<std::vector<float>>(o);
+                    if (s.size() >= 2) c.size = { s[0], s[1] };
+                }
+            })
+        .def_prop_rw("color",
+            [](const engine::UICommand& c) { return c.color; },
+            [](engine::UICommand& c, const nb::object& o) {
+                if (nb::isinstance<glm::vec4>(o)) c.color = nb::cast<glm::vec4>(o);
+                else if (nb::isinstance<nb::tuple>(o) || nb::isinstance<nb::list>(o)) {
+                    auto s = nb::cast<std::vector<float>>(o);
+                    if (s.size() >= 4) c.color = { s[0], s[1], s[2], s[3] };
+                    else if (s.size() == 3) c.color = { s[0], s[1], s[2], 1.0f };
+                }
+            })
+        .def_rw("thickness", &engine::UICommand::thickness);
+
     nb::class_<glm::vec3>(m, "Vec3")
         .def(nb::init<>())
         .def(nb::init<float, float, float>(), "x"_a, "y"_a, "z"_a)
@@ -704,7 +765,19 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("remove_entity", &engine::Scene::remove_entity, "entity"_a)
         .def("raycast", &engine::Scene::raycast, "ray"_a, "max_distance"_a = 1000.0f)
         .def("clear", &engine::Scene::clear)
-        .def_prop_ro("entities", &engine::Scene::entities);
+        .def_prop_ro("entities", &engine::Scene::entities)
+        .def("add_instanced_mesh", &engine::Scene::add_instanced_mesh, "mesh"_a)
+        .def("remove_instanced_mesh", &engine::Scene::remove_instanced_mesh, "mesh"_a)
+        .def_prop_ro("instanced_meshes", [](engine::Scene& s) -> const std::vector<std::shared_ptr<engine::InstancedMesh>>& {
+            return s.instanced_meshes();
+        })
+        .def("add", [](engine::Scene& s, const nb::object& obj) {
+            if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
+                s.add_entity(nb::cast<std::shared_ptr<engine::Entity>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::InstancedMesh>>(obj)) {
+                s.add_instanced_mesh(nb::cast<std::shared_ptr<engine::InstancedMesh>>(obj));
+            }
+        }, "obj"_a);
 
     // -----------------------------------------------------------------------
     // Model
@@ -881,6 +954,19 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_prop_ro("fog_far", &engine::EngineApp::fog_far)
         .def_prop_ro("fog_density", &engine::EngineApp::fog_density)
         .def("set_tone_mapping", &engine::EngineApp::set_tone_mapping, "enable"_a)
-        .def_prop_rw("tone_mapping", &engine::EngineApp::tone_mapping_enabled, &engine::EngineApp::set_tone_mapping);
+        .def_prop_rw("tone_mapping", &engine::EngineApp::tone_mapping_enabled, &engine::EngineApp::set_tone_mapping)
+        .def("submit_ui_commands", [](engine::EngineApp& app, const nb::object& cmds_obj) {
+            std::vector<engine::UICommand> cmds;
+            if (nb::isinstance<nb::list>(cmds_obj) || nb::isinstance<nb::tuple>(cmds_obj)) {
+                for (auto handle : cmds_obj) {
+                    if (nb::isinstance<engine::UICommand>(handle)) {
+                        cmds.push_back(nb::cast<engine::UICommand>(handle));
+                    }
+                }
+            }
+            app.submit_ui_commands(cmds);
+        }, "cmds"_a)
+        .def("clear_ui_commands", &engine::EngineApp::clear_ui_commands)
+        .def_prop_ro("custom_ui_commands", &engine::EngineApp::custom_ui_commands);
 }
 

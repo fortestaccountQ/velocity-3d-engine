@@ -165,6 +165,7 @@ target_link_libraries(_VelocityEngine_core PRIVATE velocity_engine_core)
 
 # Output compiled binary directly into VelocityEngine and engine package folders
 set(VELOCITY_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/python/VelocityEngine")
+set(PIELOSYTY_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/python/pielosyty")
 set(ENGINE_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/python/engine")
 
 set_target_properties(_VelocityEngine_core PROPERTIES
@@ -184,11 +185,14 @@ if (CMAKE_CONFIGURATION_TYPES)
     endforeach()
 endif()
 
-# Post-build copy to python/engine for backwards compatibility
+# Post-build copy to python/engine and python/pielosyty for backwards compatibility
 add_custom_command(TARGET _VelocityEngine_core POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${ENGINE_OUTPUT_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:_VelocityEngine_core>" "${ENGINE_OUTPUT_DIR}/"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PIELOSYTY_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:_VelocityEngine_core>" "${PIELOSYTY_OUTPUT_DIR}/"
 )
 
 # Installation rules for pip / scikit-build-core
+install(TARGETS _VelocityEngine_core DESTINATION pielosyty)
 install(TARGETS _VelocityEngine_core DESTINATION VelocityEngine)
