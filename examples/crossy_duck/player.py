@@ -42,7 +42,7 @@ except ImportError:
 # Gameplay Constants
 HOP_DURATION: float = 0.15     # Snappy hop time in seconds
 JUMP_HEIGHT: float = 0.65      # Peak height of parabolic jump arc
-IDLE_TIMEOUT: float = 45.0     # Idle seconds without forward progress before timeout
+IDLE_TIMEOUT: float = 120.0    # Idle seconds without forward progress before timeout (2 mins)
 BASE_SCALE: float = 0.65       # Standard duck visual scale (fits inside 1.0x1.0 grid)
 
 
@@ -131,52 +131,16 @@ class PlayerController(PlayerControllerContract):
         return None
 
     def _init_duck_visual(self) -> None:
-        """Load duck.glb 3D model or build composite voxel duck fallback."""
+        """Initialize the authentic 3D composite voxel duck visual character."""
         if self.scene is None:
             return
 
-        # 1. Look for duck.glb asset
-        repo_root = Path(__file__).resolve().parent.parent.parent
-        model_paths = [
-            repo_root / "assets" / "duck.glb",
-            Path("assets/duck.glb"),
-            Path("../assets/duck.glb"),
-        ]
-
-        loaded = False
-        for p in model_paths:
-            if p.exists():
-                try:
-                    self.entity = self.scene.load_model(str(p))
-                    self.entity.name = "CrossyDuck"
-                    self.is_voxel_duck = False
-                    loaded = True
-                    break
-                except Exception:
-                    pass
-
-        # Apply duck material from registry to loaded model if available
-        duck_mat = self._get_duck_material()
-        if loaded and self.entity is not None and duck_mat is not None:
-            if hasattr(self.entity, "root_entity") and self.entity.root_entity is not None:
-                try:
-                    self.entity.root_entity.material = duck_mat
-                except Exception:
-                    pass
-            if hasattr(self.entity, "material"):
-                try:
-                    self.entity.material = duck_mat
-                except Exception:
-                    pass
-
-        # 2. Fallback to composite voxel duck if model missing or failed
-        if not loaded or self.entity is None:
-            self._build_voxel_duck()
-
+        # Prioritize the authentic composite voxel duck matching Crossy Road aesthetic
+        self._build_voxel_duck()
         self._sync_transform()
 
     def _build_voxel_duck(self) -> None:
-        """Create a procedural composite voxel duck using scene boxes."""
+        """Create a handcrafted, adorable composite voxel duck with body, head, bill, eyes, wings, and feet."""
         if self.scene is None:
             return
 
@@ -188,13 +152,18 @@ class PlayerController(PlayerControllerContract):
             head_col = Color.from_hex("#ffdb1a")
             beak_col = Color.from_hex("#ff6f00")
             eye_col = Color.from_hex("#111111")
+            pupil_col = Color.from_hex("#ffffff")
+            wing_col = Color.from_hex("#eab308")
         except Exception:
             body_col = (0.96, 0.77, 0.0, 1.0)
             head_col = (1.0, 0.86, 0.1, 1.0)
             beak_col = (1.0, 0.43, 0.0, 1.0)
             eye_col = (0.07, 0.07, 0.07, 1.0)
+            pupil_col = (1.0, 1.0, 1.0, 1.0)
+            wing_col = (0.92, 0.70, 0.03, 1.0)
 
         white_col = WHITE if WHITE is not None else (1.0, 1.0, 1.0, 1.0)
+        feather_col = white_col if duck_mat is not None else body_col
 
         try:
             root = self.scene.create_entity("VoxelDuck")
@@ -202,7 +171,7 @@ class PlayerController(PlayerControllerContract):
             try:
                 root = self.scene.create_box(
                     size=(0.6, 0.6, 0.6),
-                    color=white_col if duck_mat is not None else body_col,
+                    color=feather_col,
                     material=duck_mat,
                     name="VoxelDuck",
                 )
@@ -219,47 +188,131 @@ class PlayerController(PlayerControllerContract):
         if duck_mat is not None and hasattr(root, "material"):
             root.material = duck_mat
 
-        # Body
+        # 1. Main Plump Body (warm golden feathers)
         body = self.scene.create_box(
-            size=(0.65, 0.50, 0.65),
-            color=white_col if duck_mat is not None else body_col,
+            size=(0.56, 0.44, 0.64),
+            color=feather_col,
             material=duck_mat,
             name="DuckBody",
         )
         if duck_mat is not None and hasattr(body, "material"):
             body.material = duck_mat
         body.parent = root
-        body.transform.position = (0.0, 0.25, 0.0)
+        body.transform.position = (0.0, 0.22, 0.0)
 
-        # Head
+        # 2. Cute Cube Head
         head = self.scene.create_box(
-            size=(0.42, 0.42, 0.42),
-            color=white_col if duck_mat is not None else head_col,
+            size=(0.40, 0.38, 0.40),
+            color=feather_col,
             material=duck_mat,
             name="DuckHead",
         )
         if duck_mat is not None and hasattr(head, "material"):
             head.material = duck_mat
         head.parent = root
-        head.transform.position = (0.0, 0.58, 0.15)
+        head.transform.position = (0.0, 0.52, 0.12)
 
-        # Beak
-        beak = self.scene.create_box(size=(0.28, 0.12, 0.22), color=beak_col, name="DuckBeak")
+        # 3. Orange Bill / Beak
+        beak = self.scene.create_box(
+            size=(0.26, 0.12, 0.22),
+            color=beak_col,
+            name="DuckBeak",
+        )
         beak.parent = root
-        beak.transform.position = (0.0, 0.50, 0.40)
+        beak.transform.position = (0.0, 0.44, 0.38)
 
-        # Eyes
-        eye_l = self.scene.create_box(size=(0.07, 0.07, 0.07), color=eye_col, name="DuckEyeL")
+        # 4. Glossy Black Eyes with Specular Catchlights
+        eye_l = self.scene.create_box(
+            size=(0.065, 0.065, 0.04),
+            color=eye_col,
+            name="DuckEyeL",
+        )
         eye_l.parent = root
-        eye_l.transform.position = (-0.15, 0.65, 0.28)
+        eye_l.transform.position = (-0.16, 0.56, 0.28)
 
-        eye_r = self.scene.create_box(size=(0.07, 0.07, 0.07), color=eye_col, name="DuckEyeR")
+        eye_r = self.scene.create_box(
+            size=(0.065, 0.065, 0.04),
+            color=eye_col,
+            name="DuckEyeR",
+        )
         eye_r.parent = root
-        eye_r.transform.position = (0.15, 0.65, 0.28)
+        eye_r.transform.position = (0.16, 0.56, 0.28)
+
+        # White pupil specular highlights
+        pupil_l = self.scene.create_box(
+            size=(0.025, 0.025, 0.045),
+            color=pupil_col,
+            name="DuckPupilL",
+        )
+        pupil_l.parent = root
+        pupil_l.transform.position = (-0.17, 0.58, 0.29)
+
+        pupil_r = self.scene.create_box(
+            size=(0.025, 0.025, 0.045),
+            color=pupil_col,
+            name="DuckPupilR",
+        )
+        pupil_r.parent = root
+        pupil_r.transform.position = (0.17, 0.58, 0.29)
+
+        # 5. Wings on left and right sides
+        wing_l = self.scene.create_box(
+            size=(0.08, 0.22, 0.38),
+            color=feather_col,
+            material=duck_mat,
+            name="DuckWingL",
+        )
+        if duck_mat is not None and hasattr(wing_l, "material"):
+            wing_l.material = duck_mat
+        wing_l.parent = root
+        wing_l.transform.position = (-0.31, 0.23, 0.0)
+
+        wing_r = self.scene.create_box(
+            size=(0.08, 0.22, 0.38),
+            color=feather_col,
+            material=duck_mat,
+            name="DuckWingR",
+        )
+        if duck_mat is not None and hasattr(wing_r, "material"):
+            wing_r.material = duck_mat
+        wing_r.parent = root
+        wing_r.transform.position = (0.31, 0.23, 0.0)
+
+        # 6. Upturned tail feathers in the rear
+        tail = self.scene.create_box(
+            size=(0.22, 0.14, 0.16),
+            color=feather_col,
+            material=duck_mat,
+            name="DuckTail",
+        )
+        if duck_mat is not None and hasattr(tail, "material"):
+            tail.material = duck_mat
+        tail.parent = root
+        tail.transform.position = (0.0, 0.30, -0.34)
+
+        # 7. Orange webbed feet
+        foot_l = self.scene.create_box(
+            size=(0.14, 0.05, 0.20),
+            color=beak_col,
+            name="DuckFootL",
+        )
+        foot_l.parent = root
+        foot_l.transform.position = (-0.15, 0.025, 0.05)
+
+        foot_r = self.scene.create_box(
+            size=(0.14, 0.05, 0.20),
+            color=beak_col,
+            name="DuckFootR",
+        )
+        foot_r.parent = root
+        foot_r.transform.position = (0.15, 0.025, 0.05)
 
         self.entity = root
         self.is_voxel_duck = True
-        self.voxel_parts = [body, head, beak, eye_l, eye_r]
+        self.voxel_parts = [
+            body, head, beak, eye_l, eye_r, pupil_l, pupil_r,
+            wing_l, wing_r, tail, foot_l, foot_r
+        ]
 
     def _sync_transform(self) -> None:
         """Synchronize physics position, rotation, and scale to visual 3D entity."""

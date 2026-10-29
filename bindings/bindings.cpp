@@ -849,6 +849,10 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_prop_rw("debug_hitboxes", &engine::EngineApp::is_debug_hitboxes, &engine::EngineApp::set_debug_hitboxes)
         .def("set_target_fps", &engine::EngineApp::set_target_fps, "fps"_a)
         .def_prop_rw("target_fps", &engine::EngineApp::target_fps, &engine::EngineApp::set_target_fps)
+        .def("set_vsync", &engine::EngineApp::set_vsync, "enabled"_a)
+        .def_prop_rw("vsync", &engine::EngineApp::vsync, &engine::EngineApp::set_vsync)
+        .def_prop_ro("fps", &engine::EngineApp::fps)
+        .def_prop_ro("frame_time_ms", &engine::EngineApp::frame_time_ms)
 
         // Fog & Tone Mapping
         .def("set_linear_fog", [](engine::EngineApp& app, const nb::object& color, float near_dist, float far_dist) {

@@ -340,3 +340,62 @@ def test_player_reset():
     assert player.score == 0
     assert player.highest_z == 0
     assert player.death_reason is None
+
+
+def test_voxel_duck_composite_character():
+    """Verify procedural composite voxel duck contains all handcrafted anatomy parts."""
+    class MockScene:
+        def __init__(self):
+            self.created_boxes = []
+
+        def create_entity(self, name=""):
+            class MockEntity:
+                def __init__(self, name):
+                    self.name = name
+                    self.material = None
+                    self.parent = None
+                    class MockT:
+                        def __init__(self):
+                            self.position = (0, 0, 0)
+                            self.rotation = (0, 0, 0)
+                            self.scale = (1, 1, 1)
+                    self.transform = MockT()
+            return MockEntity(name)
+
+        def create_box(self, size=(1, 1, 1), color=None, material=None, name=""):
+            ent = self.create_entity(name)
+            ent.size = size
+            ent.color = color
+            ent.material = material
+            self.created_boxes.append(ent)
+            return ent
+
+    scene = MockScene()
+    player = PlayerController(scene=scene)
+    assert player.is_voxel_duck is True
+    assert player.entity is not None
+    assert player.entity.name == "VoxelDuck"
+
+    # Verify all anatomical parts are created: body, head, beak, eyes, pupils, wings, tail, feet
+    part_names = [p.name for p in player.voxel_parts]
+    expected_parts = [
+        "DuckBody", "DuckHead", "DuckBeak", "DuckEyeL", "DuckEyeR",
+        "DuckPupilL", "DuckPupilR", "DuckWingL", "DuckWingR", "DuckTail",
+        "DuckFootL", "DuckFootR"
+    ]
+    for exp in expected_parts:
+        assert exp in part_names, f"Missing duck part {exp} in voxel duck"
+
+
+def test_app_vsync_and_frame_timing_properties():
+    """Verify VSync configuration and frame diagnostics on App."""
+    try:
+        import VelocityEngine as ve
+        app = ve.App(title="VSyncTest", width=640, height=480, vsync=True)
+        assert app.vsync is True
+        app.vsync = False
+        assert app.vsync is False
+        assert isinstance(app.fps, (int, float))
+        assert isinstance(app.frame_time_ms, (int, float))
+    except ImportError:
+        pass

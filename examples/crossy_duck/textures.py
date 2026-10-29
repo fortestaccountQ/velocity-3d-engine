@@ -114,6 +114,14 @@ MATERIAL_PRESETS: Dict[str, MaterialConfig] = {
         uv_scale=(1.0, 1.0),
         is_pixel_art=True,
     ),
+    "car_paint": MaterialConfig(
+        name="vehicle",
+        roughness=0.25,
+        metallic=0.15,
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        uv_scale=(1.0, 1.0),
+        is_pixel_art=True,
+    ),
     "car_grille": MaterialConfig(
         name="car_grille",
         roughness=0.30,
@@ -124,8 +132,8 @@ MATERIAL_PRESETS: Dict[str, MaterialConfig] = {
     ),
     "vehicle": MaterialConfig(
         name="vehicle",
-        roughness=0.30,
-        metallic=0.60,
+        roughness=0.25,
+        metallic=0.15,
         base_color=(1.0, 1.0, 1.0, 1.0),
         uv_scale=(1.0, 1.0),
         is_pixel_art=True,
@@ -709,74 +717,45 @@ def create_vehicle_image(size: int = 64, seed: int = 321) -> Image.Image:
 
 
 def create_duck_image(size: int = 64, seed: int = 4242) -> Image.Image:
-    """Generate adorable voxel duck feather pattern with yellow tones, beak orange, and eyes."""
+    """Generate authentic stylized voxel duck plumage/feather texture.
+
+    Creates a warm, radiant golden-yellow down feather pattern with soft
+    quilted micro-voxel scallops, subtle sunlight highlights, and depth shading.
+    Face elements (eyes, bill) are modeled as discrete 3D voxel geometry
+    to ensure 100% distortion-free rendering across all 6 faces of 3D boxes.
+    """
+    rng = np.random.RandomState(seed)
     arr = np.zeros((size, size, 4), dtype=np.uint8)
 
-    # 1. Base rubber-duck sunny yellow
-    arr[..., 0] = 254
-    arr[..., 1] = 214
-    arr[..., 2] = 16
-    arr[..., 3] = 255
+    # 1. Base vibrant duck plumage yellow (#fbc02d / #f59e0b)
+    arr[..., 0] = 252  # R
+    arr[..., 1] = 208  # G
+    arr[..., 2] = 24   # B
+    arr[..., 3] = 255  # A
 
-    # 2. Feather scallop shading across lower body
-    feather_y_start = int(size * 0.44)
-    y, x = np.mgrid[feather_y_start:size, :size]
-    scallop_w = size / 6.0
-    scallop_h = size / 8.0
-    scallop = np.sin(x * (2.0 * np.pi / scallop_w)) * np.cos((y - feather_y_start) * (2.0 * np.pi / scallop_h))
+    # 2. Procedural feather scallop down pattern
+    y, x = np.mgrid[:size, :size]
+    freq_x = 2.0 * np.pi * 4.0 / size
+    freq_y = 2.0 * np.pi * 6.0 / size
+    # Subtle scalloped feather waves
+    scallop = np.sin(x * freq_x + np.cos(y * freq_y * 0.5) * 0.8) * np.cos(y * freq_y)
 
-    body_r = arr[feather_y_start:, :, 0]
-    body_g = arr[feather_y_start:, :, 1]
-    body_b = arr[feather_y_start:, :, 2]
+    # 3. Soft highlights on crown of feathers (#fff176 / #fef08a)
+    high_mask = scallop > 0.40
+    arr[high_mask, 0] = 255
+    arr[high_mask, 1] = 236
+    arr[high_mask, 2] = 92
 
-    high_mask = scallop > 0.38
-    shade_mask = scallop < -0.38
+    # 4. Rich warm shadow between feather rows (#d97706 / #e69500)
+    shade_mask = scallop < -0.40
+    arr[shade_mask, 0] = 230
+    arr[shade_mask, 1] = 165
+    arr[shade_mask, 2] = 10
 
-    body_r[high_mask] = 255
-    body_g[high_mask] = 238
-    body_b[high_mask] = 96
-
-    body_r[shade_mask] = 234
-    body_g[shade_mask] = 172
-    body_b[shade_mask] = 12
-
-    # 3. Duck Face Details
-    eye_r = max(2, size // 18)
-    eye_y = int(size * 0.22)
-    left_eye_x = int(size * 0.32)
-    right_eye_x = int(size * 0.68)
-
-    for ex in [left_eye_x, right_eye_x]:
-        # Dark pupil
-        arr[eye_y - eye_r : eye_y + eye_r + 1, ex - eye_r : ex + eye_r + 1, :3] = [18, 18, 22]
-        # White catchlight
-        cl_r = max(1, eye_r // 2)
-        arr[eye_y - eye_r : eye_y - eye_r + cl_r, ex - eye_r : ex - eye_r + cl_r, :3] = [255, 255, 255]
-
-    # Rosy cheeks
-    blush_r = max(2, size // 14)
-    blush_y = int(size * 0.28)
-    for bx in [int(size * 0.22), int(size * 0.78)]:
-        arr[blush_y - blush_r : blush_y + blush_r, bx - blush_r : bx + blush_r, :3] = [255, 150, 160]
-
-    # Vibrant orange beak
-    beak_w = max(6, int(size * 0.28))
-    beak_h = max(4, int(size * 0.16))
-    beak_x0 = (size - beak_w) // 2
-    beak_x1 = beak_x0 + beak_w
-    beak_y0 = int(size * 0.26)
-    beak_y1 = beak_y0 + beak_h
-
-    arr[beak_y0:beak_y1, beak_x0:beak_x1, :3] = [255, 110, 0]
-    arr[beak_y0, beak_x0:beak_x1, :3] = [255, 162, 46]
-    arr[beak_y1 - 1, beak_x0:beak_x1, :3] = [210, 76, 0]
-
-    # Nostril dots
-    nx1 = size // 2 - max(1, size // 32)
-    nx2 = size // 2 + max(1, size // 32)
-    ny = beak_y0 + max(1, beak_h // 4)
-    arr[ny, nx1, :3] = [180, 52, 0]
-    arr[ny, nx2, :3] = [180, 52, 0]
+    # 5. Micro-grain voxel texture variation for authentic arcade feel
+    grain = rng.uniform(-4.0, 4.0, (size, size))
+    for c in range(3):
+        arr[..., c] = np.clip(arr[..., c].astype(float) + grain, 0, 255).astype(np.uint8)
 
     return Image.fromarray(arr)
 

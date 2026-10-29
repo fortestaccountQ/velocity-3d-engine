@@ -26,6 +26,7 @@ class App:
         clear_color: Optional[Union[Sequence[float], str, Color]] = None,
         target_fps: int = 0,
         show_crosshair: bool = True,
+        vsync: bool = True,
     ) -> None:
         """Create and configure a new engine window application."""
         self._core = _core.EngineApp(title, width, height)
@@ -43,7 +44,9 @@ class App:
         self._prev_mouse_down = [False] * 8
         self._fog: Optional[Any] = None
 
-        # Frame limiter & crosshair config
+        # VSync & Frame limiter config
+        if hasattr(self._core, "vsync"):
+            self._core.vsync = bool(vsync)
         if target_fps != 0:
             self._core.target_fps = int(target_fps)
         if not show_crosshair:
@@ -380,6 +383,30 @@ class App:
     def set_target_fps(self, fps: int) -> None:
         """Set target frames per second limiter (0 for uncapped)."""
         self._core.set_target_fps(int(fps))
+
+    @property
+    def vsync(self) -> bool:
+        """Vertical Synchronization (VSync) enable state."""
+        return getattr(self._core, "vsync", True)
+
+    @vsync.setter
+    def vsync(self, value: bool) -> None:
+        if hasattr(self._core, "vsync"):
+            self._core.vsync = bool(value)
+
+    def set_vsync(self, enabled: bool) -> None:
+        """Enable or disable VSync."""
+        self.vsync = enabled
+
+    @property
+    def fps(self) -> float:
+        """Current smoothed frames per second."""
+        return getattr(self._core, "fps", 0.0)
+
+    @property
+    def frame_time_ms(self) -> float:
+        """Current smoothed frame time in milliseconds."""
+        return getattr(self._core, "frame_time_ms", 0.0)
 
     @property
     def debug_hitboxes(self) -> bool:

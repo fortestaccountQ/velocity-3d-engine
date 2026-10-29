@@ -22,6 +22,7 @@ struct WindowConfig {
     int height = 600;
     // Daylight sky-blue #6ea0d0 (RGB [0.431, 0.627, 0.823])
     std::array<float, 4> clear_color = { 0.43137f, 0.62745f, 0.82353f, 1.0f };
+    bool vsync = true;
 };
 
 class EngineApp {
@@ -76,9 +77,13 @@ public:
     void set_hud_hint(const std::string& hint) { hud_hint_ = hint; }
     std::string hud_hint() const { return hud_hint_; }
 
-    // Frame pacing / Target FPS limiter
+    // Frame pacing / Target FPS limiter & VSync
     void set_target_fps(int fps) { target_fps_ = fps; }
     int target_fps() const { return target_fps_; }
+    void set_vsync(bool enabled) { config_.vsync = enabled; }
+    bool vsync() const { return config_.vsync; }
+    float fps() const { return current_fps_; }
+    float frame_time_ms() const { return current_fps_ > 0.0f ? (1000.0f / current_fps_) : 0.0f; }
 
     void set_debug_hitboxes(bool enable) { show_debug_hitboxes_ = enable; }
     void toggle_debug_hitboxes() { show_debug_hitboxes_ = !show_debug_hitboxes_; }

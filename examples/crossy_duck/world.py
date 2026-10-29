@@ -283,44 +283,93 @@ class CarObstacle(BaseObstacle):
 
         if scene is not None:
             veh_mat = _get_mat(self.material_registry, "vehicle")
-            # 1. Main chassis
+            grille_mat = _get_mat(self.material_registry, "car_grille")
+            facing_dir = 1.0 if speed >= 0 else -1.0
+
+            # 1. Main chassis / body: vibrant glossy car paint
             self.entity = scene.create_box(
-                size=(width, 0.45, depth),
+                size=(width, 0.44, depth),
                 position=(self.x, self.y, self.z),
-                color=car_col if veh_mat is None else WHITE,
+                color=car_col,
                 material=veh_mat,
                 cast_shadows=True,
                 name="CarChassis",
             )
-            # 2. Cabin top
+
+            # 2. Cabin top (tinted windshield and windows)
+            cabin_ox = -facing_dir * 0.08
             cabin = scene.create_box(
-                size=(width * 0.55, 0.35, depth * 0.8),
-                position=(self.x, self.y + 0.38, self.z),
+                size=(width * 0.54, 0.35, depth * 0.82),
+                position=(self.x + cabin_ox, self.y + 0.36, self.z),
                 color=COLOR_CABIN_WINDOW,
                 cast_shadows=True,
                 name="CarCabin",
             )
-            self.sub_entities.append((cabin, (0.0, 0.38, 0.0)))
+            self.sub_entities.append((cabin, (cabin_ox, 0.36, 0.0)))
 
-            # 3. Headlights (in direction of movement)
-            facing_dir = 1.0 if speed >= 0 else -1.0
-            hl_x = facing_dir * (width * 0.48)
+            # 3. Dedicated Front Grille Decal Plate (facing direction of travel)
+            grille_ox = facing_dir * (width * 0.50 + 0.01)
+            grille = scene.create_box(
+                size=(0.04, 0.34, depth * 0.86),
+                position=(self.x + grille_ox, self.y, self.z),
+                color=WHITE if grille_mat is not None else Color.from_hex("#334155"),
+                material=grille_mat,
+                cast_shadows=False,
+                name="CarGrilleDecal",
+            )
+            self.sub_entities.append((grille, (grille_ox, 0.0, 0.0)))
+
+            # 4. Front Headlights (in direction of movement)
+            hl_x = facing_dir * (width * 0.50 + 0.02)
             hl1 = scene.create_box(
-                size=(0.12, 0.15, 0.18),
-                position=(self.x + hl_x, self.y, self.z - 0.22),
+                size=(0.06, 0.12, 0.18),
+                position=(self.x + hl_x, self.y + 0.04, self.z - 0.24),
                 color=COLOR_HEADLIGHT,
                 cast_shadows=False,
                 name="Headlight1",
             )
             hl2 = scene.create_box(
-                size=(0.12, 0.15, 0.18),
-                position=(self.x + hl_x, self.y, self.z + 0.22),
+                size=(0.06, 0.12, 0.18),
+                position=(self.x + hl_x, self.y + 0.04, self.z + 0.24),
                 color=COLOR_HEADLIGHT,
                 cast_shadows=False,
                 name="Headlight2",
             )
-            self.sub_entities.append((hl1, (hl_x, 0.0, -0.22)))
-            self.sub_entities.append((hl2, (hl_x, 0.0, 0.22)))
+            self.sub_entities.append((hl1, (hl_x, 0.04, -0.24)))
+            self.sub_entities.append((hl2, (hl_x, 0.04, 0.24)))
+
+            # 5. Rear Taillights (red brake markers)
+            rear_x = -facing_dir * (width * 0.50 + 0.02)
+            tl_col = Color.from_hex("#dc2626")
+            tl1 = scene.create_box(
+                size=(0.05, 0.10, 0.16),
+                position=(self.x + rear_x, self.y + 0.04, self.z - 0.24),
+                color=tl_col,
+                cast_shadows=False,
+                name="Taillight1",
+            )
+            tl2 = scene.create_box(
+                size=(0.05, 0.10, 0.16),
+                position=(self.x + rear_x, self.y + 0.04, self.z + 0.24),
+                color=tl_col,
+                cast_shadows=False,
+                name="Taillight2",
+            )
+            self.sub_entities.append((tl1, (rear_x, 0.04, -0.24)))
+            self.sub_entities.append((tl2, (rear_x, 0.04, 0.24)))
+
+            # 6. Wheels (4 dark corner wheels)
+            wheel_col = Color.from_hex("#0f172a")
+            for wx_dir in (0.32, -0.32):
+                for wz_dir in (0.42, -0.42):
+                    wheel = scene.create_box(
+                        size=(0.36, 0.20, 0.08),
+                        position=(self.x + wx_dir * width, self.y - 0.14, self.z + wz_dir * depth),
+                        color=wheel_col,
+                        cast_shadows=False,
+                        name="CarWheel",
+                    )
+                    self.sub_entities.append((wheel, (wx_dir * width, -0.14, wz_dir * depth)))
 
 
 class TruckObstacle(BaseObstacle):
@@ -360,6 +409,7 @@ class TruckObstacle(BaseObstacle):
 
         if scene is not None:
             veh_mat = _get_mat(self.material_registry, "vehicle")
+            grille_mat = _get_mat(self.material_registry, "car_grille")
             facing_dir = 1.0 if speed >= 0 else -1.0
             cargo_w = width * 0.65
             cab_w = width * 0.35
@@ -367,45 +417,95 @@ class TruckObstacle(BaseObstacle):
             cargo_ox = -facing_dir * (cab_w * 0.5)
             cab_ox = facing_dir * (cargo_w * 0.5)
 
-            # 1. Main cargo container
+            # 1. Main cargo container (clean freight white with crisp shadow)
             self.entity = scene.create_box(
                 size=(cargo_w, height, depth),
                 position=(self.x + cargo_ox, self.y, self.z),
-                color=COLOR_TRUCK_CARGO if veh_mat is None else WHITE,
+                color=COLOR_TRUCK_CARGO,
                 material=veh_mat,
                 cast_shadows=True,
                 name="TruckCargo",
             )
 
-            # 2. Cab
+            # 2. Cab with glossy paint
             cab = scene.create_box(
                 size=(cab_w, height * 0.75, depth * 0.88),
                 position=(self.x + cab_ox, self.y - 0.12, self.z),
-                color=cab_col if veh_mat is None else WHITE,
+                color=cab_col,
                 material=veh_mat,
                 cast_shadows=True,
                 name="TruckCab",
             )
             self.sub_entities.append((cab, (cab_ox, -0.12, 0.0)))
 
-            # 3. Headlights
-            hl_x = cab_ox + facing_dir * (cab_w * 0.48)
+            # 3. Dedicated Front Grille Decal Plate on Cab Face
+            grille_ox = cab_ox + facing_dir * (cab_w * 0.50 + 0.01)
+            grille = scene.create_box(
+                size=(0.04, height * 0.60, depth * 0.82),
+                position=(self.x + grille_ox, self.y - 0.15, self.z),
+                color=WHITE if grille_mat is not None else Color.from_hex("#334155"),
+                material=grille_mat,
+                cast_shadows=False,
+                name="TruckGrilleDecal",
+            )
+            self.sub_entities.append((grille, (grille_ox, -0.15, 0.0)))
+
+            # 4. Headlights
+            hl_x = cab_ox + facing_dir * (cab_w * 0.50 + 0.02)
             hl1 = scene.create_box(
-                size=(0.12, 0.18, 0.18),
-                position=(self.x + hl_x, self.y - 0.2, self.z - 0.25),
+                size=(0.06, 0.14, 0.18),
+                position=(self.x + hl_x, self.y - 0.18, self.z - 0.25),
                 color=COLOR_HEADLIGHT,
                 cast_shadows=False,
                 name="TruckHeadlight1",
             )
             hl2 = scene.create_box(
-                size=(0.12, 0.18, 0.18),
-                position=(self.x + hl_x, self.y - 0.2, self.z + 0.25),
+                size=(0.06, 0.14, 0.18),
+                position=(self.x + hl_x, self.y - 0.18, self.z + 0.25),
                 color=COLOR_HEADLIGHT,
                 cast_shadows=False,
                 name="TruckHeadlight2",
             )
-            self.sub_entities.append((hl1, (hl_x, -0.2, -0.25)))
-            self.sub_entities.append((hl2, (hl_x, -0.2, 0.25)))
+            self.sub_entities.append((hl1, (hl_x, -0.18, -0.25)))
+            self.sub_entities.append((hl2, (hl_x, -0.18, 0.25)))
+
+            # 5. Rear Taillights
+            rear_x = cargo_ox - facing_dir * (cargo_w * 0.50 + 0.02)
+            tl_col = Color.from_hex("#dc2626")
+            tl1 = scene.create_box(
+                size=(0.05, 0.12, 0.16),
+                position=(self.x + rear_x, self.y - 0.25, self.z - 0.28),
+                color=tl_col,
+                cast_shadows=False,
+                name="TruckTaillight1",
+            )
+            tl2 = scene.create_box(
+                size=(0.05, 0.12, 0.16),
+                position=(self.x + rear_x, self.y - 0.25, self.z + 0.28),
+                color=tl_col,
+                cast_shadows=False,
+                name="TruckTaillight2",
+            )
+            self.sub_entities.append((tl1, (rear_x, -0.25, -0.28)))
+            self.sub_entities.append((tl2, (rear_x, -0.25, 0.28)))
+
+            # 6. Wheels (6 heavy wheels for cargo truck)
+            wheel_col = Color.from_hex("#0f172a")
+            wheel_x_positions = [
+                cab_ox + facing_dir * (cab_w * 0.20),
+                cargo_ox - facing_dir * (cargo_w * 0.15),
+                cargo_ox - facing_dir * (cargo_w * 0.38),
+            ]
+            for wx in wheel_x_positions:
+                for wz_dir in (0.42, -0.42):
+                    wheel = scene.create_box(
+                        size=(0.42, 0.24, 0.08),
+                        position=(self.x + wx, self.y - 0.42, self.z + wz_dir * depth),
+                        color=wheel_col,
+                        cast_shadows=False,
+                        name="TruckWheel",
+                    )
+                    self.sub_entities.append((wheel, (wx, -0.42, wz_dir * depth)))
 
 
 class LogObstacle(BaseObstacle):

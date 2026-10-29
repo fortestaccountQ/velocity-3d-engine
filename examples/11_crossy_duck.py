@@ -341,12 +341,13 @@ def main() -> None:
     print("  [ESC]        : Exit to Desktop")
     print("=" * 78)
 
-    # 1. Initialize Engine Window
+    # 1. Initialize Engine Window with Smooth VSync Enabled
     app = App(
         title="Crossy Duck 3D",
         width=1280,
         height=720,
         clear_color=Color.from_hex("#70b0e0"),  # Vibrant daylight sky
+        vsync=True,
     )
 
     # 2. Setup Lighting & Atmosphere
@@ -391,16 +392,20 @@ def main() -> None:
         return down and not was_down
 
     frame_count = 0
+    last_stream_z = -999
 
     # 4. Main Game Loop Callback
     @app.on_update
     def update(dt: float) -> None:
-        nonlocal frame_count
+        nonlocal frame_count, last_stream_z
         frame_count += 1
+
+        # Smooth frame time clamping (prevents OS context switch hitches from jumping physics)
+        clamped_dt = min(dt, 0.033)
 
         # Animate water UVs and stylized materials
         if registry is not None:
-            registry.update_animated_materials(dt)
+            registry.update_animated_materials(clamped_dt)
 
         # ESC to close
         if app.input.is_key_down(Key.ESCAPE):
@@ -411,6 +416,7 @@ def main() -> None:
         if is_just_pressed(Key.R):
             player.reset()
             world.reset()
+            last_stream_z = -999
             iso_camera.snap_to(player)
             print("[Game] Restarted!")
 
@@ -425,18 +431,20 @@ def main() -> None:
             elif is_just_pressed(Key.D) or is_just_pressed(Key.RIGHT):
                 player.hop(1, 0)
 
-        # Update World Streaming
-        world.update(dt)
-        world.generate_ahead(player.grid_z, lookahead=20)
-        world.prune_behind(player.grid_z, keep_behind=6)
+        # Update World Streaming (amortized: only when player advances grid cell)
+        world.update(clamped_dt)
+        if player.grid_z != last_stream_z:
+            last_stream_z = player.grid_z
+            world.generate_ahead(player.grid_z, lookahead=22)
+            world.prune_behind(player.grid_z, keep_behind=8)
 
         # Update Player & Physics
         current_row = world.get_row(player.grid_z)
-        player.update(dt, current_row)
+        player.update(clamped_dt, current_row)
 
         # Update Camera & HUD
-        iso_camera.update(dt, player)
-        hud.render(dt, player)
+        iso_camera.update(clamped_dt, player)
+        hud.render(clamped_dt, player)
         app.set_hud_score(player.score)
 
         # Automated CI Test Flag (--test)

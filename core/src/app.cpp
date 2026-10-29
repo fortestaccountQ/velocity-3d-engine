@@ -1299,8 +1299,8 @@ void EngineApp::run() {
     desc.window_title = config_.title.c_str();
     desc.logger.func = slog_func;
     desc.icon.sokol_default = true;
-    desc.disable_vsync = true;
-    desc.swap_interval = 0;
+    desc.disable_vsync = !config_.vsync;
+    desc.swap_interval = config_.vsync ? 1 : 0;
 
     running_ = true;
     sapp_run(&desc);
