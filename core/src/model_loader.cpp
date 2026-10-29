@@ -4,6 +4,7 @@
 #include "stb_image.h"
 
 #include "engine/model_loader.hpp"
+#include "engine/asset_io.hpp"
 #include "engine/scene.hpp"
 #include "engine/animation.hpp"
 #include "engine/skinned_mesh.hpp"
@@ -17,6 +18,16 @@
 namespace engine {
 
 std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& filepath) {
+    std::string ext = std::filesystem::path(filepath).extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    if (ext == ".obj") {
+        return load_obj(scene, filepath);
+    } else if (ext == ".stl") {
+        return load_stl(scene, filepath);
+    } else if (ext == ".ply") {
+        return load_ply(scene, filepath);
+    }
+
     cgltf_options options{};
     cgltf_data* data = nullptr;
     cgltf_result result = cgltf_parse_file(&options, filepath.c_str(), &data);

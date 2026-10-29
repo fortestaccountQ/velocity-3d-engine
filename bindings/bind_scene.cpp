@@ -8,6 +8,7 @@
 #include "engine/entity.hpp"
 #include "engine/model.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/asset_io.hpp"
 #include "engine/scene.hpp"
 #include "engine/physics.hpp"
 #include "engine/cube_texture.hpp"
@@ -91,7 +92,40 @@ void bind_scene(nb::module_& m) {
                     (void)child.world_matrix();
                 });
             }
-        }, "update_children"_a = true);
+        }, "update_children"_a = true)
+        .def("on", [](engine::Node3D& n, const std::string& event_name, nb::callable cb) {
+            n.on(event_name, [cb](const std::string& ev, void* data) {
+                nb::gil_scoped_acquire gil;
+                nb::object data_obj = nb::none();
+                if (data && (ev == "click" || ev == "hover_enter")) {
+                    data_obj = nb::cast(*static_cast<engine::RaycastHit*>(data));
+                }
+                try {
+                    cb(ev, data_obj);
+                } catch (...) {
+                    try {
+                        cb(ev);
+                    } catch (...) {
+                        try {
+                            cb();
+                        } catch (...) {}
+                    }
+                }
+            });
+        }, "event_name"_a, "callback"_a)
+        .def("emit", [](engine::Node3D& n, const std::string& event_name, nb::object data) {
+            if (data.is_none()) {
+                n.emit(event_name, nullptr);
+            } else if (nb::isinstance<engine::RaycastHit>(data)) {
+                auto* hit_ptr = nb::cast<engine::RaycastHit*>(data);
+                n.emit(event_name, hit_ptr);
+            } else {
+                n.emit(event_name, nullptr);
+            }
+        }, "event_name"_a, "data"_a = nb::none())
+        .def("has_listener", &engine::Node3D::has_listener, "event_name"_a)
+        .def("off", &engine::Node3D::off, "event_name"_a)
+        .def("clear_listeners", &engine::Node3D::clear_listeners);
 
     nb::class_<engine::Group, engine::Node3D>(m, "Group")
         .def(nb::init<const std::string&>(), "name"_a = "Group");
@@ -453,6 +487,18 @@ void bind_scene(nb::module_& m) {
             return s.create_cylinder(radius, height, segments, capped, col);
         }, "radius"_a = 0.5f, "height"_a = 2.0f, "segments"_a = 32, "capped"_a = true, "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
         .def("load_model", &engine::Scene::load_model, "filepath"_a)
+        .def("load_obj", [](engine::Scene& s, const std::string& filepath) {
+            return engine::load_obj(s, filepath);
+        }, "filepath"_a)
+        .def("load_stl", [](engine::Scene& s, const std::string& filepath) {
+            return engine::load_stl(s, filepath);
+        }, "filepath"_a)
+        .def("load_ply", [](engine::Scene& s, const std::string& filepath) {
+            return engine::load_ply(s, filepath);
+        }, "filepath"_a)
+        .def("export_gltf", [](engine::Scene& s, const std::string& filepath) {
+            return engine::export_gltf(s, filepath);
+        }, "filepath"_a)
         .def("create_plane", &engine::Scene::create_plane,
             "size"_a = 10.0f, "uv_tiling"_a = 5.0f, "material"_a = nullptr)
         .def("create_entity", &engine::Scene::create_entity, "name"_a = "Entity")
@@ -831,4 +877,28 @@ void bind_scene(nb::module_& m) {
         .def("bind", &engine::SkinnedMesh::bind, "skeleton"_a, "bind_matrix"_a = glm::mat4(1.0f))
         .def("pose", &engine::SkinnedMesh::pose)
         .def("compute_cpu_skinning", &engine::SkinnedMesh::compute_cpu_skinning);
+
+    // Module-level Exporters & Loaders
+    m.def("export_gltf", &engine::export_gltf, "scene"_a, "filepath"_a);
+    m.def("load_obj", &engine::load_obj, "scene"_a, "filepath"_a);
+    m.def("load_stl", &engine::load_stl, "scene"_a, "filepath"_a);
+    m.def("load_ply", &engine::load_ply, "scene"_a, "filepath"_a);
+
+    // AssetCache Singleton
+    nb::class_<engine::AssetCache>(m, "AssetCache")
+        .def_static("instance", &engine::AssetCache::instance, nb::rv_policy::reference)
+        .def("get_mesh", &engine::AssetCache::get_mesh, "path"_a)
+        .def("cache_mesh", &engine::AssetCache::cache_mesh, "path"_a, "mesh"_a)
+        .def("get_texture", &engine::AssetCache::get_texture, "path"_a)
+        .def("cache_texture", &engine::AssetCache::cache_texture, "path"_a, "texture"_a)
+        .def("get_model", &engine::AssetCache::get_model, "path"_a)
+        .def("cache_model", &engine::AssetCache::cache_model, "path"_a, "model"_a)
+        .def("load_mesh", &engine::AssetCache::load_mesh, "path"_a)
+        .def("load_texture", &engine::AssetCache::load_texture, "path"_a, "srgb"_a = true)
+        .def("load_model", &engine::AssetCache::load_model, "scene"_a, "path"_a)
+        .def("has", &engine::AssetCache::has, "path"_a)
+        .def("remove", &engine::AssetCache::remove, "path"_a)
+        .def("clear", &engine::AssetCache::clear)
+        .def("size", &engine::AssetCache::size)
+        .def("__len__", &engine::AssetCache::size);
 }

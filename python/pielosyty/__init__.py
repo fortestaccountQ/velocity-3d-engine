@@ -160,6 +160,20 @@ Points = getattr(_core, "Points", None)
 Particle = getattr(_core, "Particle", None)
 ParticleEmitter = getattr(_core, "ParticleEmitter", None)
 
+# Phase 7: Loaders, Exporters & AssetCache
+load_obj_mesh = getattr(_core, "load_obj_mesh", None)
+load_stl_mesh = getattr(_core, "load_stl_mesh", None)
+load_ply_mesh = getattr(_core, "load_ply_mesh", None)
+load_mesh_file = getattr(_core, "load_mesh_file", None)
+load_obj = getattr(_core, "load_obj", None)
+load_stl = getattr(_core, "load_stl", None)
+load_ply = getattr(_core, "load_ply", None)
+export_obj = getattr(_core, "export_obj", None)
+export_stl = getattr(_core, "export_stl", None)
+export_gltf = getattr(_core, "export_gltf", None)
+save_screenshot = getattr(_core, "save_screenshot", None)
+AssetCache = getattr(_core, "AssetCache", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -476,4 +490,17 @@ __all__ = [
     "Points",
     "Particle",
     "ParticleEmitter",
+    # Phase 7: Loaders, Exporters & AssetCache
+    "load_obj_mesh",
+    "load_stl_mesh",
+    "load_ply_mesh",
+    "load_mesh_file",
+    "load_obj",
+    "load_stl",
+    "load_ply",
+    "export_obj",
+    "export_stl",
+    "export_gltf",
+    "save_screenshot",
+    "AssetCache",
 ]

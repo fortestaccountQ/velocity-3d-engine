@@ -5,6 +5,7 @@
 #include <functional>
 #include <chrono>
 #include <memory>
+#include <unordered_map>
 
 #include <glm/glm.hpp>
 #include "engine/math_types.hpp"
@@ -173,6 +174,18 @@ public:
     // CubeCamera rendering
     void render_cube_camera(Scene& scene, CubeCamera& cam);
 
+    // Screenshot
+    bool save_screenshot(const std::string& filepath);
+
+    // 3D Mouse picking dispatch helpers
+    RaycastHit dispatch_mouse_click(float mouse_x, float mouse_y);
+    void dispatch_mouse_move(float mouse_x, float mouse_y);
+
+    // Event system (e.g. "resize")
+    using AppEventCallback = std::function<void(const std::string&, void*)>;
+    void on(const std::string& event_name, AppEventCallback callback);
+    void emit(const std::string& event_name, void* data = nullptr);
+
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
@@ -291,6 +304,10 @@ private:
 
     // EffectComposer post-processing
     std::shared_ptr<EffectComposer> composer_{nullptr};
+
+    // Event system & 3D picking
+    std::unordered_map<std::string, std::vector<AppEventCallback>> app_event_listeners_{};
+    std::shared_ptr<Node3D> hovered_node_{nullptr};
 };
 
 } // namespace engine

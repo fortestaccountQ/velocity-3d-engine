@@ -1,5 +1,6 @@
 #include "bind_common.hpp"
 #include "engine/app.hpp"
+#include "engine/asset_io.hpp"
 #include "engine/input.hpp"
 #include "engine/audio.hpp"
 #include "engine/editor.hpp"
@@ -169,14 +170,20 @@ void bind_app(nb::module_& m) {
     nb::class_<engine::EditorManager>(m, "EditorManager")
         .def_rw("show_hierarchy", &engine::EditorManager::show_hierarchy)
         .def_rw("show_inspector", &engine::EditorManager::show_inspector)
+        .def_rw("show_postprocess", &engine::EditorManager::show_postprocess)
         .def_rw("show_perf_overlay", &engine::EditorManager::show_perf_overlay)
         .def_prop_rw("gizmo_operation", &engine::EditorManager::gizmo_operation, &engine::EditorManager::set_gizmo_operation)
-        .def("select_entity", &engine::EditorManager::select_entity, "entity"_a)
-        .def("set_selected_entity", &engine::EditorManager::select_entity, "entity"_a)
+        .def("select_entity", &engine::EditorManager::select_entity, "entity"_a.none() = nb::none())
+        .def("set_selected_entity", &engine::EditorManager::select_entity, "entity"_a.none() = nb::none())
+        .def("select_node", &engine::EditorManager::select_node, "node"_a.none() = nb::none())
+        .def_prop_rw("selected_node", &engine::EditorManager::selected_node, &engine::EditorManager::select_node)
         .def_prop_rw("selected_entity",
             &engine::EditorManager::selected_entity,
             &engine::EditorManager::select_entity)
-        .def("enable_toggle_hotkey", &engine::EditorManager::enable_toggle_hotkey, "enable"_a, "key"_a = engine::Key::F2);
+        .def("save_scene_to_script", &engine::EditorManager::save_scene_to_script, "filepath"_a = "exported_scene.py")
+        .def("enable_toggle_hotkey", &engine::EditorManager::enable_toggle_hotkey, "enable"_a, "key"_a = engine::Key::F2)
+        .def("is_toggle_hotkey_enabled", &engine::EditorManager::is_toggle_hotkey_enabled)
+        .def("toggle_hotkey", &engine::EditorManager::toggle_hotkey);
 
     // -----------------------------------------------------------------------
     // EngineApp
@@ -318,5 +325,29 @@ void bind_app(nb::module_& m) {
         .def("set_shadow_ortho_size", &engine::EngineApp::set_shadow_ortho_size, "size"_a)
         .def("set_shadow_pcf_16_tap", &engine::EngineApp::set_shadow_pcf_16_tap, "enable"_a)
         .def("set_shadow_texel_snapping", &engine::EngineApp::set_shadow_texel_snapping, "enable"_a)
-        .def("render_cube_camera", &engine::EngineApp::render_cube_camera, "scene"_a, "camera"_a);
+        .def("render_cube_camera", &engine::EngineApp::render_cube_camera, "scene"_a, "camera"_a)
+        .def("save_screenshot", &engine::EngineApp::save_screenshot, "filepath"_a)
+        .def("dispatch_mouse_click", &engine::EngineApp::dispatch_mouse_click, "mouse_x"_a, "mouse_y"_a)
+        .def("dispatch_mouse_move", &engine::EngineApp::dispatch_mouse_move, "mouse_x"_a, "mouse_y"_a)
+        .def("on", [](engine::EngineApp& app, const std::string& event_name, nb::callable cb) {
+            app.on(event_name, [cb](const std::string& ev, void* data) {
+                nb::gil_scoped_acquire gil;
+                try {
+                    cb(ev, data);
+                } catch (...) {
+                    try {
+                        cb(ev);
+                    } catch (...) {
+                        try {
+                            cb();
+                        } catch (...) {}
+                    }
+                }
+            });
+        }, "event_name"_a, "callback"_a)
+        .def("emit", [](engine::EngineApp& app, const std::string& event_name) {
+            app.emit(event_name, nullptr);
+        }, "event_name"_a);
+
+    m.def("save_screenshot", &engine::save_screenshot, "app"_a, "filepath"_a);
 }

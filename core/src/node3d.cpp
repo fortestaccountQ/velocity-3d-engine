@@ -203,4 +203,35 @@ AABB Node3D::world_aabb() const {
     return AABB{ world_position(), world_position() };
 }
 
+void Node3D::on(const std::string& event_name, EventCallback callback) {
+    if (callback) {
+        event_listeners_[event_name].push_back(std::move(callback));
+    }
+}
+
+void Node3D::emit(const std::string& event_name, void* data) {
+    auto it = event_listeners_.find(event_name);
+    if (it != event_listeners_.end()) {
+        auto callbacks = it->second;
+        for (const auto& cb : callbacks) {
+            if (cb) {
+                cb(event_name, data);
+            }
+        }
+    }
+}
+
+bool Node3D::has_listener(const std::string& event_name) const {
+    auto it = event_listeners_.find(event_name);
+    return (it != event_listeners_.end() && !it->second.empty());
+}
+
+void Node3D::off(const std::string& event_name) {
+    event_listeners_.erase(event_name);
+}
+
+void Node3D::clear_listeners() {
+    event_listeners_.clear();
+}
+
 } // namespace engine

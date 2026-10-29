@@ -6,6 +6,7 @@
 #include "engine/transform.hpp"
 #include "engine/model.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/asset_io.hpp"
 #include "engine/sprite.hpp"
 #include "engine/points.hpp"
 #include "engine/particle.hpp"
@@ -424,6 +425,9 @@ void bind_geometry(nb::module_& m) {
         .def_static("create_box", &engine::Mesh::create_box,
             "width"_a = 1.0f, "height"_a = 1.0f, "depth"_a = 1.0f)
         .def_static("create_cube", &engine::Mesh::create_cube)
+        .def_static("load_obj", &engine::load_obj_mesh, "filepath"_a)
+        .def_static("load_stl", &engine::load_stl_mesh, "filepath"_a)
+        .def_static("load_ply", &engine::load_ply_mesh, "filepath"_a)
         .def_static("create_sphere", &engine::Mesh::create_sphere,
             "radius"_a = 1.0f, "rings"_a = 32, "sectors"_a = 32)
         .def_static("create_cylinder", &engine::Mesh::create_cylinder,
@@ -706,4 +710,12 @@ void bind_geometry(nb::module_& m) {
         .def_prop_ro("particles", [](const engine::ParticleEmitter& pe) { return pe.particles(); })
         .def_prop_ro("mesh", &engine::ParticleEmitter::get_particle_mesh)
         .def("update_mesh", &engine::ParticleEmitter::update_mesh, "camera"_a);
+
+    // Asset IO (Loaders & Exporters)
+    m.def("load_obj_mesh", &engine::load_obj_mesh, "filepath"_a);
+    m.def("load_stl_mesh", &engine::load_stl_mesh, "filepath"_a);
+    m.def("load_ply_mesh", &engine::load_ply_mesh, "filepath"_a);
+    m.def("load_mesh_file", &engine::load_mesh_file, "filepath"_a);
+    m.def("export_obj", &engine::export_obj, "node"_a, "filepath"_a);
+    m.def("export_stl", &engine::export_stl, "node"_a, "filepath"_a, "binary"_a = true);
 }

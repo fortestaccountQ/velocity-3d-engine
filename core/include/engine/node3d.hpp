@@ -3,6 +3,7 @@
 #include "engine/transform.hpp"
 #include "engine/math_types.hpp"
 #include "engine/physics.hpp"
+#include "contracts/phase7_assets_editor_contracts.h"
 
 #include <cstdint>
 #include <string>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <algorithm>
 #include <utility>
+#include <unordered_map>
 
 namespace engine {
 
@@ -65,9 +67,18 @@ public:
         return { b.min_point, b.max_point };
     }
 
+    // Event System
+    using EventCallback = std::function<void(const std::string&, void*)>;
+    void on(const std::string& event_name, EventCallback callback);
+    void emit(const std::string& event_name, void* data = nullptr);
+    bool has_listener(const std::string& event_name) const;
+    void off(const std::string& event_name);
+    void clear_listeners();
+
 protected:
     Node3D* parent_{nullptr};
     std::vector<std::shared_ptr<Node3D>> children_{};
+    std::unordered_map<std::string, std::vector<EventCallback>> event_listeners_{};
 
     mutable bool local_matrix_dirty_{true};
     mutable bool world_matrix_dirty_{true};

@@ -1,4 +1,5 @@
 #include "engine/app.hpp"
+#include "engine/asset_io.hpp"
 #include "engine/render_target.hpp"
 #include "engine/post_process.hpp"
 #include "engine/cube_texture.hpp"
@@ -3515,13 +3516,58 @@ void EngineApp::on_event(const void* raw_event) {
             input_.on_key_up(ev->key_code);
             break;
 
-        case SAPP_EVENTTYPE_MOUSE_MOVE:
-            input_.on_mouse_move(ev->mouse_x, ev->mouse_y, ev->mouse_dx, ev->mouse_dy);
+        case SAPP_EVENTTYPE_RESIZED:
+            config_.width = ev->window_width;
+            config_.height = ev->window_height;
+            emit("resize", nullptr);
             break;
 
-        case SAPP_EVENTTYPE_MOUSE_DOWN:
-            input_.on_mouse_down(ev->mouse_button);
+        case SAPP_EVENTTYPE_MOUSE_MOVE: {
+            input_.on_mouse_move(ev->mouse_x, ev->mouse_y, ev->mouse_dx, ev->mouse_dy);
+            float sw = static_cast<float>(config_.width);
+            float sh = static_cast<float>(config_.height);
+            if (sw > 0.0f && sh > 0.0f) {
+                Ray ray = camera_.screen_to_ray(ev->mouse_x, ev->mouse_y, sw, sh);
+                RaycastHit hit = scene_.raycast(ray, 1000.0f);
+                std::shared_ptr<Node3D> hit_node = (hit.hit && hit.entity) ? hit.entity : nullptr;
+                if (hit_node != hovered_node_) {
+                    if (hovered_node_) {
+                        hovered_node_->emit("hover_leave", nullptr);
+                    }
+                    hovered_node_ = hit_node;
+                    if (hovered_node_) {
+                        hovered_node_->emit("hover_enter", &hit);
+                    }
+                }
+            }
             break;
+        }
+
+        case SAPP_EVENTTYPE_MOUSE_LEAVE:
+            if (hovered_node_) {
+                hovered_node_->emit("hover_leave", nullptr);
+                hovered_node_ = nullptr;
+            }
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_DOWN: {
+            input_.on_mouse_down(ev->mouse_button);
+            if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+                float sw = static_cast<float>(config_.width);
+                float sh = static_cast<float>(config_.height);
+                if (sw > 0.0f && sh > 0.0f) {
+                    Ray ray = camera_.screen_to_ray(ev->mouse_x, ev->mouse_y, sw, sh);
+                    RaycastHit hit = scene_.raycast(ray, 1000.0f);
+                    if (hit.hit && hit.entity) {
+                        hit.entity->emit("click", &hit);
+                        for (Node3D* p = static_cast<Node3D*>(hit.entity.get())->parent(); p != nullptr; p = p->parent()) {
+                            p->emit("click", &hit);
+                        }
+                    }
+                }
+            }
+            break;
+        }
 
         case SAPP_EVENTTYPE_MOUSE_UP:
             input_.on_mouse_up(ev->mouse_button);
@@ -3529,6 +3575,37 @@ void EngineApp::on_event(const void* raw_event) {
 
         default:
             break;
+    }
+}
+
+RaycastHit EngineApp::dispatch_mouse_click(float mouse_x, float mouse_y) {
+    float sw = static_cast<float>(config_.width > 0 ? config_.width : 800);
+    float sh = static_cast<float>(config_.height > 0 ? config_.height : 600);
+    Ray ray = camera_.screen_to_ray(mouse_x, mouse_y, sw, sh);
+    RaycastHit hit = scene_.raycast(ray, 1000.0f);
+    if (hit.hit && hit.entity) {
+        hit.entity->emit("click", &hit);
+        for (Node3D* p = static_cast<Node3D*>(hit.entity.get())->parent(); p != nullptr; p = p->parent()) {
+            p->emit("click", &hit);
+        }
+    }
+    return hit;
+}
+
+void EngineApp::dispatch_mouse_move(float mouse_x, float mouse_y) {
+    float sw = static_cast<float>(config_.width > 0 ? config_.width : 800);
+    float sh = static_cast<float>(config_.height > 0 ? config_.height : 600);
+    Ray ray = camera_.screen_to_ray(mouse_x, mouse_y, sw, sh);
+    RaycastHit hit = scene_.raycast(ray, 1000.0f);
+    std::shared_ptr<Node3D> hit_node = (hit.hit && hit.entity) ? hit.entity : nullptr;
+    if (hit_node != hovered_node_) {
+        if (hovered_node_) {
+            hovered_node_->emit("hover_leave", nullptr);
+        }
+        hovered_node_ = hit_node;
+        if (hovered_node_) {
+            hovered_node_->emit("hover_enter", &hit);
+        }
     }
 }
 
@@ -3574,6 +3651,28 @@ void EngineApp::set_vsync(bool enabled) {
 void EngineApp::close() {
     if (running_) {
         sapp_request_quit();
+    }
+}
+
+bool EngineApp::save_screenshot(const std::string& filepath) {
+    return engine::save_screenshot(*this, filepath);
+}
+
+void EngineApp::on(const std::string& event_name, AppEventCallback callback) {
+    if (callback) {
+        app_event_listeners_[event_name].push_back(std::move(callback));
+    }
+}
+
+void EngineApp::emit(const std::string& event_name, void* data) {
+    auto it = app_event_listeners_.find(event_name);
+    if (it != app_event_listeners_.end()) {
+        auto callbacks = it->second;
+        for (const auto& cb : callbacks) {
+            if (cb) {
+                cb(event_name, data);
+            }
+        }
     }
 }
 

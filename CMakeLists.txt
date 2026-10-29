@@ -88,6 +88,7 @@ add_library(velocity_engine_core STATIC
     core/src/camera.cpp
     core/src/scene.cpp
     core/src/model_loader.cpp
+    core/src/asset_io.cpp
     core/src/input.cpp
     core/src/audio.cpp
     core/src/editor.cpp
