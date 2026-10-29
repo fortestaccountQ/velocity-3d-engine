@@ -381,13 +381,30 @@ def main() -> None:
     app.set_hud_title(f"PYTHON {py_ver} (64-bit) | Sokol GFX D3D11")
     app.set_hud_hint("[WASD] Hop   [B] Bot Autoplay   [V] VSync   [R] Restart   [ESC] Exit")
 
+    # Infinite World Atmospheric Depth Fog (seamless horizon blending)
+    try:
+        from VelocityEngine.fog import Fog
+        app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=54.0)
+    except Exception:
+        try:
+            from VelocityEngine import Fog
+            app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=54.0)
+        except Exception:
+            pass
+
     # Initialize MaterialRegistry
     registry = MaterialRegistry() if MaterialRegistry is not None else None
     app.material_registry = registry
 
-    # 3. Instantiate Subsystems
+    # 3. Instantiate Subsystems with Deep Streaming Span
     world = WorldGenerator(app.scene, material_registry=registry)
-    world.generate_ahead(0, lookahead=20)
+    world.generate_ahead(0, lookahead=46)
+    try:
+        from examples.crossy_duck.world import StartRow
+        for bz in range(-18, -5):
+            world.active_rows[bz] = StartRow(bz, scene=app.scene, material_registry=registry)
+    except Exception:
+        pass
 
     player = PlayerController(
         app=app,
@@ -397,6 +414,7 @@ def main() -> None:
         grid_z=0,
         material_registry=registry,
     )
+    player.world = world
     iso_camera = IsometricCamera(camera=app.camera, app=app, damping=8.5)
     iso_camera.snap_to(player)
 
@@ -503,16 +521,16 @@ def main() -> None:
         world.update(clamped_dt)
         if player.grid_z != last_stream_z:
             last_stream_z = player.grid_z
-            world.generate_ahead(player.grid_z, lookahead=22)
-            world.prune_behind(player.grid_z, keep_behind=8)
+            world.generate_ahead(player.grid_z, lookahead=46)
+            world.prune_behind(player.grid_z, keep_behind=20)
 
         # Update Player & Physics
         current_row = world.get_row(player.grid_z)
         player.update(clamped_dt, current_row)
 
-        # Update Camera & HUD with real FPS and mode badge
+        # Update Camera & HUD with smoothed 2.8Hz FPS and mode badge
         is_vsync = app.vsync
-        current_fps = app.fps
+        current_fps = hud.display_fps if hud.display_fps > 0.0 else app.fps
         if is_vsync:
             fps_str = f"FPS: {current_fps:.0f} (VSync Locked)"
         else:

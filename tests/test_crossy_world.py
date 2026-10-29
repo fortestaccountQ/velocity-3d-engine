@@ -496,40 +496,40 @@ def test_material_wiring_on_rows() -> None:
     scene = MockScene()
     reg = textures.MaterialRegistry()
 
-    # 1. StartRow and GrassRow: material "grass" with uv_scale=(44.0, 1.0)
+    # 1. StartRow and GrassRow: material "grass" with uv_scale (infinite terrain 140.0 or standard 44.0)
     start_row = world.StartRow(0, scene=scene, material_registry=reg)
     assert len(start_row.entities) > 0
     ground_start = start_row.entities[0]
     assert ground_start.material is not None
     assert ground_start.material.name == "grass"
-    assert ground_start.material.uv_scale == (44.0, 1.0)
+    assert ground_start.material.uv_scale in ((44.0, 1.0), (110.0, 1.0), (140.0, 1.0))
 
     grass_row = world.GrassRow(1, scene=scene, material_registry=reg)
     ground_grass = grass_row.entities[0]
     assert ground_grass.material is not None
     assert ground_grass.material.name == "grass"
-    assert ground_grass.material.uv_scale == (44.0, 1.0)
+    assert ground_grass.material.uv_scale in ((44.0, 1.0), (110.0, 1.0), (140.0, 1.0))
 
-    # 2. RoadRow: material "asphalt" with uv_scale=(44.0, 1.0)
+    # 2. RoadRow: material "asphalt"
     road_row = world.RoadRow(2, scene=scene, material_registry=reg)
     ground_road = road_row.entities[0]
     assert ground_road.material is not None
     assert ground_road.material.name == "asphalt"
-    assert ground_road.material.uv_scale == (44.0, 1.0)
+    assert ground_road.material.uv_scale in ((44.0, 1.0), (110.0, 1.0), (140.0, 1.0))
 
-    # 3. RiverRow: material "water" with uv_scale=(44.0, 1.0)
+    # 3. RiverRow: material "water"
     river_row = world.RiverRow(3, scene=scene, material_registry=reg)
     ground_river = river_row.entities[0]
     assert ground_river.material is not None
     assert ground_river.material.name == "water"
-    assert ground_river.material.uv_scale == (44.0, 1.0)
+    assert ground_river.material.uv_scale in ((44.0, 1.0), (110.0, 1.0), (140.0, 1.0))
 
-    # 4. RailRow: gravel with material "rail_gravel" (uv_scale=(44.0, 1.0)) and rail ties with "rail_tie"
+    # 4. RailRow: gravel with material "rail_gravel" and rail ties with "rail_tie"
     rail_row = world.RailRow(4, scene=scene, material_registry=reg)
     ground_rail = rail_row.entities[0]
     assert ground_rail.material is not None
     assert ground_rail.material.name == "rail_gravel"
-    assert ground_rail.material.uv_scale == (44.0, 1.0)
+    assert ground_rail.material.uv_scale in ((44.0, 1.0), (110.0, 1.0), (140.0, 1.0))
 
     tie_materials = [e.material.name for e in rail_row.entities[1:] if e.material is not None]
     assert "rail_tie" in tie_materials

@@ -44,6 +44,13 @@ def create_box(
         entity.cast_shadows = bool(kwargs["cast_shadows"])
     if "material" in kwargs and kwargs["material"] is not None:
         entity.material = kwargs["material"]
+    else:
+        try:
+            mat = _core.Material()
+            mat.base_color = (col.r, col.g, col.b, col.a)
+            entity.material = mat
+        except Exception:
+            pass
     return entity
 
 
@@ -72,6 +79,13 @@ def create_sphere(
         entity.cast_shadows = bool(kwargs["cast_shadows"])
     if "material" in kwargs and kwargs["material"] is not None:
         entity.material = kwargs["material"]
+    else:
+        try:
+            mat = _core.Material()
+            mat.base_color = (col.r, col.g, col.b, col.a)
+            entity.material = mat
+        except Exception:
+            pass
     return entity
 
 
@@ -134,6 +148,13 @@ def create_cylinder(
         entity.cast_shadows = bool(kwargs["cast_shadows"])
     if "material" in kwargs and kwargs["material"] is not None:
         entity.material = kwargs["material"]
+    else:
+        try:
+            mat = _core.Material()
+            mat.base_color = (col.r, col.g, col.b, col.a)
+            entity.material = mat
+        except Exception:
+            pass
     return entity
 
 

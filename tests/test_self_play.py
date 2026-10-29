@@ -205,6 +205,20 @@ def test_bot_maneuvers_around_tree():
     assert action in ((-1, 0), (1, 0))
 
 
+def test_bot_navigates_multi_tree_cluster_without_getting_stuck():
+    """When blocked by a 3-tree cluster (lanes 0, 1, 2), BFS detours safely around it."""
+    bot = CrossyBot()
+    world = MockWorld({
+        0: MockRow(0, RowType.GRASS),
+        1: MockRow(1, RowType.GRASS, blocked_x={0, 1, 2}),  # 3 trees blocking forward and right
+    })
+    # Duck at x=1
+    player = MockPlayer(gx=1, gz=0)
+    action = bot.decide_next_action(player, world)
+    # The open route is to the left (-1, 0)
+    assert action == (-1, 0)
+
+
 def test_bot_waits_for_speeding_car():
     """Bot waits (None) when a car on the road ahead would collide with the duck."""
     bot = CrossyBot()

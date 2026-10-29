@@ -195,44 +195,67 @@ class CrossyBot:
             return (0, 1)
 
         # -------------------------------------------------------------------
-        # 3. LATERAL MANEUVERING (Check left/right to unblock or align logs)
+        # 3. BFS PATHFINDING DETOUR AROUND OBSTACLES (Trees, Clusters, Gaps)
         # -------------------------------------------------------------------
-        left_safe = (cur_gx > CELL_MIN_X) and self._is_cell_safe(
-            world, cur_gx - 1, cur_gz, self.hop_predict_time
-        )
-        right_safe = (cur_gx < CELL_MAX_X) and self._is_cell_safe(
-            world, cur_gx + 1, cur_gz, self.hop_predict_time
-        )
-
-        # Check if moving laterally gives a clear forward path on next step
-        left_opens_fwd = left_safe and self._is_cell_safe(
-            world, cur_gx - 1, cur_gz + 1, self.hop_predict_time * 2.0
-        )
-        right_opens_fwd = right_safe and self._is_cell_safe(
-            world, cur_gx + 1, cur_gz + 1, self.hop_predict_time * 2.0
-        )
-
-        if left_opens_fwd and not right_opens_fwd:
-            return (-1, 0)
-        elif right_opens_fwd and not left_opens_fwd:
-            return (1, 0)
-        elif left_opens_fwd and right_opens_fwd:
-            # Prefer centering toward lane 0
-            return (-1, 0) if cur_gx > 0 else (1, 0)
-
-        # If forward is currently blocked by a static obstacle (e.g. tree), maneuver around it
-        fwd_row = self._get_row(world, fwd_target_gz)
-        if fwd_row is not None and hasattr(fwd_row, "is_blocked") and fwd_row.is_blocked(fwd_target_gx, fwd_target_gz):
-            if left_safe and not right_safe:
-                return (-1, 0)
-            elif right_safe and not left_safe:
-                return (1, 0)
-            elif left_safe and right_safe:
-                return (-1, 0) if cur_gx > 0 else (1, 0)
+        detour_action = self._find_path_bfs(world, cur_gx, cur_gz)
+        if detour_action is not None:
+            return detour_action
 
         # -------------------------------------------------------------------
         # 4. PATIENT WAITING: Timing gaps in road traffic or awaiting next train/log
         # -------------------------------------------------------------------
+        return None
+
+    def _find_path_bfs(
+        self,
+        world: Any,
+        start_gx: int,
+        start_gz: int,
+        max_depth: int = 6,
+    ) -> Optional[Tuple[int, int]]:
+        """Breadth-First Search finding optimal detour around static obstacles and traffic."""
+        from collections import deque
+
+        # Queue elements: (gx, gz, first_move, depth)
+        queue = deque()
+        visited = set([(start_gx, start_gz)])
+
+        # Ordered initial lateral moves: prefer centering toward lane 0
+        initial_moves = []
+        if start_gx > 0:
+            initial_moves.extend([(-1, 0), (1, 0)])
+        else:
+            initial_moves.extend([(1, 0), (-1, 0)])
+
+        for dx, dz in initial_moves:
+            nx = start_gx + dx
+            nz = start_gz + dz
+            if CELL_MIN_X <= nx <= CELL_MAX_X and (nx, nz) not in visited:
+                if self._is_cell_safe(world, nx, nz, self.hop_predict_time):
+                    # Check if this lateral hop immediately allows jumping forward
+                    if self._is_cell_safe(world, nx, nz + 1, self.hop_predict_time * 2.0):
+                        return (dx, dz)
+                    visited.add((nx, nz))
+                    queue.append((nx, nz, (dx, dz), 1))
+
+        # Search up to max_depth steps for a detour around wide tree clusters
+        while queue:
+            gx, gz, first_move, depth = queue.popleft()
+            if depth >= max_depth:
+                continue
+
+            for dx, dz in [(0, 1), (-1, 0), (1, 0)]:
+                nx = gx + dx
+                nz = gz + dz
+                if CELL_MIN_X <= nx <= CELL_MAX_X and (nx, nz) not in visited:
+                    t_est = self.hop_predict_time * (depth + 1)
+                    if self._is_cell_safe(world, nx, nz, t_est):
+                        if nz > start_gz:
+                            # Reached an open route to the next row!
+                            return first_move
+                        visited.add((nx, nz))
+                        queue.append((nx, nz, first_move, depth + 1))
+
         return None
 
     def _check_emergency_escape(

@@ -85,6 +85,10 @@ class PlayerController(PlayerControllerContract):
         self.x: float = float(self.grid_x * GRID_STEP)
         self.y: float = 0.0
         self.z: float = float(self.grid_z * GRID_STEP)
+        self.base_y: float = 0.0
+        self.start_base_y: float = 0.0
+        self.target_base_y: float = 0.0
+        self.world: Optional[Any] = None
 
         # Hop Interpolation State
         self.start_x: float = self.x
@@ -355,6 +359,11 @@ class PlayerController(PlayerControllerContract):
         if new_gz < min_allowed_z:
             return False
 
+        # Block hopping directly into trees / rocks if world is bound
+        if self.world is not None and hasattr(self.world, "is_blocked"):
+            if self.world.is_blocked(float(new_gx), float(new_gz)):
+                return False
+
         # Snap facing rotation to movement direction
         if dx > 0:
             self.rotation_y = 90.0   # Turn face RIGHT (+X)
@@ -365,11 +374,20 @@ class PlayerController(PlayerControllerContract):
         elif dz < 0:
             self.rotation_y = 180.0  # Turn face BACKWARD (-Z)
 
+        # Target surface elevation (0.22 on river logs, 0.0 on solid land)
+        target_elev = 0.0
+        if self.world is not None and hasattr(self.world, "get_row"):
+            row = self.world.get_row(new_gz)
+            if row is not None and getattr(row, "row_type", None) == RowType.RIVER:
+                target_elev = 0.22
+
         # Start hopping state
         self.status = PlayerStatus.HOPPING
         self.hop_timer = 0.0
         self.start_x = self.x
         self.start_z = self.z
+        self.start_base_y = self.base_y
+        self.target_base_y = target_elev
         self.target_grid_x = new_gx
         self.target_grid_z = new_gz
         self.target_x = float(new_gx * GRID_STEP)
@@ -442,9 +460,10 @@ class PlayerController(PlayerControllerContract):
             self.x = self.start_x + (self.target_x - self.start_x) * t
             self.z = self.start_z + (self.target_z - self.start_z) * t
 
-            # Parabolic Jump Arc: 4 * h * t * (1 - t)
+            # Parabolic Jump Arc: 4 * h * t * (1 - t) + smooth base elevation lerp
             arc = 4.0 * t * (1.0 - t)
-            self.y = JUMP_HEIGHT * arc
+            base_elev = self.start_base_y + (self.target_base_y - self.start_base_y) * t
+            self.y = base_elev + JUMP_HEIGHT * arc
 
             # Squash & Stretch
             if t < 0.2:
@@ -474,7 +493,8 @@ class PlayerController(PlayerControllerContract):
                 self.grid_z = self.target_grid_z
                 self.x = self.target_x
                 self.z = self.target_z
-                self.y = 0.0
+                self.base_y = self.target_base_y
+                self.y = self.base_y
                 self.scale_x = BASE_SCALE
                 self.scale_y = BASE_SCALE
                 self.scale_z = BASE_SCALE
@@ -494,10 +514,12 @@ class PlayerController(PlayerControllerContract):
                 self._sync_transform()
                 return
 
-            # Safe on log in River row
+            # Safe on log in River row (elevated cleanly on top of the log surface)
             if carrier_vx is not None and self.status == PlayerStatus.IDLE:
                 self.carrier_vx = carrier_vx
                 self.x += self.carrier_vx * dt
+                self.base_y = 0.22
+                self.y = 0.22
                 self.grid_x = int(round(self.x / GRID_STEP))
                 # Swept off-screen into river edge
                 if self.x < CELL_MIN_X - 0.8 or self.x > CELL_MAX_X + 0.8:
@@ -506,6 +528,9 @@ class PlayerController(PlayerControllerContract):
                     return
             else:
                 self.carrier_vx = 0.0
+                if self.status == PlayerStatus.IDLE and self.base_y != 0.0 and getattr(current_row, "row_type", None) != RowType.RIVER:
+                    self.base_y = 0.0
+                    self.y = 0.0
         else:
             self.carrier_vx = 0.0
 
@@ -525,6 +550,9 @@ class PlayerController(PlayerControllerContract):
         self.grid_z = 0
         self.x = 0.0
         self.y = 0.0
+        self.base_y = 0.0
+        self.start_base_y = 0.0
+        self.target_base_y = 0.0
         self.z = 0.0
         self.start_x = 0.0
         self.start_z = 0.0

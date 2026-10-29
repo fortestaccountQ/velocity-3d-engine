@@ -576,35 +576,38 @@ class LogObstacle(BaseObstacle):
             bark_mat = _get_mat(self.material_registry, "wood_bark", uv_scale=(self.width, 1.0))
             rings_mat = _get_mat(self.material_registry, "wood_rings")
 
+            # Eliminate coplanar Z-fighting: trunk ends where ring caps begin
+            ring_w = 0.16
+            trunk_w = max(0.4, width - ring_w * 2.0)
+
             # 1. Main log trunk
             self.entity = scene.create_box(
-                size=(width, height, depth),
+                size=(trunk_w, height, depth),
                 position=(self.x, self.y, self.z),
                 color=COLOR_LOG_WOOD if bark_mat is None else WHITE,
                 material=bark_mat,
                 cast_shadows=True,
                 name="RiverLog",
             )
-            # 2. Voxel end rings (lighter wood rings)
-            ring_w = 0.18
+            # 2. Voxel end rings (non-overlapping caps on outer ends)
             ring_l = scene.create_box(
-                size=(ring_w, height * 0.85, depth * 0.85),
-                position=(self.x - width * 0.5 + ring_w * 0.5, self.y, self.z),
+                size=(ring_w, height * 0.90, depth * 0.90),
+                position=(self.x - trunk_w * 0.5 - ring_w * 0.5, self.y, self.z),
                 color=COLOR_LOG_END_RING if rings_mat is None else WHITE,
                 material=rings_mat,
                 cast_shadows=False,
                 name="LogRingL",
             )
             ring_r = scene.create_box(
-                size=(ring_w, height * 0.85, depth * 0.85),
-                position=(self.x + width * 0.5 - ring_w * 0.5, self.y, self.z),
+                size=(ring_w, height * 0.90, depth * 0.90),
+                position=(self.x + trunk_w * 0.5 + ring_w * 0.5, self.y, self.z),
                 color=COLOR_LOG_END_RING if rings_mat is None else WHITE,
                 material=rings_mat,
                 cast_shadows=False,
                 name="LogRingR",
             )
-            self.sub_entities.append((ring_l, (-width * 0.5 + ring_w * 0.5, 0.0, 0.0)))
-            self.sub_entities.append((ring_r, (width * 0.5 - ring_w * 0.5, 0.0, 0.0)))
+            self.sub_entities.append((ring_l, (-trunk_w * 0.5 - ring_w * 0.5, 0.0, 0.0)))
+            self.sub_entities.append((ring_r, (trunk_w * 0.5 + ring_w * 0.5, 0.0, 0.0)))
 
 
 class TrainObstacle(BaseObstacle):
@@ -853,9 +856,9 @@ class StartRow(BaseRow):
         self.blocked_lanes: Set[int] = set()
 
         if scene is not None:
-            mat = _get_mat(self.material_registry, "grass", uv_scale=(44.0, 1.0))
+            mat = _get_mat(self.material_registry, "grass", uv_scale=(140.0, 1.0))
             ground = scene.create_box(
-                size=(44.0, 0.45, 1.0),
+                size=(140.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
                 color=COLOR_START_ZONE if mat is None else WHITE,
                 material=mat,
@@ -865,8 +868,8 @@ class StartRow(BaseRow):
             )
             self.entities.append(ground)
 
-        # Place outer perimeter trees outside playable width [-10, 10]
-        for bx in [-13, -12, -11, 11, 12, 13]:
+        # Place dense outer perimeter trees outside playable width [-10, 10] to create infinite forest borders
+        for bx in [-24, -20, -17, -15, -13, -12, -11, 11, 12, 13, 15, 17, 20, 24]:
             self.blocked_lanes.add(bx)
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
@@ -895,9 +898,9 @@ class GrassRow(BaseRow):
         # Alternate strip color slightly for satisfying voxel checkerboard pattern
         ground_col = COLOR_GRASS_EVEN if (abs(z_index) % 2 == 0) else COLOR_GRASS_ODD
         if scene is not None:
-            mat = _get_mat(self.material_registry, "grass", uv_scale=(44.0, 1.0))
+            mat = _get_mat(self.material_registry, "grass", uv_scale=(140.0, 1.0))
             ground = scene.create_box(
-                size=(44.0, 0.45, 1.0),
+                size=(140.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
                 color=ground_col if mat is None else WHITE,
                 material=mat,
@@ -907,8 +910,8 @@ class GrassRow(BaseRow):
             )
             self.entities.append(ground)
 
-        # Boundary trees outside playable grid
-        for bx in [-13, -12, -11, 11, 12, 13]:
+        # Dense boundary forest outside playable grid
+        for bx in [-24, -20, -17, -15, -13, -12, -11, 11, 12, 13, 15, 17, 20, 24]:
             self.blocked_lanes.add(bx)
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
@@ -977,9 +980,9 @@ class RoadRow(BaseRow):
 
         # 1. Dark asphalt strip
         if scene is not None:
-            asphalt_mat = _get_mat(self.material_registry, "asphalt", uv_scale=(44.0, 1.0))
+            asphalt_mat = _get_mat(self.material_registry, "asphalt", uv_scale=(140.0, 1.0))
             asphalt = scene.create_box(
-                size=(44.0, 0.40, 1.0),
+                size=(140.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
                 color=COLOR_ROAD_ASPHALT if asphalt_mat is None else WHITE,
                 material=asphalt_mat,
@@ -994,7 +997,7 @@ class RoadRow(BaseRow):
             # Outer borders have solid white edge lines (at z ± 0.45).
             if not self.has_prev_road:
                 edge_south = scene.create_box(
-                    size=(44.0, 0.03, 0.08),
+                    size=(140.0, 0.03, 0.08),
                     position=(0.0, 0.025, float(self.z_index) - 0.45),
                     color=COLOR_ROAD_EDGE_WHITE,
                     cast_shadows=False,
@@ -1005,7 +1008,7 @@ class RoadRow(BaseRow):
 
             if not self.has_next_road:
                 edge_north = scene.create_box(
-                    size=(44.0, 0.03, 0.08),
+                    size=(140.0, 0.03, 0.08),
                     position=(0.0, 0.025, float(self.z_index) + 0.45),
                     color=COLOR_ROAD_EDGE_WHITE,
                     cast_shadows=False,
@@ -1027,7 +1030,7 @@ class RoadRow(BaseRow):
                 if is_opposing:
                     # Opposing directions meet -> distinct center divider (double solid yellow lines)
                     div_a = scene.create_box(
-                        size=(44.0, 0.03, 0.04),
+                        size=(140.0, 0.03, 0.04),
                         position=(0.0, 0.025, z_shared - 0.04),
                         color=COLOR_ROAD_DIVIDER_CENTER,
                         cast_shadows=False,
@@ -1035,7 +1038,7 @@ class RoadRow(BaseRow):
                         name=f"CenterDividerA_{z_index}",
                     )
                     div_b = scene.create_box(
-                        size=(44.0, 0.03, 0.04),
+                        size=(140.0, 0.03, 0.04),
                         position=(0.0, 0.025, z_shared + 0.04),
                         color=COLOR_ROAD_DIVIDER_CENTER,
                         cast_shadows=False,
@@ -1046,7 +1049,7 @@ class RoadRow(BaseRow):
                     self.entities.append(div_b)
                 else:
                     # Same direction lanes -> dashed white lane divider
-                    for mx in range(-20, 21, 4):
+                    for mx in range(-28, 29, 4):
                         marker = scene.create_box(
                             size=(1.4, 0.03, 0.10),
                             position=(float(mx), 0.025, z_shared),
@@ -1068,7 +1071,7 @@ class RoadRow(BaseRow):
                 is_opposing_prev = (self.direction * target_prev_dir) < 0
                 if is_opposing_prev:
                     div_a = scene.create_box(
-                        size=(44.0, 0.03, 0.04),
+                        size=(140.0, 0.03, 0.04),
                         position=(0.0, 0.025, z_shared_prev - 0.04),
                         color=COLOR_ROAD_DIVIDER_CENTER,
                         cast_shadows=False,
@@ -1076,7 +1079,7 @@ class RoadRow(BaseRow):
                         name=f"CenterDividerPrevA_{z_index}",
                     )
                     div_b = scene.create_box(
-                        size=(44.0, 0.03, 0.04),
+                        size=(140.0, 0.03, 0.04),
                         position=(0.0, 0.025, z_shared_prev + 0.04),
                         color=COLOR_ROAD_DIVIDER_CENTER,
                         cast_shadows=False,
@@ -1086,7 +1089,7 @@ class RoadRow(BaseRow):
                     self.entities.append(div_a)
                     self.entities.append(div_b)
                 else:
-                    for mx in range(-20, 21, 4):
+                    for mx in range(-28, 29, 4):
                         marker = scene.create_box(
                             size=(1.4, 0.03, 0.10),
                             position=(float(mx), 0.025, z_shared_prev),
@@ -1169,9 +1172,9 @@ class RiverRow(BaseRow):
 
         # 1. Vibrant water box (slightly lowered)
         if scene is not None:
-            water_mat = _get_mat(self.material_registry, "water", uv_scale=(44.0, 1.0))
+            water_mat = _get_mat(self.material_registry, "water", uv_scale=(140.0, 1.0))
             water = scene.create_box(
-                size=(44.0, 0.35, 1.0),
+                size=(140.0, 0.35, 1.0),
                 position=(0.0, -0.22, float(self.z_index)),
                 color=COLOR_RIVER_WATER if water_mat is None else WHITE,
                 material=water_mat,
@@ -1183,8 +1186,8 @@ class RiverRow(BaseRow):
 
         # 2. Wooden logs (2-3 logs spaced out)
         count = log_count if log_count is not None else r.choice([2, 3])
-        wrap_min = -19.0
-        wrap_max = 19.0
+        wrap_min = -24.0
+        wrap_max = 24.0
         span = wrap_max - wrap_min
 
         spacing = span / float(count)
@@ -1245,14 +1248,15 @@ class RailRow(BaseRow):
         self.beacon_lit: bool = False
 
         self.beacon_light_entity: Optional[Any] = None
+        self.beacon_light_r: Optional[Any] = None
 
         if scene is not None:
-            gravel_mat = _get_mat(self.material_registry, "rail_gravel", uv_scale=(44.0, 1.0))
+            gravel_mat = _get_mat(self.material_registry, "rail_gravel", uv_scale=(140.0, 1.0))
             tie_mat = _get_mat(self.material_registry, "rail_tie")
 
-            # 1. Gravel strip
+            # 1. Gravel strip (full infinite span)
             gravel = scene.create_box(
-                size=(44.0, 0.40, 1.0),
+                size=(140.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
                 color=COLOR_RAIL_GRAVEL if gravel_mat is None else WHITE,
                 material=gravel_mat,
@@ -1262,8 +1266,8 @@ class RailRow(BaseRow):
             )
             self.entities.append(gravel)
 
-            # 2. Wooden sleepers (ties) - step of 3 to save draw calls & prevent Z-fighting
-            for tx in range(-12, 13, 3):
+            # 2. Wooden sleepers (ties) - step of 3 across the entire span
+            for tx in range(-25, 26, 3):
                 tie = scene.create_box(
                     size=(0.4, 0.05, 0.85),
                     position=(float(tx), 0.028, float(self.z_index)),
@@ -1275,9 +1279,9 @@ class RailRow(BaseRow):
                 )
                 self.entities.append(tie)
 
-            # 3. Metallic rails (2 parallel steel tracks, slightly elevated above ties)
+            # 3. Metallic rails (2 parallel steel tracks)
             r1 = scene.create_box(
-                size=(44.0, 0.06, 0.08),
+                size=(140.0, 0.06, 0.08),
                 position=(0.0, 0.075, float(self.z_index) - 0.22),
                 color=COLOR_RAIL_STEEL,
                 cast_shadows=False,
@@ -1285,7 +1289,7 @@ class RailRow(BaseRow):
                 name=f"RailSteel1_{z_index}",
             )
             r2 = scene.create_box(
-                size=(44.0, 0.06, 0.08),
+                size=(140.0, 0.06, 0.08),
                 position=(0.0, 0.075, float(self.z_index) + 0.22),
                 color=COLOR_RAIL_STEEL,
                 cast_shadows=False,
@@ -1294,22 +1298,58 @@ class RailRow(BaseRow):
             )
             self.entities.extend([r1, r2])
 
-            # 4. Warning beacon post and light
+            # 4. Authentic Railway Crossing Signal (Mast, Crossbuck, Dual Flashing Red Beacons)
+            beacon_x = -11.5 if self.train_direction > 0.0 else 11.5
+            beacon_z = float(self.z_index) - 0.44
+
+            # Cast iron mast base
+            base = scene.create_box(
+                size=(0.40, 0.08, 0.40),
+                position=(beacon_x, 0.04, beacon_z),
+                color=Color.from_hex("#1e293b"),
+                has_collision=False,
+                name=f"BeaconBase_{z_index}",
+            )
+            # Heavy dark industrial steel post
             post = scene.create_box(
-                size=(0.15, 1.2, 0.15),
-                position=(11.5, 0.60, float(self.z_index)),
-                color=COLOR_BEACON_POST,
+                size=(0.12, 1.35, 0.12),
+                position=(beacon_x, 0.70, beacon_z),
+                color=Color.from_hex("#334155"),
                 has_collision=False,
                 name=f"BeaconPost_{z_index}",
             )
+            # High-visibility crossbuck warning sign ('X' plate)
+            crossbuck = scene.create_box(
+                size=(0.65, 0.14, 0.04),
+                position=(beacon_x, 1.35, beacon_z + 0.02),
+                color=Color.from_hex("#f8fafc"),
+                has_collision=False,
+                name=f"BeaconCross_{z_index}",
+            )
+            # Signal flasher housing bar
+            head = scene.create_box(
+                size=(0.56, 0.22, 0.16),
+                position=(beacon_x, 1.12, beacon_z + 0.02),
+                color=Color.from_hex("#0f172a"),
+                has_collision=False,
+                name=f"BeaconHead_{z_index}",
+            )
+            # Dual alternating warning flasher lenses
             self.beacon_light_entity = scene.create_box(
-                size=(0.30, 0.30, 0.30),
-                position=(11.5, 1.35, float(self.z_index)),
+                size=(0.18, 0.18, 0.08),
+                position=(beacon_x - 0.17, 1.12, beacon_z - 0.07),
                 color=COLOR_BEACON_IDLE,
                 has_collision=False,
-                name=f"BeaconLight_{z_index}",
+                name=f"BeaconLightL_{z_index}",
             )
-            self.entities.extend([post, self.beacon_light_entity])
+            self.beacon_light_r = scene.create_box(
+                size=(0.18, 0.18, 0.08),
+                position=(beacon_x + 0.17, 1.12, beacon_z - 0.07),
+                color=COLOR_BEACON_IDLE,
+                has_collision=False,
+                name=f"BeaconLightR_{z_index}",
+            )
+            self.entities.extend([base, post, crossbuck, head, self.beacon_light_entity, self.beacon_light_r])
 
         # 5. Bullet train obstacle (starts off-screen)
         initial_train_x = -999.0
@@ -1337,6 +1377,8 @@ class RailRow(BaseRow):
         self.beacon_lit = True
         if self.beacon_light_entity is not None:
             self.beacon_light_entity.color = COLOR_BEACON_ACTIVE
+        if getattr(self, "beacon_light_r", None) is not None:
+            self.beacon_light_r.color = COLOR_BEACON_ACTIVE
 
         # Position train at approach edge
         if self.train_direction > 0.0:
@@ -1357,10 +1399,13 @@ class RailRow(BaseRow):
         if 0.0 < time_to_train <= self.warning_duration and not self.is_train_passing:
             self.is_warning = True
             self.blink_timer += dt
-            # 4 Hz blink rate
-            self.beacon_lit = int(self.blink_timer * 8.0) % 2 == 0
+            # 6 Hz alternating flasher blink
+            blink_state = int(self.blink_timer * 6.0) % 2 == 0
+            self.beacon_lit = blink_state
             if self.beacon_light_entity is not None:
-                self.beacon_light_entity.color = COLOR_BEACON_ACTIVE if self.beacon_lit else COLOR_BEACON_IDLE
+                self.beacon_light_entity.color = COLOR_BEACON_ACTIVE if blink_state else COLOR_BEACON_IDLE
+            if getattr(self, "beacon_light_r", None) is not None:
+                self.beacon_light_r.color = COLOR_BEACON_IDLE if blink_state else COLOR_BEACON_ACTIVE
 
         # Train arrival trigger
         if self.train_timer >= self.cycle_interval and not self.is_train_passing:
@@ -1384,6 +1429,8 @@ class RailRow(BaseRow):
                 self.train.set_position(-999.0, self.train.y, self.train.z)
                 if self.beacon_light_entity is not None:
                     self.beacon_light_entity.color = COLOR_BEACON_IDLE
+                if getattr(self, "beacon_light_r", None) is not None:
+                    self.beacon_light_r.color = COLOR_BEACON_IDLE
 
     def check_player_hazard(self, px: float, pz: float) -> Tuple[bool, Optional[str], Optional[float]]:
         if abs(pz - self.z_index) <= 0.6:

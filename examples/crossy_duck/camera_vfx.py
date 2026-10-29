@@ -114,6 +114,8 @@ class CrossyHUD:
         self.app = app
         self.high_score: int = 0
         self.smoothed_fps: float = 60.0
+        self.fps_timer: float = 0.0
+        self.display_fps: float = 60.0
 
         py_ver = sys.version.split()[0]
         self.py_version_tag: str = f"🐍 PYTHON {py_ver} (64-bit) | Sokol GFX D3D11"
@@ -141,6 +143,13 @@ class CrossyHUD:
             inst_fps = 1.0 / dt
             self.smoothed_fps = self.smoothed_fps * 0.9 + inst_fps * 0.1
 
+        # Smooth FPS updates at 2.8 Hz (~2-3 times per second) to prevent rapid flickering
+        self.fps_timer += dt
+        if self.fps_timer >= 0.35:
+            self.fps_timer = 0.0
+            real_fps_val = getattr(self.app, "fps", 0.0)
+            self.display_fps = real_fps_val if real_fps_val > 0.0 else self.smoothed_fps
+
         ui = self.app.ui
         ui.clear()
 
@@ -148,15 +157,13 @@ class CrossyHUD:
         screen_h = float(getattr(self.app, "height", 720))
 
         # Determine real smoothed or instant FPS and VSync status
-        real_fps = getattr(self.app, "fps", 0.0)
-        if real_fps <= 0.0:
-            real_fps = self.smoothed_fps
+        display_fps = self.display_fps if self.display_fps > 0.0 else self.smoothed_fps
 
         is_vsync = vsync if vsync is not None else getattr(self.app, "vsync", True)
         if is_vsync:
-            vsync_label = f"FPS: {real_fps:.0f} (VSync Locked)"
+            vsync_label = f"FPS: {display_fps:.0f} (VSync Locked)"
         else:
-            vsync_label = f"FPS: {real_fps:.0f} (Uncapped Mode)"
+            vsync_label = f"FPS: {display_fps:.0f} (Uncapped Mode)"
 
         py_ver = sys.version.split()[0]
         top_left_text = f"🐍 PYTHON {py_ver} (64-bit) | Sokol GFX D3D11 | {vsync_label}"

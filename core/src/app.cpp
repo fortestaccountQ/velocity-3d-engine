@@ -1104,7 +1104,7 @@ void EngineApp::on_frame() {
 
             sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
 
-            glm::vec4 cur_mat_color = mat->base_color;
+            glm::vec4 cur_mat_color = mat->base_color * entity->color;
             glm::vec4 cur_mat_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
             glm::vec4 cur_mat_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, 0.0f, 0.0f);
             if (!fs_applied || cur_mat_color != last_mat_color || cur_mat_params != last_mat_params || cur_mat_uv_offset != last_mat_uv_offset) {
