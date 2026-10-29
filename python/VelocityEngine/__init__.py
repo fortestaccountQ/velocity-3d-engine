@@ -105,6 +105,38 @@ except ImportError:
     ColorGradingPass = getattr(_core, "ColorGradingPass", None)
     EffectComposer = getattr(_core, "EffectComposer", None)
 
+    # Phase 4: Environment, Skybox, HDR/IBL & Advanced Shadows v2
+    BackgroundType = getattr(_core, "BackgroundType", None)
+    ShadowSettings = getattr(_core, "ShadowSettings", None)
+    SkyParams = getattr(_core, "SkyParams", None)
+    CubeTexture = getattr(_core, "CubeTexture", None)
+    ProceduralSky = getattr(_core, "ProceduralSky", None)
+    CubeRenderTarget = getattr(_core, "CubeRenderTarget", None)
+    CubeCamera = getattr(_core, "CubeCamera", None)
+
+    # Phase 5: Geometry, Curves, Helpers & Level of Detail
+    Curve3 = getattr(_core, "Curve3", None)
+    CatmullRomCurve3 = getattr(_core, "CatmullRomCurve3", None)
+    CubicBezierCurve3 = getattr(_core, "CubicBezierCurve3", None)
+    QuadraticBezierCurve3 = getattr(_core, "QuadraticBezierCurve3", None)
+    LineCurve3 = getattr(_core, "LineCurve3", None)
+    create_tube = getattr(_core, "create_tube", None)
+    create_lathe = getattr(_core, "create_lathe", None)
+    create_extrude = getattr(_core, "create_extrude", None)
+
+    LODLevel = getattr(_core, "LODLevel", None)
+    LOD = getattr(_core, "LOD", None)
+
+    Helper = getattr(_core, "Helper", None)
+    GridHelper = getattr(_core, "GridHelper", None)
+    AxesHelper = getattr(_core, "AxesHelper", None)
+    BoxHelper = getattr(_core, "BoxHelper", None)
+    ArrowHelper = getattr(_core, "ArrowHelper", None)
+    DirectionalLightHelper = getattr(_core, "DirectionalLightHelper", None)
+    SpotLightHelper = getattr(_core, "SpotLightHelper", None)
+    PointLightHelper = getattr(_core, "PointLightHelper", None)
+    CameraHelper = getattr(_core, "CameraHelper", None)
+
     def DataTexture(data: Any, width: int, height: int, channels: int = 4) -> Any:
         """Create a Texture from raw bytes, bytearray, memoryview, or numpy array."""
         if hasattr(data, "tobytes"):
@@ -344,4 +376,32 @@ except ImportError:
         "VignetteChromaticPass",
         "ColorGradingPass",
         "EffectComposer",
+        # Phase 4: Environment, Skybox, HDR/IBL & Advanced Shadows v2
+        "BackgroundType",
+        "ShadowSettings",
+        "SkyParams",
+        "CubeTexture",
+        "ProceduralSky",
+        "CubeRenderTarget",
+        "CubeCamera",
+        # Phase 5: Geometry, Curves, Helpers & Level of Detail
+        "Curve3",
+        "CatmullRomCurve3",
+        "CubicBezierCurve3",
+        "QuadraticBezierCurve3",
+        "LineCurve3",
+        "create_tube",
+        "create_lathe",
+        "create_extrude",
+        "LODLevel",
+        "LOD",
+        "Helper",
+        "GridHelper",
+        "AxesHelper",
+        "BoxHelper",
+        "ArrowHelper",
+        "DirectionalLightHelper",
+        "SpotLightHelper",
+        "PointLightHelper",
+        "CameraHelper",
     ]

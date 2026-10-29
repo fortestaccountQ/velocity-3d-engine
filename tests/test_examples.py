@@ -100,6 +100,10 @@ class TestExamplesParity(unittest.TestCase):
         self.assertIsNotNone(m_12)
         self.assertTrue(hasattr(m_12, "app"))
 
+        m_13 = importlib.import_module("examples.13_phase5_curves_helpers_wave")
+        self.assertIsNotNone(m_13)
+        self.assertTrue(hasattr(m_13, "main"))
+
 
 if __name__ == "__main__":
     unittest.main()

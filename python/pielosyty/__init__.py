@@ -118,6 +118,29 @@ ProceduralSky = getattr(_core, "ProceduralSky", None)
 CubeRenderTarget = getattr(_core, "CubeRenderTarget", None)
 CubeCamera = getattr(_core, "CubeCamera", None)
 
+# Phase 5: Geometry, Curves, Helpers & Level of Detail
+Curve3 = getattr(_core, "Curve3", None)
+CatmullRomCurve3 = getattr(_core, "CatmullRomCurve3", None)
+CubicBezierCurve3 = getattr(_core, "CubicBezierCurve3", None)
+QuadraticBezierCurve3 = getattr(_core, "QuadraticBezierCurve3", None)
+LineCurve3 = getattr(_core, "LineCurve3", None)
+create_tube = getattr(_core, "create_tube", None)
+create_lathe = getattr(_core, "create_lathe", None)
+create_extrude = getattr(_core, "create_extrude", None)
+
+LODLevel = getattr(_core, "LODLevel", None)
+LOD = getattr(_core, "LOD", None)
+
+Helper = getattr(_core, "Helper", None)
+GridHelper = getattr(_core, "GridHelper", None)
+AxesHelper = getattr(_core, "AxesHelper", None)
+BoxHelper = getattr(_core, "BoxHelper", None)
+ArrowHelper = getattr(_core, "ArrowHelper", None)
+DirectionalLightHelper = getattr(_core, "DirectionalLightHelper", None)
+SpotLightHelper = getattr(_core, "SpotLightHelper", None)
+PointLightHelper = getattr(_core, "PointLightHelper", None)
+CameraHelper = getattr(_core, "CameraHelper", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -397,4 +420,24 @@ __all__ = [
     "ProceduralSky",
     "CubeRenderTarget",
     "CubeCamera",
+    # Phase 5: Geometry, Curves, Helpers & Level of Detail
+    "Curve3",
+    "CatmullRomCurve3",
+    "CubicBezierCurve3",
+    "QuadraticBezierCurve3",
+    "LineCurve3",
+    "create_tube",
+    "create_lathe",
+    "create_extrude",
+    "LODLevel",
+    "LOD",
+    "Helper",
+    "GridHelper",
+    "AxesHelper",
+    "BoxHelper",
+    "ArrowHelper",
+    "DirectionalLightHelper",
+    "SpotLightHelper",
+    "PointLightHelper",
+    "CameraHelper",
 ]

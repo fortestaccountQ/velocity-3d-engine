@@ -96,6 +96,9 @@ add_library(velocity_engine_core STATIC
     core/src/cube_texture.cpp
     core/src/sky.cpp
     core/src/cube_camera.cpp
+    core/src/curve.cpp
+    core/src/helpers.cpp
+    core/src/lod.cpp
     core/src/app.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp

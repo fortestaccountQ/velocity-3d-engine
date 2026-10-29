@@ -4,6 +4,8 @@
 #include "engine/cube_texture.hpp"
 #include "engine/sky.hpp"
 #include "engine/cube_camera.hpp"
+#include "engine/helpers.hpp"
+#include "engine/lod.hpp"
 
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -57,11 +59,6 @@ struct ShadowVSParams {
 struct InstancedVSParams {
     glm::mat4 view_proj;
     glm::mat4 light_vp;
-};
-
-struct LineVertex {
-    glm::vec3 pos;
-    glm::vec4 color;
 };
 
 struct LineVSParams {
@@ -2689,6 +2686,13 @@ static void apply_camera_viewport_and_scissor(const Camera& cam, int target_w, i
 void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen, uint32_t color_format) {
     if (pip_id_ == 0) return;
 
+    // 0. Update LOD levels according to camera position
+    for (const auto& lod : scene.lods()) {
+        if (lod && lod->visible) {
+            lod->update_lod(camera.position);
+        }
+    }
+
     apply_camera_viewport_and_scissor(camera, target_w, target_h);
 
     if (target_h > 0 && camera.type == CameraType::Perspective) {
@@ -3053,6 +3057,40 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 
     // Render transparent entities second
     render_entities(transparent_queue, true);
+
+    // Render visual helpers via line pipeline
+    if (line_pip_id_ != 0 && line_vbuf_id_ != 0 && !scene.helpers().empty()) {
+        std::vector<LineVertex> helper_verts;
+        helper_verts.reserve(2048);
+        for (const auto& hlp : scene.helpers()) {
+            if (!hlp || !hlp->visible) continue;
+            hlp->update();
+            std::vector<LineVertex> local_verts;
+            hlp->get_line_vertices(local_verts);
+            glm::mat4 model = hlp->world_matrix();
+            for (auto& lv : local_verts) {
+                glm::vec4 wpos = model * glm::vec4(lv.pos, 1.0f);
+                helper_verts.push_back({ glm::vec3(wpos), lv.color });
+            }
+        }
+        if (!helper_verts.empty()) {
+            size_t count = std::min(helper_verts.size(), static_cast<size_t>(8192));
+            sg_range range{ helper_verts.data(), count * sizeof(LineVertex) };
+            sg_update_buffer(sg_buffer{ line_vbuf_id_ }, &range);
+
+            sg_pipeline pip{ line_pip_id_ };
+            sg_apply_pipeline(pip);
+
+            LineVSParams vs{ vp };
+            sg_apply_uniforms(0, SG_RANGE_REF(vs));
+
+            sg_bindings bind{};
+            bind.vertex_buffers[0] = sg_buffer{ line_vbuf_id_ };
+            sg_apply_bindings(&bind);
+
+            sg_draw(0, static_cast<int>(count), 1);
+        }
+    }
 }
 
 void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target) {

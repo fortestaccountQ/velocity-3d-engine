@@ -1,5 +1,7 @@
 #include "engine/scene.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/helpers.hpp"
+#include "engine/lod.hpp"
 
 #include <algorithm>
 
@@ -67,6 +69,18 @@ void Scene::add(std::shared_ptr<Node3D> node) {
                 instanced_meshes_.push_back(im);
             }
         }
+        auto hlp = std::dynamic_pointer_cast<Helper>(n);
+        if (hlp) {
+            if (std::find(helpers_.begin(), helpers_.end(), hlp) == helpers_.end()) {
+                helpers_.push_back(hlp);
+            }
+        }
+        auto lod = std::dynamic_pointer_cast<LOD>(n);
+        if (lod) {
+            if (std::find(lods_.begin(), lods_.end(), lod) == lods_.end()) {
+                lods_.push_back(lod);
+            }
+        }
         auto sky = std::dynamic_pointer_cast<ProceduralSky>(n);
         if (sky) {
             set_procedural_sky(sky);
@@ -101,6 +115,16 @@ void Scene::remove(std::shared_ptr<Node3D> node) {
         if (im) {
             auto it = std::find(instanced_meshes_.begin(), instanced_meshes_.end(), im);
             if (it != instanced_meshes_.end()) instanced_meshes_.erase(it);
+        }
+        auto hlp = std::dynamic_pointer_cast<Helper>(n);
+        if (hlp) {
+            auto it = std::find(helpers_.begin(), helpers_.end(), hlp);
+            if (it != helpers_.end()) helpers_.erase(it);
+        }
+        auto lod = std::dynamic_pointer_cast<LOD>(n);
+        if (lod) {
+            auto it = std::find(lods_.begin(), lods_.end(), lod);
+            if (it != lods_.end()) lods_.erase(it);
         }
         for (const auto& child : n->children()) {
             purge(child);
@@ -195,6 +219,8 @@ void Scene::clear() {
     entities_.clear();
     instanced_meshes_.clear();
     lights_.clear();
+    helpers_.clear();
+    lods_.clear();
     procedural_sky_ = nullptr;
     background_cube_ = nullptr;
     environment_ = nullptr;

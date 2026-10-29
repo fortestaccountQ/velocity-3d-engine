@@ -1,7 +1,9 @@
 #include "engine/mesh.hpp"
+#include "engine/curve.hpp"
 
 #include "sokol_gfx.h"
 #include <cmath>
+#include <algorithm>
 
 namespace engine {
 
@@ -37,6 +39,9 @@ bool Mesh::ensure_gpu_buffers() {
 
     sg_buffer_desc vbuf_desc{};
     vbuf_desc.usage.vertex_buffer = true;
+    if (is_dynamic) {
+        vbuf_desc.usage.dynamic_update = true;
+    }
     vbuf_desc.data = { cpu_vertices.data(), cpu_vertices.size() * sizeof(Vertex) };
     vbuf_desc.label = "mesh-vbuf";
     sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
@@ -51,6 +56,24 @@ bool Mesh::ensure_gpu_buffers() {
 
     num_indices = static_cast<int>(cpu_indices.size());
     return (vbuf_id != 0 && ibuf_id != 0);
+}
+
+void Mesh::update_vertices_raw(const float* raw_data, size_t num_floats) {
+    if (!raw_data || num_floats == 0) return;
+    mark_dynamic();
+    size_t byte_size = num_floats * sizeof(float);
+
+    if (vbuf_id == 0) {
+        size_t vert_count = byte_size / sizeof(Vertex);
+        if (cpu_vertices.size() < vert_count) {
+            cpu_vertices.resize(vert_count);
+        }
+        std::memcpy(cpu_vertices.data(), raw_data, byte_size);
+        ensure_gpu_buffers();
+    } else if (sg_isvalid()) {
+        sg_range range{ raw_data, byte_size };
+        sg_update_buffer(sg_buffer{ vbuf_id }, &range);
+    }
 }
 
 std::shared_ptr<Mesh> Mesh::create_box(float width, float height, float depth) {
@@ -377,6 +400,563 @@ std::shared_ptr<Mesh> Mesh::create_custom(
     mesh->calculate_aabb();
     mesh->ensure_gpu_buffers();
     return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_capsule(float radius, float length, int cap_segments, int radial_segments) {
+    auto mesh = std::make_shared<Mesh>();
+    if (cap_segments < 2) cap_segments = 2;
+    if (radial_segments < 3) radial_segments = 3;
+    if (length < 0.0f) length = 0.0f;
+
+    const float pi = 3.14159265358979323846f;
+    float half_len = length * 0.5f;
+    int total_rings = cap_segments * 2 + 2;
+    mesh->cpu_vertices.reserve(total_rings * (radial_segments + 1));
+
+    for (int r = 0; r < total_rings; ++r) {
+        float phi, y_center;
+        if (r <= cap_segments) {
+            float t = static_cast<float>(r) / static_cast<float>(cap_segments);
+            phi = t * (pi * 0.5f);
+            y_center = half_len;
+        } else {
+            float t = static_cast<float>(r - (cap_segments + 1)) / static_cast<float>(cap_segments);
+            phi = (pi * 0.5f) + t * (pi * 0.5f);
+            y_center = -half_len;
+        }
+
+        float cos_phi = std::cos(phi);
+        float sin_phi = std::sin(phi);
+        float y = y_center + radius * cos_phi;
+        float ring_r = radius * sin_phi;
+        float v = 1.0f - static_cast<float>(r) / static_cast<float>(total_rings - 1);
+
+        for (int s = 0; s <= radial_segments; ++s) {
+            float u = static_cast<float>(s) / static_cast<float>(radial_segments);
+            float theta = u * 2.0f * pi;
+            float cos_theta = std::cos(theta);
+            float sin_theta = std::sin(theta);
+
+            glm::vec3 normal(sin_phi * cos_theta, cos_phi, sin_phi * sin_theta);
+            glm::vec3 pos(ring_r * cos_theta, y, ring_r * sin_theta);
+            glm::vec4 tangent(-sin_theta, 0.0f, cos_theta, 1.0f);
+
+            mesh->cpu_vertices.push_back({ pos, normal, { u, v }, glm::vec4(1.0f), tangent });
+        }
+    }
+
+    for (int r = 0; r < total_rings - 1; ++r) {
+        for (int s = 0; s < radial_segments; ++s) {
+            uint16_t i0 = static_cast<uint16_t>(r * (radial_segments + 1) + s);
+            uint16_t i1 = static_cast<uint16_t>(i0 + 1);
+            uint16_t i2 = static_cast<uint16_t>((r + 1) * (radial_segments + 1) + s);
+            uint16_t i3 = static_cast<uint16_t>(i2 + 1);
+
+            mesh->cpu_indices.push_back(i0);
+            mesh->cpu_indices.push_back(i1);
+            mesh->cpu_indices.push_back(i2);
+
+            mesh->cpu_indices.push_back(i1);
+            mesh->cpu_indices.push_back(i3);
+            mesh->cpu_indices.push_back(i2);
+        }
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_cone(float radius, float height, int radial_segments, bool open_ended) {
+    auto mesh = std::make_shared<Mesh>();
+    if (radial_segments < 3) radial_segments = 3;
+    float half_h = height * 0.5f;
+    const float pi = 3.14159265358979323846f;
+    float slant_len = std::sqrt(radius * radius + height * height);
+    float normal_y = radius / slant_len;
+    float normal_r = height / slant_len;
+
+    for (int s = 0; s <= radial_segments; ++s) {
+        float u = static_cast<float>(s) / static_cast<float>(radial_segments);
+        float theta = u * 2.0f * pi;
+        float cos_t = std::cos(theta);
+        float sin_t = std::sin(theta);
+
+        glm::vec3 n(normal_r * cos_t, normal_y, normal_r * sin_t);
+        glm::vec4 tan(-sin_t, 0.0f, cos_t, 1.0f);
+
+        mesh->cpu_vertices.push_back({ { 0.0f, half_h, 0.0f }, n, { u, 1.0f }, glm::vec4(1.0f), tan });
+        mesh->cpu_vertices.push_back({ { radius * cos_t, -half_h, radius * sin_t }, n, { u, 0.0f }, glm::vec4(1.0f), tan });
+    }
+
+    for (int s = 0; s < radial_segments; ++s) {
+        uint16_t top_curr = static_cast<uint16_t>(s * 2);
+        uint16_t bot_curr = static_cast<uint16_t>(top_curr + 1);
+        uint16_t bot_next = static_cast<uint16_t>((s + 1) * 2 + 1);
+
+        mesh->cpu_indices.push_back(top_curr);
+        mesh->cpu_indices.push_back(bot_curr);
+        mesh->cpu_indices.push_back(bot_next);
+    }
+
+    if (!open_ended) {
+        uint16_t center_idx = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        mesh->cpu_vertices.push_back({ { 0.0f, -half_h, 0.0f }, { 0.0f, -1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
+
+        uint16_t ring_start = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        for (int s = 0; s <= radial_segments; ++s) {
+            float u = static_cast<float>(s) / static_cast<float>(radial_segments);
+            float theta = u * 2.0f * pi;
+            float cos_t = std::cos(theta);
+            float sin_t = std::sin(theta);
+            glm::vec3 pos(radius * cos_t, -half_h, radius * sin_t);
+            glm::vec2 uv(0.5f + 0.5f * cos_t, 0.5f - 0.5f * sin_t);
+            mesh->cpu_vertices.push_back({ pos, { 0.0f, -1.0f, 0.0f }, uv, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
+        }
+
+        for (int s = 0; s < radial_segments; ++s) {
+            uint16_t v0 = static_cast<uint16_t>(ring_start + s);
+            uint16_t v1 = static_cast<uint16_t>(ring_start + s + 1);
+            mesh->cpu_indices.push_back(center_idx);
+            mesh->cpu_indices.push_back(v0);
+            mesh->cpu_indices.push_back(v1);
+        }
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_torus(float radius, float tube, int radial_segments, int tubular_segments) {
+    auto mesh = std::make_shared<Mesh>();
+    if (radial_segments < 3) radial_segments = 3;
+    if (tubular_segments < 3) tubular_segments = 3;
+
+    const float pi = 3.14159265358979323846f;
+    mesh->cpu_vertices.reserve((tubular_segments + 1) * (radial_segments + 1));
+
+    for (int j = 0; j <= radial_segments; ++j) {
+        float v = static_cast<float>(j) / static_cast<float>(radial_segments);
+        float phi = v * 2.0f * pi;
+        float cos_phi = std::cos(phi);
+        float sin_phi = std::sin(phi);
+
+        for (int i = 0; i <= tubular_segments; ++i) {
+            float u = static_cast<float>(i) / static_cast<float>(tubular_segments);
+            float theta = u * 2.0f * pi;
+            float cos_theta = std::cos(theta);
+            float sin_theta = std::sin(theta);
+
+            glm::vec3 pos(
+                (radius + tube * cos_phi) * cos_theta,
+                tube * sin_phi,
+                (radius + tube * cos_phi) * sin_theta
+            );
+
+            glm::vec3 center(radius * cos_theta, 0.0f, radius * sin_theta);
+            glm::vec3 normal = glm::normalize(pos - center);
+            glm::vec4 tangent(-sin_theta, 0.0f, cos_theta, 1.0f);
+            glm::vec2 uv(u, v);
+
+            mesh->cpu_vertices.push_back({ pos, normal, uv, glm::vec4(1.0f), tangent });
+        }
+    }
+
+    for (int j = 0; j < radial_segments; ++j) {
+        for (int i = 0; i < tubular_segments; ++i) {
+            uint16_t a = static_cast<uint16_t>((tubular_segments + 1) * j + i);
+            uint16_t b = static_cast<uint16_t>((tubular_segments + 1) * (j + 1) + i);
+            uint16_t c = static_cast<uint16_t>((tubular_segments + 1) * (j + 1) + i + 1);
+            uint16_t d = static_cast<uint16_t>((tubular_segments + 1) * j + i + 1);
+
+            mesh->cpu_indices.push_back(a);
+            mesh->cpu_indices.push_back(b);
+            mesh->cpu_indices.push_back(d);
+
+            mesh->cpu_indices.push_back(b);
+            mesh->cpu_indices.push_back(c);
+            mesh->cpu_indices.push_back(d);
+        }
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_torus_knot(float radius, float tube, int tubular_segments, int radial_segments, int p, int q) {
+    auto mesh = std::make_shared<Mesh>();
+    if (tubular_segments < 3) tubular_segments = 3;
+    if (radial_segments < 3) radial_segments = 3;
+
+    const float pi = 3.14159265358979323846f;
+
+    auto calculate_pos_on_curve = [&](float u, glm::vec3& pos) {
+        float cu = std::cos(u);
+        float su = std::sin(u);
+        float quOverP = u * static_cast<float>(q) / static_cast<float>(p);
+        float cs = std::cos(quOverP);
+        pos.x = radius * (2.0f + cs) * 0.5f * cu;
+        pos.y = radius * (2.0f + cs) * 0.5f * su;
+        pos.z = radius * std::sin(quOverP) * 0.5f;
+    };
+
+    mesh->cpu_vertices.reserve((tubular_segments + 1) * (radial_segments + 1));
+
+    for (int i = 0; i <= tubular_segments; ++i) {
+        float u = static_cast<float>(i) / static_cast<float>(tubular_segments) * static_cast<float>(p) * 2.0f * pi;
+        glm::vec3 p1, p2;
+        calculate_pos_on_curve(u, p1);
+        calculate_pos_on_curve(u + 0.01f, p2);
+
+        glm::vec3 T = glm::normalize(p2 - p1);
+        glm::vec3 N = glm::normalize(p1 + p2);
+        if (glm::length(N) < 0.001f || std::abs(glm::dot(T, N)) > 0.99f) {
+            N = glm::normalize(glm::cross(T, glm::vec3(0.0f, 0.0f, 1.0f)));
+        }
+        glm::vec3 B = glm::normalize(glm::cross(T, N));
+        N = glm::normalize(glm::cross(B, T));
+
+        for (int j = 0; j <= radial_segments; ++j) {
+            float v = static_cast<float>(j) / static_cast<float>(radial_segments) * 2.0f * pi;
+            float cx = -tube * std::cos(v);
+            float cy = tube * std::sin(v);
+
+            glm::vec3 pos = p1 + cx * N + cy * B;
+            glm::vec3 normal = glm::normalize(pos - p1);
+            glm::vec4 tangent(T, 1.0f);
+            glm::vec2 uv(static_cast<float>(i) / tubular_segments, static_cast<float>(j) / radial_segments);
+
+            mesh->cpu_vertices.push_back({ pos, normal, uv, glm::vec4(1.0f), tangent });
+        }
+    }
+
+    for (int i = 0; i < tubular_segments; ++i) {
+        for (int j = 0; j < radial_segments; ++j) {
+            uint16_t a = static_cast<uint16_t>((radial_segments + 1) * i + j);
+            uint16_t b = static_cast<uint16_t>((radial_segments + 1) * (i + 1) + j);
+            uint16_t c = static_cast<uint16_t>((radial_segments + 1) * (i + 1) + j + 1);
+            uint16_t d = static_cast<uint16_t>((radial_segments + 1) * i + j + 1);
+
+            mesh->cpu_indices.push_back(a);
+            mesh->cpu_indices.push_back(b);
+            mesh->cpu_indices.push_back(d);
+
+            mesh->cpu_indices.push_back(b);
+            mesh->cpu_indices.push_back(c);
+            mesh->cpu_indices.push_back(d);
+        }
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_circle(float radius, int segments) {
+    auto mesh = std::make_shared<Mesh>();
+    if (segments < 3) segments = 3;
+    const float pi = 3.14159265358979323846f;
+
+    mesh->cpu_vertices.push_back({ { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.5f, 0.5f }, glm::vec4(1.0f), { 1.0f, 0.0f, 0.0f, 1.0f } });
+
+    for (int s = 0; s <= segments; ++s) {
+        float u = static_cast<float>(s) / static_cast<float>(segments);
+        float theta = u * 2.0f * pi;
+        float cos_t = std::cos(theta);
+        float sin_t = std::sin(theta);
+        glm::vec3 pos(radius * cos_t, 0.0f, radius * sin_t);
+        glm::vec2 uv(0.5f + 0.5f * cos_t, 0.5f - 0.5f * sin_t);
+        glm::vec4 tan(-sin_t, 0.0f, cos_t, 1.0f);
+        mesh->cpu_vertices.push_back({ pos, { 0.0f, 1.0f, 0.0f }, uv, glm::vec4(1.0f), tan });
+    }
+
+    for (int s = 1; s <= segments; ++s) {
+        mesh->cpu_indices.push_back(0);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(s));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(s + 1));
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_ring(float inner_radius, float outer_radius, int segments) {
+    auto mesh = std::make_shared<Mesh>();
+    if (segments < 3) segments = 3;
+    const float pi = 3.14159265358979323846f;
+
+    for (int s = 0; s <= segments; ++s) {
+        float u = static_cast<float>(s) / static_cast<float>(segments);
+        float theta = u * 2.0f * pi;
+        float cos_t = std::cos(theta);
+        float sin_t = std::sin(theta);
+        glm::vec4 tan(-sin_t, 0.0f, cos_t, 1.0f);
+
+        glm::vec3 pos_in(inner_radius * cos_t, 0.0f, inner_radius * sin_t);
+        glm::vec2 uv_in(0.5f + 0.5f * (inner_radius / outer_radius) * cos_t, 0.5f + 0.5f * (inner_radius / outer_radius) * sin_t);
+        mesh->cpu_vertices.push_back({ pos_in, { 0.0f, 1.0f, 0.0f }, uv_in, glm::vec4(1.0f), tan });
+
+        glm::vec3 pos_out(outer_radius * cos_t, 0.0f, outer_radius * sin_t);
+        glm::vec2 uv_out(0.5f + 0.5f * cos_t, 0.5f + 0.5f * sin_t);
+        mesh->cpu_vertices.push_back({ pos_out, { 0.0f, 1.0f, 0.0f }, uv_out, glm::vec4(1.0f), tan });
+    }
+
+    for (int s = 0; s < segments; ++s) {
+        uint16_t in0 = static_cast<uint16_t>(s * 2);
+        uint16_t out0 = static_cast<uint16_t>(in0 + 1);
+        uint16_t in1 = static_cast<uint16_t>((s + 1) * 2);
+        uint16_t out1 = static_cast<uint16_t>(in1 + 1);
+
+        mesh->cpu_indices.push_back(in0);
+        mesh->cpu_indices.push_back(in1);
+        mesh->cpu_indices.push_back(out0);
+
+        mesh->cpu_indices.push_back(out0);
+        mesh->cpu_indices.push_back(in1);
+        mesh->cpu_indices.push_back(out1);
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_tetrahedron(float radius) {
+    auto mesh = std::make_shared<Mesh>();
+    std::vector<glm::vec3> verts = {
+        glm::normalize(glm::vec3( 1.0f,  1.0f,  1.0f)) * radius,
+        glm::normalize(glm::vec3(-1.0f, -1.0f,  1.0f)) * radius,
+        glm::normalize(glm::vec3(-1.0f,  1.0f, -1.0f)) * radius,
+        glm::normalize(glm::vec3( 1.0f, -1.0f, -1.0f)) * radius
+    };
+
+    uint16_t faces[4][3] = {
+        { 0, 2, 1 },
+        { 0, 1, 3 },
+        { 0, 3, 2 },
+        { 1, 2, 3 }
+    };
+
+    for (int f = 0; f < 4; ++f) {
+        glm::vec3 p0 = verts[faces[f][0]];
+        glm::vec3 p1 = verts[faces[f][1]];
+        glm::vec3 p2 = verts[faces[f][2]];
+        glm::vec3 normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+        glm::vec3 up = (std::abs(normal.y) > 0.9f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec4 tan(glm::normalize(glm::cross(up, normal)), 1.0f);
+
+        uint16_t base = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        mesh->cpu_vertices.push_back({ p0, normal, { 0.5f, 1.0f }, glm::vec4(1.0f), tan });
+        mesh->cpu_vertices.push_back({ p1, normal, { 0.0f, 0.0f }, glm::vec4(1.0f), tan });
+        mesh->cpu_vertices.push_back({ p2, normal, { 1.0f, 0.0f }, glm::vec4(1.0f), tan });
+
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 1));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 2));
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_octahedron(float radius) {
+    auto mesh = std::make_shared<Mesh>();
+    std::vector<glm::vec3> verts = {
+        {  radius, 0.0f, 0.0f },
+        { -radius, 0.0f, 0.0f },
+        { 0.0f,  radius, 0.0f },
+        { 0.0f, -radius, 0.0f },
+        { 0.0f, 0.0f,  radius },
+        { 0.0f, 0.0f, -radius }
+    };
+
+    uint16_t faces[8][3] = {
+        { 0, 2, 4 }, { 2, 1, 4 }, { 1, 3, 4 }, { 3, 0, 4 },
+        { 2, 0, 5 }, { 1, 2, 5 }, { 3, 1, 5 }, { 0, 3, 5 }
+    };
+
+    for (int f = 0; f < 8; ++f) {
+        glm::vec3 p0 = verts[faces[f][0]];
+        glm::vec3 p1 = verts[faces[f][1]];
+        glm::vec3 p2 = verts[faces[f][2]];
+        glm::vec3 normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+        glm::vec3 up = (std::abs(normal.y) > 0.9f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec4 tan(glm::normalize(glm::cross(up, normal)), 1.0f);
+
+        uint16_t base = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        mesh->cpu_vertices.push_back({ p0, normal, { 0.5f, 1.0f }, glm::vec4(1.0f), tan });
+        mesh->cpu_vertices.push_back({ p1, normal, { 0.0f, 0.0f }, glm::vec4(1.0f), tan });
+        mesh->cpu_vertices.push_back({ p2, normal, { 1.0f, 0.0f }, glm::vec4(1.0f), tan });
+
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 1));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 2));
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_icosahedron(float radius, int subdivisions) {
+    auto mesh = std::make_shared<Mesh>();
+    float t = (1.0f + std::sqrt(5.0f)) * 0.5f;
+
+    std::vector<glm::vec3> initial_verts = {
+        glm::normalize(glm::vec3(-1.0f,  t, 0.0f)),
+        glm::normalize(glm::vec3( 1.0f,  t, 0.0f)),
+        glm::normalize(glm::vec3(-1.0f, -t, 0.0f)),
+        glm::normalize(glm::vec3( 1.0f, -t, 0.0f)),
+        glm::normalize(glm::vec3(0.0f, -1.0f,  t)),
+        glm::normalize(glm::vec3(0.0f,  1.0f,  t)),
+        glm::normalize(glm::vec3(0.0f, -1.0f, -t)),
+        glm::normalize(glm::vec3(0.0f,  1.0f, -t)),
+        glm::normalize(glm::vec3( t, 0.0f, -1.0f)),
+        glm::normalize(glm::vec3( t, 0.0f,  1.0f)),
+        glm::normalize(glm::vec3(-t, 0.0f, -1.0f)),
+        glm::normalize(glm::vec3(-t, 0.0f,  1.0f))
+    };
+
+    struct Tri { glm::vec3 a, b, c; };
+    std::vector<Tri> tris;
+    uint16_t initial_faces[20][3] = {
+        { 0, 11, 5 }, { 0, 5, 1 }, { 0, 1, 7 }, { 0, 7, 10 }, { 0, 10, 11 },
+        { 1, 5, 9 }, { 5, 11, 4 }, { 11, 10, 2 }, { 10, 7, 6 }, { 7, 1, 8 },
+        { 3, 9, 4 }, { 3, 4, 2 }, { 3, 2, 6 }, { 3, 6, 8 }, { 3, 8, 9 },
+        { 4, 9, 5 }, { 2, 4, 11 }, { 6, 2, 10 }, { 8, 6, 7 }, { 9, 8, 1 }
+    };
+    for (int i = 0; i < 20; ++i) {
+        tris.push_back({ initial_verts[initial_faces[i][0]], initial_verts[initial_faces[i][1]], initial_verts[initial_faces[i][2]] });
+    }
+
+    for (int s = 0; s < subdivisions; ++s) {
+        std::vector<Tri> next_tris;
+        next_tris.reserve(tris.size() * 4);
+        for (const auto& tri : tris) {
+            glm::vec3 m01 = glm::normalize(tri.a + tri.b);
+            glm::vec3 m12 = glm::normalize(tri.b + tri.c);
+            glm::vec3 m20 = glm::normalize(tri.c + tri.a);
+
+            next_tris.push_back({ tri.a, m01, m20 });
+            next_tris.push_back({ tri.b, m12, m01 });
+            next_tris.push_back({ tri.c, m20, m12 });
+            next_tris.push_back({ m01, m12, m20 });
+        }
+        tris = std::move(next_tris);
+    }
+
+    const float pi = 3.14159265358979323846f;
+    for (const auto& tri : tris) {
+        glm::vec3 pts[3] = { tri.a, tri.b, tri.c };
+        uint16_t base = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        for (int i = 0; i < 3; ++i) {
+            glm::vec3 n = pts[i];
+            glm::vec3 pos = n * radius;
+            float u = std::atan2(n.z, n.x) / (2.0f * pi) + 0.5f;
+            float v = std::asin(std::clamp(n.y, -1.0f, 1.0f)) / pi + 0.5f;
+            glm::vec4 tan(-n.z, 0.0f, n.x, 1.0f);
+            if (glm::length(glm::vec2(n.x, n.z)) > 1e-4f) {
+                tan = glm::vec4(glm::normalize(glm::vec3(-n.z, 0.0f, n.x)), 1.0f);
+            } else {
+                tan = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+            }
+            mesh->cpu_vertices.push_back({ pos, n, { u, v }, glm::vec4(1.0f), tan });
+        }
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 1));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 2));
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_dodecahedron(float radius) {
+    auto mesh = std::make_shared<Mesh>();
+    float phi = (1.0f + std::sqrt(5.0f)) * 0.5f;
+    float inv_phi = 1.0f / phi;
+
+    std::vector<glm::vec3> verts = {
+        {-1,-1,-1}, {-1,-1, 1}, {-1, 1,-1}, {-1, 1, 1},
+        { 1,-1,-1}, { 1,-1, 1}, { 1, 1,-1}, { 1, 1, 1},
+        {0, -inv_phi, -phi}, {0, -inv_phi, phi}, {0, inv_phi, -phi}, {0, inv_phi, phi},
+        {-inv_phi, -phi, 0}, {-inv_phi, phi, 0}, {inv_phi, -phi, 0}, {inv_phi, phi, 0},
+        {-phi, 0, -inv_phi}, {-phi, 0, inv_phi}, {phi, 0, -inv_phi}, {phi, 0, inv_phi}
+    };
+    for (auto& v : verts) {
+        v = glm::normalize(v) * radius;
+    }
+
+    uint16_t pentagons[12][5] = {
+        { 3, 11,  7, 15, 13 },
+        { 7, 19, 18,  6, 15 },
+        { 7, 11,  9,  5, 19 },
+        { 8, 10,  6, 18,  4 },
+        { 10, 2, 13, 15,  6 },
+        { 2, 16, 17,  3, 13 },
+        { 3, 17,  1,  9, 11 },
+        { 4, 18, 19,  5, 14 },
+        { 2, 10,  8,  0, 16 },
+        { 1, 12, 14,  5,  9 },
+        { 0,  8,  4, 14, 12 },
+        { 0, 12,  1, 17, 16 }
+    };
+
+    for (int p = 0; p < 12; ++p) {
+        glm::vec3 p0 = verts[pentagons[p][0]];
+        glm::vec3 p1 = verts[pentagons[p][1]];
+        glm::vec3 p2 = verts[pentagons[p][2]];
+        glm::vec3 normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+        glm::vec3 up = (std::abs(normal.y) > 0.9f) ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec4 tan(glm::normalize(glm::cross(up, normal)), 1.0f);
+
+        uint16_t base = static_cast<uint16_t>(mesh->cpu_vertices.size());
+        for (int k = 0; k < 5; ++k) {
+            mesh->cpu_vertices.push_back({ verts[pentagons[p][k]], normal, { 0.5f, 0.5f }, glm::vec4(1.0f), tan });
+        }
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 1));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 2));
+
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 2));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 3));
+
+        mesh->cpu_indices.push_back(base);
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 3));
+        mesh->cpu_indices.push_back(static_cast<uint16_t>(base + 4));
+    }
+
+    mesh->num_indices = static_cast<int>(mesh->cpu_indices.size());
+    mesh->calculate_aabb();
+    mesh->ensure_gpu_buffers();
+    return mesh;
+}
+
+std::shared_ptr<Mesh> Mesh::create_tube(const Curve3& curve, int tubular_segments, float radius, int radial_segments, bool closed) {
+    return engine::create_tube(curve, tubular_segments, radius, radial_segments, closed);
+}
+
+std::shared_ptr<Mesh> Mesh::create_lathe(const std::vector<glm::vec2>& points, int segments, float phi_start, float phi_length) {
+    return engine::create_lathe(points, segments, phi_start, phi_length);
+}
+
+std::shared_ptr<Mesh> Mesh::create_extrude(const std::vector<glm::vec2>& polygon, float depth, float bevel_thickness) {
+    return engine::create_extrude(polygon, depth, bevel_thickness);
 }
 
 // ---------------------------------------------------------------------------

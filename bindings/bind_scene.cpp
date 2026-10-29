@@ -13,6 +13,27 @@
 #include "engine/cube_texture.hpp"
 #include "engine/sky.hpp"
 #include "engine/cube_camera.hpp"
+#include "engine/helpers.hpp"
+#include "engine/lod.hpp"
+
+static inline glm::vec3 parse_scene_vec3(nb::handle h) {
+    if (nb::isinstance<glm::vec3>(h)) return nb::cast<glm::vec3>(h);
+    if (nb::isinstance<nb::tuple>(h) || nb::isinstance<nb::list>(h)) {
+        auto seq = nb::cast<std::vector<float>>(h);
+        if (seq.size() >= 3) return { seq[0], seq[1], seq[2] };
+    }
+    return {0.0f, 0.0f, 0.0f};
+}
+
+static inline glm::vec4 parse_scene_vec4(nb::handle h) {
+    if (nb::isinstance<glm::vec4>(h)) return nb::cast<glm::vec4>(h);
+    if (nb::isinstance<nb::tuple>(h) || nb::isinstance<nb::list>(h)) {
+        auto seq = nb::cast<std::vector<float>>(h);
+        if (seq.size() >= 4) return { seq[0], seq[1], seq[2], seq[3] };
+        if (seq.size() == 3) return { seq[0], seq[1], seq[2], 1.0f };
+    }
+    return {0.0f, 0.0f, 0.0f, 1.0f};
+}
 
 void bind_scene(nb::module_& m) {
     // -----------------------------------------------------------------------
@@ -521,5 +542,110 @@ void bind_scene(nb::module_& m) {
         }, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
         .def("set_environment", [](engine::Scene& s, std::shared_ptr<engine::CubeTexture> env, float intensity) {
             s.set_environment(env, intensity);
-        }, "env"_a.none() = nb::none(), "intensity"_a = 1.0f);
+        }, "env"_a.none() = nb::none(), "intensity"_a = 1.0f)
+        .def_prop_ro("helpers", [](engine::Scene& s) { return s.helpers(); })
+        .def_prop_ro("lods", [](engine::Scene& s) { return s.lods(); });
+
+    // -----------------------------------------------------------------------
+    // Level of Detail (LOD)
+    // -----------------------------------------------------------------------
+    nb::class_<engine::LODLevel>(m, "LODLevel")
+        .def_ro("node", &engine::LODLevel::node)
+        .def_ro("distance", &engine::LODLevel::distance);
+
+    nb::class_<engine::LOD, engine::Node3D>(m, "LOD")
+        .def(nb::init<const std::string&>(), "name"_a = "LOD")
+        .def("add_level", &engine::LOD::add_level, "node"_a, "distance"_a)
+        .def("num_levels", &engine::LOD::num_levels)
+        .def("get_level", &engine::LOD::get_level, "index"_a)
+        .def("current_level_index", &engine::LOD::current_level_index)
+        .def("update_lod", [](engine::LOD& lod, nb::handle cam_pos) {
+            lod.update_lod(parse_scene_vec3(cam_pos));
+        }, "camera_position"_a)
+        .def_prop_ro("levels", [](const engine::LOD& lod) { return lod.levels(); });
+
+    // -----------------------------------------------------------------------
+    // Visual Helpers (Phase 5)
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Helper, engine::Node3D>(m, "Helper")
+        .def("update", &engine::Helper::update);
+
+    nb::class_<engine::GridHelper, engine::Helper>(m, "GridHelper")
+        .def("__init__", [](engine::GridHelper* h, float size, int divisions, nb::handle col_c, nb::handle col_g) {
+            new (h) engine::GridHelper(size, divisions, parse_scene_vec4(col_c), parse_scene_vec4(col_g));
+        }, "size"_a = 10.0f, "divisions"_a = 10,
+           "color_center"_a = nb::make_tuple(0.8f, 0.8f, 0.8f, 1.0f),
+           "color_grid"_a = nb::make_tuple(0.3f, 0.3f, 0.3f, 1.0f))
+        .def_rw("size", &engine::GridHelper::size)
+        .def_rw("divisions", &engine::GridHelper::divisions)
+        .def_rw("color_center", &engine::GridHelper::color_center)
+        .def_rw("color_grid", &engine::GridHelper::color_grid);
+
+    nb::class_<engine::AxesHelper, engine::Helper>(m, "AxesHelper")
+        .def(nb::init<float>(), "size"_a = 1.0f)
+        .def_rw("size", &engine::AxesHelper::size);
+
+    nb::class_<engine::BoxHelper, engine::Helper>(m, "BoxHelper")
+        .def("__init__", [](engine::BoxHelper* h, std::shared_ptr<engine::Node3D> target, nb::handle color_obj) {
+            new (h) engine::BoxHelper(target, parse_scene_vec4(color_obj));
+        }, "target"_a = nullptr, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f))
+        .def_rw("target", &engine::BoxHelper::target)
+        .def_rw("color", &engine::BoxHelper::color)
+        .def("set_from_object", &engine::BoxHelper::set_from_object, "obj"_a)
+        .def("update", &engine::BoxHelper::update);
+
+    nb::class_<engine::ArrowHelper, engine::Helper>(m, "ArrowHelper")
+        .def("__init__", [](engine::ArrowHelper* h, nb::handle dir, nb::handle origin, float length, nb::handle color, float head_length, float head_width) {
+            new (h) engine::ArrowHelper(parse_scene_vec3(dir), parse_scene_vec3(origin), length, parse_scene_vec4(color), head_length, head_width);
+        }, "dir"_a = nb::make_tuple(0.0f, 1.0f, 0.0f), "origin"_a = nb::make_tuple(0.0f, 0.0f, 0.0f),
+           "length"_a = 1.0f, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f),
+           "head_length"_a = 0.2f, "head_width"_a = 0.1f)
+        .def_rw("dir", &engine::ArrowHelper::dir)
+        .def_rw("origin", &engine::ArrowHelper::origin)
+        .def_rw("length", &engine::ArrowHelper::length)
+        .def_rw("color", &engine::ArrowHelper::color)
+        .def_rw("head_length", &engine::ArrowHelper::head_length)
+        .def_rw("head_width", &engine::ArrowHelper::head_width)
+        .def("set_direction", [](engine::ArrowHelper& a, nb::handle dir) {
+            a.set_direction(parse_scene_vec3(dir));
+        }, "dir"_a)
+        .def("set_length", &engine::ArrowHelper::set_length,
+             "length"_a, "head_length"_a = -1.0f, "head_width"_a = -1.0f)
+        .def("set_color", [](engine::ArrowHelper& a, nb::handle color) {
+            a.set_color(parse_scene_vec4(color));
+        }, "color"_a);
+
+    nb::class_<engine::DirectionalLightHelper, engine::Helper>(m, "DirectionalLightHelper")
+        .def("__init__", [](engine::DirectionalLightHelper* h, std::shared_ptr<engine::DirectionalLight> light, float size, nb::handle color) {
+            new (h) engine::DirectionalLightHelper(light, size, parse_scene_vec4(color));
+        }, "light"_a = nullptr, "size"_a = 1.0f, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f))
+        .def_rw("light", &engine::DirectionalLightHelper::light)
+        .def_rw("size", &engine::DirectionalLightHelper::size)
+        .def_rw("color", &engine::DirectionalLightHelper::color)
+        .def("update", &engine::DirectionalLightHelper::update);
+
+    nb::class_<engine::SpotLightHelper, engine::Helper>(m, "SpotLightHelper")
+        .def("__init__", [](engine::SpotLightHelper* h, std::shared_ptr<engine::SpotLight> light, nb::handle color) {
+            new (h) engine::SpotLightHelper(light, parse_scene_vec4(color));
+        }, "light"_a = nullptr, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f))
+        .def_rw("light", &engine::SpotLightHelper::light)
+        .def_rw("color", &engine::SpotLightHelper::color)
+        .def("update", &engine::SpotLightHelper::update);
+
+    nb::class_<engine::PointLightHelper, engine::Helper>(m, "PointLightHelper")
+        .def("__init__", [](engine::PointLightHelper* h, std::shared_ptr<engine::PointLight> light, float sphere_size, nb::handle color) {
+            new (h) engine::PointLightHelper(light, sphere_size, parse_scene_vec4(color));
+        }, "light"_a = nullptr, "sphere_size"_a = 0.5f, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f))
+        .def_rw("light", &engine::PointLightHelper::light)
+        .def_rw("sphere_size", &engine::PointLightHelper::sphere_size)
+        .def_rw("color", &engine::PointLightHelper::color)
+        .def("update", &engine::PointLightHelper::update);
+
+    nb::class_<engine::CameraHelper, engine::Helper>(m, "CameraHelper")
+        .def("__init__", [](engine::CameraHelper* h, std::shared_ptr<engine::Camera> cam, nb::handle color) {
+            new (h) engine::CameraHelper(cam, parse_scene_vec4(color));
+        }, "camera"_a = nullptr, "color"_a = nb::make_tuple(1.0f, 1.0f, 0.0f, 1.0f))
+        .def_rw("camera", &engine::CameraHelper::camera)
+        .def_rw("color", &engine::CameraHelper::color)
+        .def("update", &engine::CameraHelper::update);
 }

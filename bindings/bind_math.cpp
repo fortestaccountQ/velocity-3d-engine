@@ -147,6 +147,24 @@ void bind_math(nb::module_& m) {
                     if (seq.size() >= 3) b.max_point = { seq[0], seq[1], seq[2] };
                 }
             }, nb::rv_policy::reference_internal)
+        .def_prop_rw("min_bounds",
+            [](engine::AABB& b) -> glm::vec3& { return b.min_point; },
+            [](engine::AABB& b, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) b.min_point = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) b.min_point = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("max_bounds",
+            [](engine::AABB& b) -> glm::vec3& { return b.max_point; },
+            [](engine::AABB& b, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) b.max_point = nb::cast<glm::vec3>(val);
+                else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) b.max_point = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
         .def("is_valid", &engine::AABB::is_valid)
         .def("center", &engine::AABB::center)
         .def("size", &engine::AABB::size)

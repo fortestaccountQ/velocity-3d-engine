@@ -16,6 +16,9 @@
 
 namespace engine {
 
+class Helper;
+class LOD;
+
 class Scene {
 public:
     DirectionalLight light;
@@ -50,6 +53,12 @@ public:
     std::vector<std::shared_ptr<InstancedMesh>>& instanced_meshes() { return instanced_meshes_; }
     const std::vector<std::shared_ptr<Light>>& lights() const { return lights_; }
     std::vector<std::shared_ptr<Light>>& lights() { return lights_; }
+
+    const std::vector<std::shared_ptr<Helper>>& helpers() const { return helpers_; }
+    std::vector<std::shared_ptr<Helper>>& helpers() { return helpers_; }
+
+    const std::vector<std::shared_ptr<LOD>>& lods() const { return lods_; }
+    std::vector<std::shared_ptr<LOD>>& lods() { return lods_; }
 
     std::shared_ptr<Mesh> default_cube_mesh();
     std::shared_ptr<Texture> default_checker_texture();
@@ -92,6 +101,8 @@ private:
     std::vector<std::shared_ptr<Entity>> entities_;
     std::vector<std::shared_ptr<InstancedMesh>> instanced_meshes_;
     std::vector<std::shared_ptr<Light>> lights_;
+    std::vector<std::shared_ptr<Helper>> helpers_;
+    std::vector<std::shared_ptr<LOD>> lods_;
 
     BackgroundType background_type_{BackgroundType::Color};
     std::shared_ptr<CubeTexture> background_cube_{nullptr};
