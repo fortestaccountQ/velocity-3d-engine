@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Callable, Optional, Sequence, Union, Any, List
+from typing import Callable, Optional, Sequence, Union, Any, List, Tuple
 
 try:
     from . import _VelocityEngine_core as _core

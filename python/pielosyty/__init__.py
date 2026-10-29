@@ -18,6 +18,12 @@ except ImportError:
 
 Mode = _core.Mode
 Key = _core.Key
+
+class MouseButton:
+    """Standard mouse buttons."""
+    LEFT: int = 0
+    RIGHT: int = 1
+    MIDDLE: int = 2
 Vec2 = getattr(_core, "Vec2", None)
 Vec3 = _core.Vec3
 Vec4 = _core.Vec4
@@ -57,6 +63,43 @@ quat_to_euler = getattr(_core, "quat_to_euler", None)
 quat_from_axis_angle = getattr(_core, "quat_from_axis_angle", None)
 quat_look_rotation = getattr(_core, "quat_look_rotation", None)
 quat_slerp = getattr(_core, "quat_slerp", None)
+
+class Euler:
+    """Euler angles representation (in radians) with rotation order."""
+    def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, order: str = "XYZ") -> None:
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        self.order = str(order)
+
+    def to_quat(self) -> Any:
+        if quat_from_euler is not None:
+            return quat_from_euler(self.x, self.y, self.z, self.order)
+        return Quat() if Quat is not None else None
+
+    @classmethod
+    def from_quat(cls, q: Any, order: str = "XYZ") -> Euler:
+        if quat_to_euler is not None:
+            v = quat_to_euler(q, order)
+            return cls(v.x, v.y, v.z, order)
+        return cls(0.0, 0.0, 0.0, order)
+
+    def to_vec3(self) -> Any:
+        return Vec3(self.x, self.y, self.z)
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
+        yield self.z
+
+    def __getitem__(self, idx: int) -> float:
+        return (self.x, self.y, self.z)[idx]
+
+    def __len__(self) -> int:
+        return 3
+
+    def __repr__(self) -> str:
+        return f"Euler(x={self.x}, y={self.y}, z={self.z}, order='{self.order}')"
 
 # Phase 2: Materials, Textures, Geometry & Lights
 Vertex = getattr(_core, "Vertex", None)
@@ -173,6 +216,32 @@ export_stl = getattr(_core, "export_stl", None)
 export_gltf = getattr(_core, "export_gltf", None)
 save_screenshot = getattr(_core, "save_screenshot", None)
 AssetCache = getattr(_core, "AssetCache", None)
+
+class ModelLoader:
+    """Utility class for loading 3D meshes and models."""
+    @staticmethod
+    def load(filepath: str) -> Any:
+        if load_mesh_file is not None:
+            return load_mesh_file(filepath)
+        return None
+
+    @staticmethod
+    def load_obj(filepath: str) -> Any:
+        if load_obj_mesh is not None:
+            return load_obj_mesh(filepath)
+        return None
+
+    @staticmethod
+    def load_stl(filepath: str) -> Any:
+        if load_stl_mesh is not None:
+            return load_stl_mesh(filepath)
+        return None
+
+    @staticmethod
+    def load_ply(filepath: str) -> Any:
+        if load_ply_mesh is not None:
+            return load_ply_mesh(filepath)
+        return None
 
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
@@ -309,6 +378,7 @@ __all__ = [
     "EngineApp",
     "Mode",
     "Key",
+    "MouseButton",
     "Vec2",
     "Vec3",
     "Vec4",
@@ -322,6 +392,7 @@ __all__ = [
     "Material",
     "Entity",
     "Model",
+    "ModelLoader",
     "Scene",
     "InputManager",
     "AudioManager",
@@ -400,6 +471,7 @@ __all__ = [
     "Node3D",
     "Mat4",
     "Quat",
+    "Euler",
     "Plane",
     "Frustum",
     "RenderStats",
