@@ -291,3 +291,89 @@ def test_horizon_backdrop_depth_placement() -> None:
     # Ensure all mountain entities are placed >= current_forward_z
     for ent in wg.backdrop.entities:
         assert ent.transform.position[2] >= 25.0 + 20.0
+
+
+# =============================================================================
+# 4. Truck Obstacle Alignment and Centered Camera Contract
+# =============================================================================
+def test_truck_obstacle_entity_ox_synchronization_on_update() -> None:
+    """Verify TruckObstacle preserves cargo_ox offset in update() and set_position()."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    truck = world.TruckObstacle(x=10.0, z=5.0, speed=4.0, scene=scene, material_registry=reg)
+    assert hasattr(truck, "entity_ox")
+    assert truck.entity_ox != 0.0
+
+    # Before update: entity should be at x + entity_ox
+    expected_x = truck.x + truck.entity_ox
+    assert pytest.approx(truck.entity.transform.position[0]) == expected_x
+
+    # Advance simulation by dt
+    truck.update(0.1)
+    new_expected_x = truck.x + truck.entity_ox
+    assert pytest.approx(truck.entity.transform.position[0]) == new_expected_x
+
+    # Ensure all wheels are strictly under the truck body (no floating rear wheels)
+    cargo_w = truck.width * 0.65
+    facing_dir = 1.0 if truck.speed >= 0 else -1.0
+    cargo_ox = truck.entity_ox
+    rear_edge_x = truck.x + cargo_ox - facing_dir * (cargo_w * 0.50)
+
+    wheels = [ent for ent, _ in truck.sub_entities if ent.name == "TruckWheel"]
+    assert len(wheels) == 6
+    for w in wheels:
+        # Wheel must not stick out behind rear container wall
+        if facing_dir > 0:
+            assert w.transform.position[0] >= rear_edge_x - 0.05
+        else:
+            assert w.transform.position[0] <= rear_edge_x + 0.05
+
+    # Check taillights flush on rear surface
+    taillights = [ent for ent, _ in truck.sub_entities if "TruckTaillight" in ent.name]
+    assert len(taillights) == 2
+    for tl in taillights:
+        dist_to_rear = abs(tl.transform.position[0] - rear_edge_x)
+        assert dist_to_rear < 0.06, f"Taillight {tl.name} floating too far from rear: {dist_to_rear}!"
+
+
+def test_isometric_camera_configurable_offsets() -> None:
+    """Verify IsometricCamera supports configurable forward-centered perspective."""
+    from examples.crossy_duck.camera_vfx import IsometricCamera
+
+    class DummyCam:
+        def __init__(self):
+            self.position = (0.0, 0.0, 0.0)
+            self.target = (0.0, 0.0, 0.0)
+        def set_position(self, x, y, z):
+            self.position = (x, y, z)
+        def set_target(self, x, y, z):
+            self.target = (x, y, z)
+
+    # 1. Defaults preserve classic contract
+    classic_cam = IsometricCamera()
+    assert classic_cam.offset_x == -7.0
+    assert classic_cam.offset_y == 11.0
+    assert classic_cam.offset_z == -8.5
+
+    # 2. Configurable centered perspective
+    centered_cam = IsometricCamera(
+        camera=DummyCam(),
+        damping=8.5,
+        offset_x=0.0,
+        offset_y=12.0,
+        offset_z=-9.0,
+        target_offset_x=0.0,
+        target_offset_y=0.5,
+        target_offset_z=2.0,
+    )
+    assert centered_cam.offset_x == 0.0
+    assert centered_cam.offset_y == 12.0
+    assert centered_cam.offset_z == -9.0
+    assert centered_cam.target_offset_z == 2.0
+
+    des_pos = centered_cam.get_desired_position(5.0, 0.0, 10.0)
+    des_tgt = centered_cam.get_desired_target(5.0, 0.0, 10.0)
+    assert des_pos == (5.0, 12.0, 1.0)
+    assert des_tgt == (5.0, 0.5, 12.0)
+

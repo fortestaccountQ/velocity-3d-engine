@@ -386,11 +386,11 @@ def main() -> None:
     # Infinite World Atmospheric Depth Fog (seamless horizon blending)
     try:
         from VelocityEngine.fog import Fog
-        app.fog = Fog(color=Color.from_hex("#70b0e0"), near=34.0, far=60.0)
+        app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=52.0)
     except Exception:
         try:
             from VelocityEngine import Fog
-            app.fog = Fog(color=Color.from_hex("#70b0e0"), near=34.0, far=60.0)
+            app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=52.0)
         except Exception:
             pass
 
@@ -400,7 +400,7 @@ def main() -> None:
 
     # 3. Instantiate Subsystems with Optimized Streaming Span
     world = WorldGenerator(app.scene, material_registry=registry)
-    world.generate_ahead(0, lookahead=34)
+    world.generate_ahead(0, lookahead=38)
     try:
         from examples.crossy_duck.world import StartRow
         for bz in range(-10, -5):
@@ -417,7 +417,17 @@ def main() -> None:
         material_registry=registry,
     )
     player.world = world
-    iso_camera = IsometricCamera(camera=app.camera, app=app, damping=8.5)
+    iso_camera = IsometricCamera(
+        camera=app.camera,
+        app=app,
+        damping=8.5,
+        offset_x=0.0,
+        offset_y=12.0,
+        offset_z=-9.0,
+        target_offset_x=0.0,
+        target_offset_y=0.5,
+        target_offset_z=2.0,
+    )
     iso_camera.snap_to(player)
 
     hud = CrossyHUD(app=app)
@@ -523,7 +533,7 @@ def main() -> None:
         world.update(clamped_dt)
         if player.grid_z != last_stream_z:
             last_stream_z = player.grid_z
-            world.generate_ahead(player.grid_z, lookahead=34)
+            world.generate_ahead(player.grid_z, lookahead=38)
             world.prune_behind(player.grid_z, keep_behind=12)
 
         # Update Player & Physics

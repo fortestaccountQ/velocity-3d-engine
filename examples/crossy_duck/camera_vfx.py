@@ -31,19 +31,25 @@ class IsometricCamera:
         camera: Optional[Any] = None,
         app: Optional[Any] = None,
         damping: float = 8.5,
+        offset_x: float = -7.0,
+        offset_y: float = 11.0,
+        offset_z: float = -8.5,
+        target_offset_x: float = 0.0,
+        target_offset_y: float = 0.5,
+        target_offset_z: float = 1.5,
     ) -> None:
         self.camera = camera or (getattr(app, "camera", None) if app else None)
         self.app = app
         self.damping: float = float(damping)
 
-        # Fixed Isometric Offsets from Contract
-        self.offset_x: float = -7.0
-        self.offset_y: float = 11.0
-        self.offset_z: float = -8.5
+        # Configurable Isometric Offsets (with contract-preserving defaults)
+        self.offset_x: float = float(offset_x)
+        self.offset_y: float = float(offset_y)
+        self.offset_z: float = float(offset_z)
 
-        self.target_offset_x: float = 0.0
-        self.target_offset_y: float = 0.5
-        self.target_offset_z: float = 1.5
+        self.target_offset_x: float = float(target_offset_x)
+        self.target_offset_y: float = float(target_offset_y)
+        self.target_offset_z: float = float(target_offset_z)
 
         # Current Camera Coordinates
         self.pos_x: float = self.offset_x

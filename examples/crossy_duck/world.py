@@ -197,6 +197,7 @@ class BaseObstacle:
             material_registry if material_registry is not None
             else (get_default_material_registry() if scene is not None else None)
         )
+        self.entity_ox: float = 0.0
         self.entity: Any = None
         self.sub_entities: List[Tuple[Any, Tuple[float, float, float]]] = []
 
@@ -216,7 +217,7 @@ class BaseObstacle:
 
         # Synchronize 3D scene entity transform
         if self.entity is not None and hasattr(self.entity, "transform"):
-            self.entity.transform.set_position(self.x, self.y, self.z)
+            self.entity.transform.set_position(self.x + getattr(self, "entity_ox", 0.0), self.y, self.z)
 
         for sub_ent, (ox, oy, oz) in self.sub_entities:
             if hasattr(sub_ent, "transform"):
@@ -228,7 +229,7 @@ class BaseObstacle:
         self.y = float(y)
         self.z = float(z)
         if self.entity is not None and hasattr(self.entity, "transform"):
-            self.entity.transform.set_position(self.x, self.y, self.z)
+            self.entity.transform.set_position(self.x + getattr(self, "entity_ox", 0.0), self.y, self.z)
         for sub_ent, (ox, oy, oz) in self.sub_entities:
             if hasattr(sub_ent, "transform"):
                 sub_ent.transform.set_position(self.x + ox, self.y + oy, self.z + oz)
@@ -460,15 +461,17 @@ class TruckObstacle(BaseObstacle):
 
         cab_col = color if color is not None else random.choice(COLOR_CAR_PALETTE)
 
+        facing_dir = 1.0 if speed >= 0 else -1.0
+        cargo_w = width * 0.65
+        cab_w = width * 0.35
+
+        cargo_ox = -facing_dir * (cab_w * 0.5)
+        cab_ox = facing_dir * (cargo_w * 0.5)
+        self.entity_ox = cargo_ox
+
         if scene is not None:
             veh_mat = _get_mat(self.material_registry, "vehicle")
             grille_mat = _get_mat(self.material_registry, "car_grille")
-            facing_dir = 1.0 if speed >= 0 else -1.0
-            cargo_w = width * 0.65
-            cab_w = width * 0.35
-
-            cargo_ox = -facing_dir * (cab_w * 0.5)
-            cab_ox = facing_dir * (cargo_w * 0.5)
 
             # 1. Main cargo container (clean freight white with crisp shadow)
             cargo_mat = _get_mat(self.material_registry, "truck_cargo")
@@ -534,18 +537,18 @@ class TruckObstacle(BaseObstacle):
             self.sub_entities.append((hl1, (hl_x, -0.18, -0.25)))
             self.sub_entities.append((hl2, (hl_x, -0.18, 0.25)))
 
-            # 5. Rear Taillights
-            rear_x = cargo_ox - facing_dir * (cargo_w * 0.50 + 0.02)
+            # 5. Rear Taillights (red brake markers flush on cargo container back)
+            rear_x = cargo_ox - facing_dir * (cargo_w * 0.50 + 0.01)
             tl_col = Color.from_hex("#dc2626")
             tl1 = scene.create_box(
-                size=(0.05, 0.12, 0.16),
+                size=(0.04, 0.12, 0.16),
                 position=(self.x + rear_x, self.y - 0.25, self.z - 0.28),
                 color=tl_col,
                 cast_shadows=False,
                 name="TruckTaillight1",
             )
             tl2 = scene.create_box(
-                size=(0.05, 0.12, 0.16),
+                size=(0.04, 0.12, 0.16),
                 position=(self.x + rear_x, self.y - 0.25, self.z + 0.28),
                 color=tl_col,
                 cast_shadows=False,
@@ -554,13 +557,16 @@ class TruckObstacle(BaseObstacle):
             self.sub_entities.append((tl1, (rear_x, -0.25, -0.28)))
             self.sub_entities.append((tl2, (rear_x, -0.25, 0.28)))
 
-            # 6. Wheels (6 heavy wheels for cargo truck)
+            # 6. Wheels (6 heavy wheels for cargo truck strictly under body)
+            # Front wheels under cab: cab_ox + facing_dir * (cab_w * 0.15)
+            # Mid wheels under cargo: cargo_ox + facing_dir * (cargo_w * 0.12)
+            # Rear wheels under cargo: cargo_ox - facing_dir * (cargo_w * 0.32)
             wheel_mat = _get_mat(self.material_registry, "car_wheel")
             wheel_col = Color.from_hex("#0f172a") if wheel_mat is None else WHITE
             wheel_x_positions = [
-                cab_ox + facing_dir * (cab_w * 0.20),
-                cargo_ox - facing_dir * (cargo_w * 0.15),
-                cargo_ox - facing_dir * (cargo_w * 0.38),
+                cab_ox + facing_dir * (cab_w * 0.15),
+                cargo_ox + facing_dir * (cargo_w * 0.12),
+                cargo_ox - facing_dir * (cargo_w * 0.32),
             ]
             for wx in wheel_x_positions:
                 for wz_dir in (0.42, -0.42):
