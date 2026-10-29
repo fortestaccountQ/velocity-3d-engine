@@ -93,6 +93,22 @@ SpotLight = getattr(_core, "SpotLight", None)
 HemisphereLight = getattr(_core, "HemisphereLight", None)
 AmbientLight = getattr(_core, "AmbientLight", None)
 
+# Phase 3: Cameras, Viewports, RenderTargets & Post-Processing
+CameraType = getattr(_core, "CameraType", None)
+PerspectiveCamera = getattr(_core, "PerspectiveCamera", None)
+OrthographicCamera = getattr(_core, "OrthographicCamera", None)
+RenderTargetFormat = getattr(_core, "RenderTargetFormat", None)
+RenderTarget = getattr(_core, "RenderTarget", None)
+TonemappingMode = getattr(_core, "TonemappingMode", None)
+PostProcessPass = getattr(_core, "PostProcessPass", None)
+BloomPass = getattr(_core, "BloomPass", None)
+SSAOPass = getattr(_core, "SSAOPass", None)
+FXAAPass = getattr(_core, "FXAAPass", None)
+TonemappingPass = getattr(_core, "TonemappingPass", None)
+VignetteChromaticPass = getattr(_core, "VignetteChromaticPass", None)
+ColorGradingPass = getattr(_core, "ColorGradingPass", None)
+EffectComposer = getattr(_core, "EffectComposer", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -349,4 +365,19 @@ __all__ = [
     "SpotLight",
     "HemisphereLight",
     "AmbientLight",
+    # Phase 3: Cameras, Viewports, RenderTargets & Post-Processing
+    "CameraType",
+    "PerspectiveCamera",
+    "OrthographicCamera",
+    "RenderTargetFormat",
+    "RenderTarget",
+    "TonemappingMode",
+    "PostProcessPass",
+    "BloomPass",
+    "SSAOPass",
+    "FXAAPass",
+    "TonemappingPass",
+    "VignetteChromaticPass",
+    "ColorGradingPass",
+    "EffectComposer",
 ]

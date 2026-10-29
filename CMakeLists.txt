@@ -91,6 +91,8 @@ add_library(velocity_engine_core STATIC
     core/src/input.cpp
     core/src/audio.cpp
     core/src/editor.cpp
+    core/src/render_target.cpp
+    core/src/post_process.cpp
     core/src/app.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp

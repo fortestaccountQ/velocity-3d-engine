@@ -1,4 +1,6 @@
 #include "engine/app.hpp"
+#include "engine/render_target.hpp"
+#include "engine/post_process.hpp"
 
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -2003,6 +2005,438 @@ void EngineApp::evaluate_frustum_culling() {
     }
 }
 
+static void apply_camera_viewport_and_scissor(const Camera& cam, int target_w, int target_h) {
+    if (target_w <= 0 || target_h <= 0) return;
+
+    // Viewport
+    int vp_x = 0;
+    int vp_y = 0;
+    int vp_w = target_w;
+    int vp_h = target_h;
+
+    if (cam.viewport.z <= 1.0f && cam.viewport.w <= 1.0f && cam.viewport.z > 0.0f && cam.viewport.w > 0.0f) {
+        vp_x = static_cast<int>(cam.viewport.x * static_cast<float>(target_w));
+        vp_y = static_cast<int>(cam.viewport.y * static_cast<float>(target_h));
+        vp_w = static_cast<int>(cam.viewport.z * static_cast<float>(target_w));
+        vp_h = static_cast<int>(cam.viewport.w * static_cast<float>(target_h));
+    } else if (cam.viewport.z > 1.0f || cam.viewport.w > 1.0f) {
+        vp_x = static_cast<int>(cam.viewport.x);
+        vp_y = static_cast<int>(cam.viewport.y);
+        vp_w = static_cast<int>(cam.viewport.z);
+        vp_h = static_cast<int>(cam.viewport.w);
+    }
+
+    sg_apply_viewport(vp_x, vp_y, vp_w, vp_h, true);
+
+    // Scissor
+    if (cam.has_scissor) {
+        int sc_x = 0;
+        int sc_y = 0;
+        int sc_w = target_w;
+        int sc_h = target_h;
+
+        if (cam.scissor.z <= 1.0f && cam.scissor.w <= 1.0f && cam.scissor.z > 0.0f && cam.scissor.w > 0.0f) {
+            sc_x = static_cast<int>(cam.scissor.x * static_cast<float>(target_w));
+            sc_y = static_cast<int>(cam.scissor.y * static_cast<float>(target_h));
+            sc_w = static_cast<int>(cam.scissor.z * static_cast<float>(target_w));
+            sc_h = static_cast<int>(cam.scissor.w * static_cast<float>(target_h));
+        } else {
+            sc_x = static_cast<int>(cam.scissor.x);
+            sc_y = static_cast<int>(cam.scissor.y);
+            sc_w = static_cast<int>(cam.scissor.z);
+            sc_h = static_cast<int>(cam.scissor.w);
+        }
+
+        sg_apply_scissor_rect(sc_x, sc_y, sc_w, sc_h, true);
+    }
+}
+
+void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen) {
+    if (pip_id_ == 0) return;
+
+    apply_camera_viewport_and_scissor(camera, target_w, target_h);
+
+    if (target_h > 0 && camera.type == CameraType::Perspective) {
+        camera.aspect = static_cast<float>(target_w) / static_cast<float>(target_h);
+    }
+    glm::mat4 vp = camera.view_projection_matrix();
+
+    // 1. Gather lights from scene into LightParamsUBO
+    LightParamsUBO light_ubo{};
+    light_ubo.hemi_sky = glm::vec4(scene.light.ambient_sky, 1.0f);
+    light_ubo.hemi_ground = glm::vec4(scene.light.ambient_ground, 1.0f);
+    light_ubo.ambient_and_count = glm::vec4(scene.light.ambient, 0.0f);
+
+    int num_dirs = 0;
+    int num_points = 0;
+    int num_spots = 0;
+
+    for (const auto& l : scene.lights()) {
+        if (!l) continue;
+        switch (l->type) {
+            case LightType::Ambient:
+                light_ubo.ambient_and_count.r += l->color.r * l->intensity;
+                light_ubo.ambient_and_count.g += l->color.g * l->intensity;
+                light_ubo.ambient_and_count.b += l->color.b * l->intensity;
+                break;
+            case LightType::Hemisphere: {
+                auto hl = std::dynamic_pointer_cast<HemisphereLight>(l);
+                if (hl) {
+                    light_ubo.hemi_sky = glm::vec4(hl->sky_color, hl->intensity);
+                    light_ubo.hemi_ground = glm::vec4(hl->ground_color, 1.0f);
+                }
+                break;
+            }
+            case LightType::Directional: {
+                if (num_dirs < 4) {
+                    auto dl = std::dynamic_pointer_cast<DirectionalLight>(l);
+                    bool cast_shd = dl ? dl->cast_shadow : true;
+                    light_ubo.dir_lights[num_dirs].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), cast_shd ? 1.0f : 0.0f);
+                    light_ubo.dir_lights[num_dirs].color_and_intensity = glm::vec4(l->color, l->intensity);
+                    num_dirs++;
+                }
+                break;
+            }
+            case LightType::Point: {
+                if (num_points < 16) {
+                    auto pl = std::dynamic_pointer_cast<PointLight>(l);
+                    light_ubo.point_lights[num_points].position_and_range = glm::vec4(l->get_world_position(), l->range);
+                    light_ubo.point_lights[num_points].color_and_intensity = glm::vec4(l->color, l->intensity);
+                    light_ubo.point_lights[num_points].params = glm::vec4(pl ? pl->decay : 2.0f, 0.0f, 0.0f, 0.0f);
+                    num_points++;
+                }
+                break;
+            }
+            case LightType::Spot: {
+                if (num_spots < 8) {
+                    auto sl = std::dynamic_pointer_cast<SpotLight>(l);
+                    light_ubo.spot_lights[num_spots].position_and_range = glm::vec4(l->get_world_position(), l->range);
+                    light_ubo.spot_lights[num_spots].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), (sl && sl->cast_shadow) ? 1.0f : 0.0f);
+                    light_ubo.spot_lights[num_spots].color_and_intensity = glm::vec4(l->color, l->intensity);
+                    float inner = sl ? sl->inner_cone_angle : 0.349f;
+                    float outer = sl ? sl->outer_cone_angle : 0.523f;
+                    float penumbra = sl ? sl->penumbra : 0.0f;
+                    light_ubo.spot_lights[num_spots].cone_params = glm::vec4(std::cos(inner), std::cos(outer), penumbra, 0.0f);
+                    num_spots++;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    if (num_dirs == 0) {
+        light_ubo.dir_lights[0].direction_and_cast_shadow = glm::vec4(scene.light.direction, 1.0f);
+        light_ubo.dir_lights[0].color_and_intensity = glm::vec4(scene.light.color, scene.light.intensity);
+        num_dirs = 1;
+    }
+
+    light_ubo.ambient_and_count.w = static_cast<float>(num_dirs);
+    light_ubo.light_counts.x = static_cast<float>(num_points);
+    light_ubo.light_counts.y = static_cast<float>(num_spots);
+
+    // Prepare base lighting uniform
+    FSParams fs_params{};
+    fs_params.eye_pos = glm::vec4(camera.position, 1.0f);
+    fs_params.fog_color = glm::vec4(fog_color_, (tone_mapping_enabled_ && !composer_) ? 1.0f : 0.0f);
+    fs_params.fog_params = glm::vec4(
+        fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
+        fog_near_,
+        fog_far_,
+        fog_density_
+    );
+
+    auto default_mat = scene.default_material();
+
+    // Compute camera frustum for culling
+    Frustum camera_frustum;
+    camera_frustum.set_from_projection_matrix(camera.view_projection_matrix());
+
+    // Split visible entities into opaque and transparent queues
+    struct RenderItem {
+        std::shared_ptr<Entity> entity;
+        float dist_sq;
+    };
+
+    std::vector<RenderItem> opaque_queue;
+    std::vector<RenderItem> transparent_queue;
+
+    for (const auto& entity : scene.entities()) {
+        if (!entity || !entity->visible || !entity->mesh) continue;
+        if ((camera.layers & entity->layers) == 0) continue;
+
+        AABB aabb = entity->world_aabb();
+        if (aabb.is_valid()) {
+            if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
+                stats_.culled_objects++;
+                continue;
+            }
+        }
+
+        if (!entity->mesh->ensure_gpu_buffers()) continue;
+
+        glm::vec3 wpos = entity->world_position();
+        glm::vec3 diff = camera.position - wpos;
+        float d2 = glm::dot(diff, diff);
+
+        auto mat = entity->material ? entity->material : default_mat;
+        bool is_trans = mat && (mat->transparent || mat->opacity < 0.999f || mat->blend_mode != BlendMode::Opaque);
+        if (is_trans) {
+            transparent_queue.push_back({ entity, d2 });
+        } else {
+            opaque_queue.push_back({ entity, d2 });
+        }
+    }
+
+    // Sort opaque front-to-back (ascending distance)
+    std::sort(opaque_queue.begin(), opaque_queue.end(), [](const RenderItem& a, const RenderItem& b) {
+        return a.dist_sq < b.dist_sq;
+    });
+
+    // Sort transparent back-to-front (descending distance)
+    std::sort(transparent_queue.begin(), transparent_queue.end(), [](const RenderItem& a, const RenderItem& b) {
+        return a.dist_sq > b.dist_sq;
+    });
+
+    uint64_t current_pip_key = 0;
+
+    auto render_entities = [&](const std::vector<RenderItem>& queue, bool is_transparent_pass) {
+        for (const auto& item : queue) {
+            const auto& entity = item.entity;
+            auto mat = entity->material ? entity->material : default_mat;
+
+            SideMode side = mat ? mat->side : SideMode::Front;
+            bool depth_write = is_transparent_pass ? false : (mat ? mat->depth_write : true);
+            bool depth_test = mat ? mat->depth_test : true;
+            BlendMode blend = is_transparent_pass ? (mat ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
+            bool wireframe = mat ? mat->wireframe : false;
+            int samples = is_offscreen ? 1 : sapp_sample_count();
+            uint32_t target_fmt = is_offscreen ? static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F) : 0;
+
+            uint64_t pip_key = PipelineManager::make_key(shd_id_, side, depth_write, depth_test, blend, wireframe, false, samples, target_fmt);
+            if (pip_key != current_pip_key) {
+                sg_pipeline_desc pdesc{};
+                pdesc.layout.buffers[0].stride = sizeof(Vertex);
+                pdesc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+                pdesc.layout.attrs[0].offset = offsetof(Vertex, position);
+                pdesc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+                pdesc.layout.attrs[1].offset = offsetof(Vertex, normal);
+                pdesc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+                pdesc.layout.attrs[2].offset = offsetof(Vertex, uv);
+                pdesc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+                pdesc.layout.attrs[3].offset = offsetof(Vertex, color);
+                pdesc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+                pdesc.layout.attrs[4].offset = offsetof(Vertex, tangent);
+                pdesc.shader = sg_shader{ shd_id_ };
+                pdesc.index_type = SG_INDEXTYPE_UINT16;
+                pdesc.depth.compare = depth_test ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
+                pdesc.depth.write_enabled = depth_write;
+                pdesc.face_winding = SG_FACEWINDING_CCW;
+                pdesc.cull_mode = (side == SideMode::Double) ? SG_CULLMODE_NONE : ((side == SideMode::Back) ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK);
+                pdesc.sample_count = samples;
+                pdesc.primitive_type = wireframe ? SG_PRIMITIVETYPE_LINES : SG_PRIMITIVETYPE_TRIANGLES;
+                pdesc.colors[0].pixel_format = is_offscreen ? SG_PIXELFORMAT_RGBA16F : _SG_PIXELFORMAT_DEFAULT;
+
+                if (blend == BlendMode::Alpha) {
+                    pdesc.colors[0].blend.enabled = true;
+                    pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+                    pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+                    pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+                    pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+                } else if (blend == BlendMode::Additive) {
+                    pdesc.colors[0].blend.enabled = true;
+                    pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+                    pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE;
+                    pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+                    pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+                } else if (blend == BlendMode::Multiply) {
+                    pdesc.colors[0].blend.enabled = true;
+                    pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+                    pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+                    pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
+                    pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+                }
+
+                sg_pipeline pip = PipelineManager::instance().get_or_create(pip_key, pdesc);
+                sg_apply_pipeline(pip);
+                current_pip_key = pip_key;
+                sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
+            }
+
+            auto tex_alb = (mat && mat->albedo_map) ? mat->albedo_map : default_white_tex_;
+            if (tex_alb) tex_alb->ensure_gpu_resources();
+            if (!tex_alb || !tex_alb->is_valid()) tex_alb = default_white_tex_;
+
+            auto tex_norm = (mat && mat->normal_map) ? mat->normal_map : default_flat_normal_tex_;
+            if (tex_norm) tex_norm->ensure_gpu_resources();
+            if (!tex_norm || !tex_norm->is_valid()) tex_norm = default_flat_normal_tex_;
+
+            auto tex_mr = (mat && mat->metallic_roughness_map) ? mat->metallic_roughness_map : default_white_tex_;
+            if (tex_mr) tex_mr->ensure_gpu_resources();
+            if (!tex_mr || !tex_mr->is_valid()) tex_mr = default_white_tex_;
+
+            auto tex_em = (mat && mat->emissive_map) ? mat->emissive_map : default_black_tex_;
+            if (tex_em) tex_em->ensure_gpu_resources();
+            if (!tex_em || !tex_em->is_valid()) tex_em = default_black_tex_;
+
+            auto tex_ao_tex = (mat && mat->ao_map) ? mat->ao_map : ((mat && mat->occlusion_map) ? mat->occlusion_map : default_white_tex_);
+            if (tex_ao_tex) tex_ao_tex->ensure_gpu_resources();
+            if (!tex_ao_tex || !tex_ao_tex->is_valid()) tex_ao_tex = default_white_tex_;
+
+            glm::mat4 model = entity->world_model_matrix();
+            glm::mat4 normal_mat = entity->world_normal_matrix();
+            glm::mat4 mvp = vp * model;
+            glm::mat4 l_mvp = light_vp_ * model;
+
+            VSParams vs_params{ mvp, model, normal_mat, l_mvp };
+
+            sg_bindings bind{};
+            bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
+            bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+            bind.views[0] = sg_view{ tex_alb ? tex_alb->view_id : 0 };
+            bind.samplers[0] = sg_sampler{ tex_alb ? tex_alb->sampler_id : 0 };
+            bind.views[1] = sg_view{ shadow_tex_view_id_ };
+            bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
+            bind.views[2] = sg_view{ tex_norm ? tex_norm->view_id : 0 };
+            bind.samplers[2] = sg_sampler{ tex_norm ? tex_norm->sampler_id : 0 };
+            bind.views[3] = sg_view{ tex_mr ? tex_mr->view_id : 0 };
+            bind.samplers[3] = sg_sampler{ tex_mr ? tex_mr->sampler_id : 0 };
+            bind.views[4] = sg_view{ tex_em ? tex_em->view_id : 0 };
+            bind.samplers[4] = sg_sampler{ tex_em ? tex_em->sampler_id : 0 };
+            bind.views[5] = sg_view{ tex_ao_tex ? tex_ao_tex->view_id : 0 };
+            bind.samplers[5] = sg_sampler{ tex_ao_tex ? tex_ao_tex->sampler_id : 0 };
+
+            sg_apply_bindings(&bind);
+            sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
+
+            FSParams ent_fs = fs_params;
+            ent_fs.material_color = (mat ? mat->base_color : glm::vec4(1.0f)) * entity->color;
+            ent_fs.material_params = glm::vec4(mat ? mat->roughness : 0.5f, mat ? mat->metallic : 0.0f, mat ? mat->uv_scale.x : 1.0f, mat ? mat->uv_scale.y : 1.0f);
+            ent_fs.material_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, mat ? mat->normal_scale : 1.0f, mat ? mat->ao_intensity : 1.0f);
+            ent_fs.emissive_params = glm::vec4(mat ? (mat->emissive_color * mat->emissive_intensity) : glm::vec3(0.0f), (mat && mat->alpha_test) ? mat->alpha_cutoff : -1.0f);
+            ent_fs.texture_flags = glm::vec4(
+                (mat && mat->normal_map) ? 1.0f : 0.0f,
+                (mat && mat->metallic_roughness_map) ? 1.0f : 0.0f,
+                (mat && mat->emissive_map) ? 1.0f : 0.0f,
+                (mat && (mat->ao_map || mat->occlusion_map)) ? 1.0f : 0.0f
+            );
+            float mtype = 0.0f;
+            float extra_val = 0.0f;
+            if (mat) {
+                switch (mat->type()) {
+                    case MaterialType::Unlit: mtype = 1.0f; break;
+                    case MaterialType::Lambert: mtype = 2.0f; break;
+                    case MaterialType::Phong: {
+                        mtype = 3.0f;
+                        auto pm = std::dynamic_pointer_cast<PhongMaterial>(mat);
+                        extra_val = pm ? pm->shininess : 32.0f;
+                        break;
+                    }
+                    case MaterialType::Toon: {
+                        mtype = 4.0f;
+                        auto tm = std::dynamic_pointer_cast<ToonMaterial>(mat);
+                        extra_val = tm ? tm->steps : 4.0f;
+                        break;
+                    }
+                    case MaterialType::Physical:
+                    case MaterialType::Standard:
+                    default:
+                        mtype = 0.0f;
+                        break;
+                }
+            }
+            ent_fs.extra_params = glm::vec4(mtype, extra_val, mat ? mat->opacity : 1.0f, is_transparent_pass ? 1.0f : 0.0f);
+
+            sg_apply_uniforms(1, SG_RANGE_REF(ent_fs));
+
+            sg_draw(0, entity->mesh->num_indices, 1);
+            stats_.draw_calls++;
+            stats_.total_triangles += entity->mesh->num_indices / 3;
+        }
+    };
+
+    // Render opaque entities first
+    render_entities(opaque_queue, false);
+
+    // Draw instanced meshes in Scene
+    if (instanced_pip_id_ != 0 && !scene.instanced_meshes().empty()) {
+        sg_pipeline inst_pip{ instanced_pip_id_ };
+        sg_apply_pipeline(inst_pip);
+
+        InstancedVSParams inst_vs{ vp, light_vp_ };
+        sg_apply_uniforms(0, SG_RANGE_REF(inst_vs));
+
+        for (const auto& inst_mesh : scene.instanced_meshes()) {
+            if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
+            if (!inst_mesh->mesh->ensure_gpu_buffers() || !inst_mesh->ensure_gpu_buffers()) continue;
+
+            sg_bindings bind{};
+            bind.vertex_buffers[0] = sg_buffer{ inst_mesh->mesh->vbuf_id };
+            bind.vertex_buffers[1] = sg_buffer{ inst_mesh->inst_vbuf_id };
+            bind.index_buffer = sg_buffer{ inst_mesh->mesh->ibuf_id };
+            bind.views[0] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
+            bind.samplers[0] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
+            bind.views[1] = sg_view{ shadow_tex_view_id_ };
+            bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
+            bind.views[2] = sg_view{ default_flat_normal_tex_ ? default_flat_normal_tex_->view_id : 0 };
+            bind.samplers[2] = sg_sampler{ default_flat_normal_tex_ ? default_flat_normal_tex_->sampler_id : 0 };
+            bind.views[3] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
+            bind.samplers[3] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
+            bind.views[4] = sg_view{ default_black_tex_ ? default_black_tex_->view_id : 0 };
+            bind.samplers[4] = sg_sampler{ default_black_tex_ ? default_black_tex_->sampler_id : 0 };
+            bind.views[5] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
+            bind.samplers[5] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
+            sg_apply_bindings(&bind);
+
+            sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
+            stats_.draw_calls++;
+            stats_.total_instances += static_cast<uint32_t>(inst_mesh->instance_count());
+            stats_.total_triangles += static_cast<uint32_t>((inst_mesh->mesh->num_indices / 3) * inst_mesh->instance_count());
+        }
+    }
+
+    // Render transparent entities second
+    render_entities(transparent_queue, true);
+}
+
+void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target) {
+    if (pip_id_ == 0 || target.color_view_id() == 0) return;
+
+    render_shadow_pass();
+
+    sg_pass pass{};
+    pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+    pass.action.colors[0].clear_value = {
+        camera.clear_color.r,
+        camera.clear_color.g,
+        camera.clear_color.b,
+        camera.clear_color.a
+    };
+    if (target.has_depth()) {
+        pass.action.depth.load_action = SG_LOADACTION_CLEAR;
+        pass.action.depth.clear_value = 1.0f;
+        pass.attachments.depth_stencil = sg_view{ target.depth_view_id() };
+    }
+    pass.attachments.colors[0] = sg_view{ target.color_view_id() };
+    pass.label = "rendertarget-scene-pass";
+
+    sg_begin_pass(&pass);
+    render_scene_pass(scene, camera, target.width(), target.height(), true);
+    sg_end_pass();
+}
+
+std::vector<uint8_t> EngineApp::read_pixels(RenderTarget& target) {
+    return target.read_pixels();
+}
+
+void EngineApp::set_composer(std::shared_ptr<EffectComposer> composer) {
+    composer_ = composer;
+    if (composer_) {
+        composer_->set_app(this);
+    }
+}
+
 void EngineApp::on_frame() {
     // Reset render stats for current frame
     stats_ = RenderStats{};
@@ -2054,388 +2488,89 @@ void EngineApp::on_frame() {
     // 4. Update Camera Aspect & Matrix
     float w = sapp_widthf();
     float h = sapp_heightf();
-    camera_.aspect = (h > 0.0f) ? (w / h) : 1.333333f;
+    if (camera_.type == CameraType::Perspective) {
+        camera_.aspect = (h > 0.0f) ? (w / h) : 1.333333f;
+    }
     glm::mat4 vp = camera_.view_projection_matrix();
 
     // 5. Render Pass 1: Offscreen Shadow Map Pass
     render_shadow_pass();
 
-    // 6. Render Pass 2: Main Swapchain Pass with Daylight Clear Color
-    sg_pass pass{};
-    pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
-    pass.action.colors[0].clear_value = {
-        config_.clear_color[0],
-        config_.clear_color[1],
-        config_.clear_color[2],
-        config_.clear_color[3]
-    };
-    pass.action.depth.load_action = SG_LOADACTION_CLEAR;
-    pass.action.depth.clear_value = 1.0f;
-    pass.swapchain = sglue_swapchain();
+    // 6. Main Render Pass (Direct Swapchain or via EffectComposer)
+    if (composer_ && composer_->enabled) {
+        // Run passes through EffectComposer
+        composer_->render_passes(*this, scene_, camera_);
 
-    sg_begin_pass(&pass);
-
-    if (pip_id_ != 0) {
-        // 1. Gather lights from scene into LightParamsUBO
-        LightParamsUBO light_ubo{};
-        light_ubo.hemi_sky = glm::vec4(scene_.light.ambient_sky, 1.0f);
-        light_ubo.hemi_ground = glm::vec4(scene_.light.ambient_ground, 1.0f);
-        light_ubo.ambient_and_count = glm::vec4(scene_.light.ambient, 0.0f);
-
-        int num_dirs = 0;
-        int num_points = 0;
-        int num_spots = 0;
-
-        for (const auto& l : scene_.lights()) {
-            if (!l) continue;
-            switch (l->type) {
-                case LightType::Ambient:
-                    light_ubo.ambient_and_count.r += l->color.r * l->intensity;
-                    light_ubo.ambient_and_count.g += l->color.g * l->intensity;
-                    light_ubo.ambient_and_count.b += l->color.b * l->intensity;
-                    break;
-                case LightType::Hemisphere: {
-                    auto hl = std::dynamic_pointer_cast<HemisphereLight>(l);
-                    if (hl) {
-                        light_ubo.hemi_sky = glm::vec4(hl->sky_color, hl->intensity);
-                        light_ubo.hemi_ground = glm::vec4(hl->ground_color, 1.0f);
-                    }
-                    break;
-                }
-                case LightType::Directional: {
-                    if (num_dirs < 4) {
-                        auto dl = std::dynamic_pointer_cast<DirectionalLight>(l);
-                        bool cast_shd = dl ? dl->cast_shadow : true;
-                        light_ubo.dir_lights[num_dirs].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), cast_shd ? 1.0f : 0.0f);
-                        light_ubo.dir_lights[num_dirs].color_and_intensity = glm::vec4(l->color, l->intensity);
-                        num_dirs++;
-                    }
-                    break;
-                }
-                case LightType::Point: {
-                    if (num_points < 16) {
-                        auto pl = std::dynamic_pointer_cast<PointLight>(l);
-                        light_ubo.point_lights[num_points].position_and_range = glm::vec4(l->get_world_position(), l->range);
-                        light_ubo.point_lights[num_points].color_and_intensity = glm::vec4(l->color, l->intensity);
-                        light_ubo.point_lights[num_points].params = glm::vec4(pl ? pl->decay : 2.0f, 0.0f, 0.0f, 0.0f);
-                        num_points++;
-                    }
-                    break;
-                }
-                case LightType::Spot: {
-                    if (num_spots < 8) {
-                        auto sl = std::dynamic_pointer_cast<SpotLight>(l);
-                        light_ubo.spot_lights[num_spots].position_and_range = glm::vec4(l->get_world_position(), l->range);
-                        light_ubo.spot_lights[num_spots].direction_and_cast_shadow = glm::vec4(l->get_world_direction(), (sl && sl->cast_shadow) ? 1.0f : 0.0f);
-                        light_ubo.spot_lights[num_spots].color_and_intensity = glm::vec4(l->color, l->intensity);
-                        float inner = sl ? sl->inner_cone_angle : 0.349f;
-                        float outer = sl ? sl->outer_cone_angle : 0.523f;
-                        float penumbra = sl ? sl->penumbra : 0.0f;
-                        light_ubo.spot_lights[num_spots].cone_params = glm::vec4(std::cos(inner), std::cos(outer), penumbra, 0.0f);
-                        num_spots++;
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-
-        if (num_dirs == 0) {
-            light_ubo.dir_lights[0].direction_and_cast_shadow = glm::vec4(scene_.light.direction, 1.0f);
-            light_ubo.dir_lights[0].color_and_intensity = glm::vec4(scene_.light.color, scene_.light.intensity);
-            num_dirs = 1;
-        }
-
-        light_ubo.ambient_and_count.w = static_cast<float>(num_dirs);
-        light_ubo.light_counts.x = static_cast<float>(num_points);
-        light_ubo.light_counts.y = static_cast<float>(num_spots);
-
-        // Prepare base lighting uniform
-        FSParams fs_params{};
-        fs_params.eye_pos = glm::vec4(camera_.position, 1.0f);
-        fs_params.fog_color = glm::vec4(fog_color_, tone_mapping_enabled_ ? 1.0f : 0.0f);
-        fs_params.fog_params = glm::vec4(
-            fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
-            fog_near_,
-            fog_far_,
-            fog_density_
-        );
-
-        auto default_mat = scene_.default_material();
-
-        // Compute camera frustum for culling
-        Frustum camera_frustum;
-        camera_frustum.set_from_projection_matrix(camera_.view_projection_matrix());
-
-        // Split visible entities into opaque and transparent queues
-        struct RenderItem {
-            std::shared_ptr<Entity> entity;
-            float dist_sq;
+        sg_pass pass{};
+        pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+        pass.action.colors[0].clear_value = {
+            config_.clear_color[0],
+            config_.clear_color[1],
+            config_.clear_color[2],
+            config_.clear_color[3]
         };
+        pass.action.depth.load_action = SG_LOADACTION_CLEAR;
+        pass.action.depth.clear_value = 1.0f;
+        pass.swapchain = sglue_swapchain();
 
-        std::vector<RenderItem> opaque_queue;
-        std::vector<RenderItem> transparent_queue;
+        sg_begin_pass(&pass);
 
-        for (const auto& entity : scene_.entities()) {
-            if (!entity || !entity->visible || !entity->mesh) continue;
-            if ((camera_.layers & entity->layers) == 0) continue;
-
-            AABB aabb = entity->world_aabb();
-            if (aabb.is_valid()) {
-                if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
-                    stats_.culled_objects++;
-                    continue;
-                }
-            }
-
-            if (!entity->mesh->ensure_gpu_buffers()) continue;
-
-            glm::vec3 wpos = entity->world_position();
-            glm::vec3 diff = camera_.position - wpos;
-            float d2 = glm::dot(diff, diff);
-
-            auto mat = entity->material ? entity->material : default_mat;
-            bool is_trans = mat && (mat->transparent || mat->opacity < 0.999f || mat->blend_mode != BlendMode::Opaque);
-            if (is_trans) {
-                transparent_queue.push_back({ entity, d2 });
-            } else {
-                opaque_queue.push_back({ entity, d2 });
-            }
+        if (composer_->final_target()) {
+            composer_->blit_to_swapchain(*composer_->final_target());
         }
 
-        // Sort opaque front-to-back (ascending distance)
-        std::sort(opaque_queue.begin(), opaque_queue.end(), [](const RenderItem& a, const RenderItem& b) {
-            return a.dist_sq < b.dist_sq;
-        });
+        // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
+        if (show_debug_hitboxes_ || mode_ == EngineMode::EDITOR) {
+            render_debug_hitboxes(vp);
+        }
 
-        // Sort transparent back-to-front (descending distance)
-        std::sort(transparent_queue.begin(), transparent_queue.end(), [](const RenderItem& a, const RenderItem& b) {
-            return a.dist_sq > b.dist_sq;
-        });
+        // 8. 2D HUD Rendering (only in Game Mode)
+        if ((show_hud_ || !custom_ui_commands_.empty()) && mode_ == EngineMode::GAME) {
+            render_hud(w, h, current_fps_);
+        }
 
-        uint64_t current_pip_key = 0;
+        // 9. Visual Editor UI (Dear ImGui & ImGuizmo) - only in Editor Mode
+        if (mode_ == EngineMode::EDITOR) {
+            editor_.render(static_cast<float>(dt), w, h);
+        }
 
-        auto render_entities = [&](const std::vector<RenderItem>& queue, bool is_transparent_pass) {
-            for (const auto& item : queue) {
-                const auto& entity = item.entity;
-                auto mat = entity->material ? entity->material : default_mat;
-
-                SideMode side = mat ? mat->side : SideMode::Front;
-                bool depth_write = is_transparent_pass ? false : (mat ? mat->depth_write : true);
-                bool depth_test = mat ? mat->depth_test : true;
-                BlendMode blend = is_transparent_pass ? (mat ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
-                bool wireframe = mat ? mat->wireframe : false;
-                int samples = sapp_sample_count();
-
-                uint64_t pip_key = PipelineManager::make_key(shd_id_, side, depth_write, depth_test, blend, wireframe, false, samples);
-                if (pip_key != current_pip_key) {
-                    sg_pipeline_desc pdesc{};
-                    pdesc.layout.buffers[0].stride = sizeof(Vertex);
-                    pdesc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-                    pdesc.layout.attrs[0].offset = offsetof(Vertex, position);
-                    pdesc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
-                    pdesc.layout.attrs[1].offset = offsetof(Vertex, normal);
-                    pdesc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
-                    pdesc.layout.attrs[2].offset = offsetof(Vertex, uv);
-                    pdesc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
-                    pdesc.layout.attrs[3].offset = offsetof(Vertex, color);
-                    pdesc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
-                    pdesc.layout.attrs[4].offset = offsetof(Vertex, tangent);
-                    pdesc.shader = sg_shader{ shd_id_ };
-                    pdesc.index_type = SG_INDEXTYPE_UINT16;
-                    pdesc.depth.compare = depth_test ? SG_COMPAREFUNC_LESS_EQUAL : SG_COMPAREFUNC_ALWAYS;
-                    pdesc.depth.write_enabled = depth_write;
-                    pdesc.face_winding = SG_FACEWINDING_CCW;
-                    pdesc.cull_mode = (side == SideMode::Double) ? SG_CULLMODE_NONE : ((side == SideMode::Back) ? SG_CULLMODE_FRONT : SG_CULLMODE_BACK);
-                    pdesc.sample_count = samples;
-                    pdesc.primitive_type = wireframe ? SG_PRIMITIVETYPE_LINES : SG_PRIMITIVETYPE_TRIANGLES;
-
-                    if (blend == BlendMode::Alpha) {
-                        pdesc.colors[0].blend.enabled = true;
-                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-                    } else if (blend == BlendMode::Additive) {
-                        pdesc.colors[0].blend.enabled = true;
-                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE;
-                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
-                    } else if (blend == BlendMode::Multiply) {
-                        pdesc.colors[0].blend.enabled = true;
-                        pdesc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
-                        pdesc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ZERO;
-                        pdesc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
-                        pdesc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ZERO;
-                    }
-
-                    sg_pipeline pip = PipelineManager::instance().get_or_create(pip_key, pdesc);
-                    sg_apply_pipeline(pip);
-                    current_pip_key = pip_key;
-                    sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
-                }
-
-                auto tex_alb = (mat && mat->albedo_map) ? mat->albedo_map : default_white_tex_;
-                if (tex_alb) tex_alb->ensure_gpu_resources();
-                if (!tex_alb || !tex_alb->is_valid()) tex_alb = default_white_tex_;
-
-                auto tex_norm = (mat && mat->normal_map) ? mat->normal_map : default_flat_normal_tex_;
-                if (tex_norm) tex_norm->ensure_gpu_resources();
-                if (!tex_norm || !tex_norm->is_valid()) tex_norm = default_flat_normal_tex_;
-
-                auto tex_mr = (mat && mat->metallic_roughness_map) ? mat->metallic_roughness_map : default_white_tex_;
-                if (tex_mr) tex_mr->ensure_gpu_resources();
-                if (!tex_mr || !tex_mr->is_valid()) tex_mr = default_white_tex_;
-
-                auto tex_em = (mat && mat->emissive_map) ? mat->emissive_map : default_black_tex_;
-                if (tex_em) tex_em->ensure_gpu_resources();
-                if (!tex_em || !tex_em->is_valid()) tex_em = default_black_tex_;
-
-                auto tex_ao_tex = (mat && mat->ao_map) ? mat->ao_map : ((mat && mat->occlusion_map) ? mat->occlusion_map : default_white_tex_);
-                if (tex_ao_tex) tex_ao_tex->ensure_gpu_resources();
-                if (!tex_ao_tex || !tex_ao_tex->is_valid()) tex_ao_tex = default_white_tex_;
-
-                glm::mat4 model = entity->world_model_matrix();
-                glm::mat4 normal_mat = entity->world_normal_matrix();
-                glm::mat4 mvp = vp * model;
-                glm::mat4 l_mvp = light_vp_ * model;
-
-                VSParams vs_params{ mvp, model, normal_mat, l_mvp };
-
-                sg_bindings bind{};
-                bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
-                bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
-                bind.views[0] = sg_view{ tex_alb ? tex_alb->view_id : 0 };
-                bind.samplers[0] = sg_sampler{ tex_alb ? tex_alb->sampler_id : 0 };
-                bind.views[1] = sg_view{ shadow_tex_view_id_ };
-                bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
-                bind.views[2] = sg_view{ tex_norm ? tex_norm->view_id : 0 };
-                bind.samplers[2] = sg_sampler{ tex_norm ? tex_norm->sampler_id : 0 };
-                bind.views[3] = sg_view{ tex_mr ? tex_mr->view_id : 0 };
-                bind.samplers[3] = sg_sampler{ tex_mr ? tex_mr->sampler_id : 0 };
-                bind.views[4] = sg_view{ tex_em ? tex_em->view_id : 0 };
-                bind.samplers[4] = sg_sampler{ tex_em ? tex_em->sampler_id : 0 };
-                bind.views[5] = sg_view{ tex_ao_tex ? tex_ao_tex->view_id : 0 };
-                bind.samplers[5] = sg_sampler{ tex_ao_tex ? tex_ao_tex->sampler_id : 0 };
-
-                sg_apply_bindings(&bind);
-                sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
-
-                FSParams ent_fs = fs_params;
-                ent_fs.material_color = (mat ? mat->base_color : glm::vec4(1.0f)) * entity->color;
-                ent_fs.material_params = glm::vec4(mat ? mat->roughness : 0.5f, mat ? mat->metallic : 0.0f, mat ? mat->uv_scale.x : 1.0f, mat ? mat->uv_scale.y : 1.0f);
-                ent_fs.material_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, mat ? mat->normal_scale : 1.0f, mat ? mat->ao_intensity : 1.0f);
-                ent_fs.emissive_params = glm::vec4(mat ? (mat->emissive_color * mat->emissive_intensity) : glm::vec3(0.0f), (mat && mat->alpha_test) ? mat->alpha_cutoff : -1.0f);
-                ent_fs.texture_flags = glm::vec4(
-                    (mat && mat->normal_map) ? 1.0f : 0.0f,
-                    (mat && mat->metallic_roughness_map) ? 1.0f : 0.0f,
-                    (mat && mat->emissive_map) ? 1.0f : 0.0f,
-                    (mat && (mat->ao_map || mat->occlusion_map)) ? 1.0f : 0.0f
-                );
-                float mtype = 0.0f;
-                float extra_val = 0.0f;
-                if (mat) {
-                    switch (mat->type()) {
-                        case MaterialType::Unlit: mtype = 1.0f; break;
-                        case MaterialType::Lambert: mtype = 2.0f; break;
-                        case MaterialType::Phong: {
-                            mtype = 3.0f;
-                            auto pm = std::dynamic_pointer_cast<PhongMaterial>(mat);
-                            extra_val = pm ? pm->shininess : 32.0f;
-                            break;
-                        }
-                        case MaterialType::Toon: {
-                            mtype = 4.0f;
-                            auto tm = std::dynamic_pointer_cast<ToonMaterial>(mat);
-                            extra_val = tm ? static_cast<float>(tm->num_steps) : 4.0f;
-                            break;
-                        }
-                        default: mtype = 0.0f; break;
-                    }
-                }
-                ent_fs.extra_params = glm::vec4(mtype, extra_val, mat ? mat->opacity : 1.0f, is_transparent_pass ? 1.0f : 0.0f);
-                sg_apply_uniforms(1, SG_RANGE_REF(ent_fs));
-
-                sg_draw(0, entity->mesh->num_indices, 1);
-                stats_.draw_calls++;
-                stats_.total_triangles += entity->mesh->num_indices / 3;
-            }
+        sg_end_pass();
+        sg_commit();
+    } else {
+        sg_pass pass{};
+        pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+        pass.action.colors[0].clear_value = {
+            config_.clear_color[0],
+            config_.clear_color[1],
+            config_.clear_color[2],
+            config_.clear_color[3]
         };
+        pass.action.depth.load_action = SG_LOADACTION_CLEAR;
+        pass.action.depth.clear_value = 1.0f;
+        pass.swapchain = sglue_swapchain();
 
-        // Render opaque first
-        render_entities(opaque_queue, false);
+        sg_begin_pass(&pass);
 
-        // Draw instanced meshes in Scene
-        if (instanced_pip_id_ != 0 && !scene_.instanced_meshes().empty()) {
-            sg_pipeline inst_pip{ instanced_pip_id_ };
-            sg_apply_pipeline(inst_pip);
+        render_scene_pass(scene_, camera_, static_cast<int>(w), static_cast<int>(h), false);
 
-            InstancedVSParams inst_vs{ vp, light_vp_ };
-            sg_apply_uniforms(0, SG_RANGE_REF(inst_vs));
-
-            fs_params.material_color = glm::vec4(1.0f);
-            fs_params.material_params = glm::vec4(0.5f, 0.0f, 1.0f, 1.0f);
-            fs_params.material_uv_offset = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-            fs_params.emissive_params = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
-            fs_params.texture_flags = glm::vec4(0.0f);
-            fs_params.extra_params = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
-            sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
-            sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
-
-            for (const auto& inst_mesh : scene_.instanced_meshes()) {
-                if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
-                if ((camera_.layers & inst_mesh->layers) == 0) continue;
-                if (!inst_mesh->ensure_gpu_buffers()) continue;
-
-                auto tex = default_white_tex_;
-                sg_bindings bind{};
-                bind.vertex_buffers[0] = sg_buffer{ inst_mesh->mesh->vbuf_id };
-                bind.vertex_buffers[1] = sg_buffer{ inst_mesh->inst_vbuf_id };
-                bind.index_buffer = sg_buffer{ inst_mesh->mesh->ibuf_id };
-                bind.views[0] = sg_view{ tex ? tex->view_id : 0 };
-                bind.samplers[0] = sg_sampler{ tex ? tex->sampler_id : 0 };
-                bind.views[1] = sg_view{ shadow_tex_view_id_ };
-                bind.samplers[1] = sg_sampler{ shadow_sampler_id_ };
-                bind.views[2] = sg_view{ default_flat_normal_tex_ ? default_flat_normal_tex_->view_id : 0 };
-                bind.samplers[2] = sg_sampler{ default_flat_normal_tex_ ? default_flat_normal_tex_->sampler_id : 0 };
-                bind.views[3] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
-                bind.samplers[3] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
-                bind.views[4] = sg_view{ default_black_tex_ ? default_black_tex_->view_id : 0 };
-                bind.samplers[4] = sg_sampler{ default_black_tex_ ? default_black_tex_->sampler_id : 0 };
-                bind.views[5] = sg_view{ default_white_tex_ ? default_white_tex_->view_id : 0 };
-                bind.samplers[5] = sg_sampler{ default_white_tex_ ? default_white_tex_->sampler_id : 0 };
-                sg_apply_bindings(&bind);
-
-                sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
-                stats_.draw_calls++;
-                stats_.total_instances += static_cast<uint32_t>(inst_mesh->instance_count());
-                stats_.total_triangles += static_cast<uint32_t>((inst_mesh->mesh->num_indices / 3) * inst_mesh->instance_count());
-            }
+        // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
+        if (show_debug_hitboxes_ || mode_ == EngineMode::EDITOR) {
+            render_debug_hitboxes(vp);
         }
 
-        // Render transparent entities second
-        render_entities(transparent_queue, true);
-    }
+        // 8. 2D HUD Rendering (only in Game Mode)
+        if ((show_hud_ || !custom_ui_commands_.empty()) && mode_ == EngineMode::GAME) {
+            render_hud(w, h, current_fps_);
+        }
 
-    // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)
-    if (show_debug_hitboxes_ || mode_ == EngineMode::EDITOR) {
-        render_debug_hitboxes(vp);
-    }
+        // 9. Visual Editor UI (Dear ImGui & ImGuizmo) - only in Editor Mode
+        if (mode_ == EngineMode::EDITOR) {
+            editor_.render(static_cast<float>(dt), w, h);
+        }
 
-    // 8. 2D HUD Rendering (only in Game Mode)
-    if ((show_hud_ || !custom_ui_commands_.empty()) && mode_ == EngineMode::GAME) {
-        render_hud(w, h, current_fps_);
+        sg_end_pass();
+        sg_commit();
     }
-
-    // 9. Visual Editor UI (Dear ImGui & ImGuizmo) - only in Editor Mode
-    if (mode_ == EngineMode::EDITOR) {
-        editor_.render(static_cast<float>(dt), w, h);
-    }
-
-    sg_end_pass();
-    sg_commit();
 
     // 9. Reset per-frame input transients
     input_.post_frame();

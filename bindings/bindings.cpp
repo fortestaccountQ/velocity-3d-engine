@@ -26,6 +26,8 @@
 #include "engine/audio.hpp"
 #include "engine/app.hpp"
 #include "engine/editor.hpp"
+#include "engine/render_target.hpp"
+#include "engine/post_process.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -304,7 +306,7 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("center", &engine::AABB::center)
         .def("size", &engine::AABB::size)
         .def("extents", &engine::AABB::extents)
-        .def("expand", [](engine::AABB& b, const nb::object& obj) {
+        .def("expand", [](engine::AABB& b, nb::handle obj) {
             if (nb::isinstance<glm::vec3>(obj)) {
                 b.expand(nb::cast<glm::vec3>(obj));
             } else if (nb::isinstance<engine::AABB>(obj)) {
@@ -314,7 +316,7 @@ NB_MODULE(_VelocityEngine_core, m) {
                 if (seq.size() >= 3) b.expand({ seq[0], seq[1], seq[2] });
             }
         }, "other"_a)
-        .def("contains", [](const engine::AABB& b, const nb::object& obj) -> bool {
+        .def("contains", [](const engine::AABB& b, nb::handle obj) -> bool {
             if (nb::isinstance<glm::vec3>(obj)) {
                 return b.contains(nb::cast<glm::vec3>(obj));
             } else if (nb::isinstance<nb::tuple>(obj) || nb::isinstance<nb::list>(obj)) {
@@ -683,7 +685,8 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_rw("wrap_t", &engine::Texture::wrap_t)
         .def_rw("filter_min", &engine::Texture::filter_min)
         .def_rw("filter_mag", &engine::Texture::filter_mag)
-        .def("is_valid", &engine::Texture::is_valid);
+        .def("is_valid", &engine::Texture::is_valid)
+        .def("__call__", [](std::shared_ptr<engine::Texture> self) { return self; });
 
     // -----------------------------------------------------------------------
     // Material Enums
@@ -740,22 +743,54 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_rw("blend_mode", &engine::Material::blend_mode)
         .def_prop_rw("albedo_map",
             [](engine::Material& m) { return m.albedo_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.albedo_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.albedo_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.albedo_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.albedo_map = nb::cast<engine::RenderTarget&>(obj).texture(); }
+                else if (nb::hasattr(obj, "texture")) {
+                    auto tex = obj.attr("texture");
+                    if (nb::isinstance<engine::Texture>(tex)) m.albedo_map = nb::cast<std::shared_ptr<engine::Texture>>(tex);
+                    else if (PyCallable_Check(tex.ptr())) {
+                        auto res = tex();
+                        if (nb::isinstance<engine::Texture>(res)) m.albedo_map = nb::cast<std::shared_ptr<engine::Texture>>(res);
+                    }
+                }
+            })
         .def_prop_rw("normal_map",
             [](engine::Material& m) { return m.normal_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.normal_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.normal_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.normal_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.normal_map = nb::cast<engine::RenderTarget&>(obj).texture(); }
+            })
         .def_prop_rw("metallic_roughness_map",
             [](engine::Material& m) { return m.metallic_roughness_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.metallic_roughness_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.metallic_roughness_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.metallic_roughness_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.metallic_roughness_map = nb::cast<engine::RenderTarget&>(obj).texture(); }
+            })
         .def_prop_rw("occlusion_map",
             [](engine::Material& m) { return m.occlusion_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.occlusion_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.occlusion_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.occlusion_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.occlusion_map = nb::cast<engine::RenderTarget&>(obj).texture(); }
+            })
         .def_prop_rw("ao_map",
             [](engine::Material& m) { return m.ao_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.ao_map = t; m.occlusion_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.ao_map = nullptr; m.occlusion_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.ao_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); m.occlusion_map = m.ao_map; }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.ao_map = nb::cast<engine::RenderTarget&>(obj).texture(); m.occlusion_map = m.ao_map; }
+            })
         .def_prop_rw("emissive_map",
             [](engine::Material& m) { return m.emissive_map; },
-            [](engine::Material& m, std::shared_ptr<engine::Texture> t) { m.emissive_map = t; })
+            [](engine::Material& m, nb::handle obj) {
+                if (obj.is_none()) { m.emissive_map = nullptr; }
+                else if (nb::isinstance<engine::Texture>(obj)) { m.emissive_map = nb::cast<std::shared_ptr<engine::Texture>>(obj); }
+                else if (nb::isinstance<engine::RenderTarget>(obj)) { m.emissive_map = nb::cast<engine::RenderTarget&>(obj).texture(); }
+            })
         .def_rw("normal_scale", &engine::Material::normal_scale)
         .def_rw("ao_intensity", &engine::Material::ao_intensity)
         .def_rw("alpha_test", &engine::Material::alpha_test)
@@ -881,8 +916,14 @@ NB_MODULE(_VelocityEngine_core, m) {
     // -----------------------------------------------------------------------
     // Camera
     // -----------------------------------------------------------------------
+    nb::enum_<engine::CameraType>(m, "CameraType")
+        .value("Perspective", engine::CameraType::Perspective)
+        .value("Orthographic", engine::CameraType::Orthographic)
+        .export_values();
+
     nb::class_<engine::Camera, engine::Node3D>(m, "Camera")
         .def(nb::init<>())
+        .def_rw("type", &engine::Camera::type)
         .def_prop_rw("position",
             [](engine::Camera& c) -> glm::vec3& { return c.position; },
             [](engine::Camera& c, const nb::object& val) {
@@ -914,11 +955,50 @@ NB_MODULE(_VelocityEngine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_rw("fov", &engine::Camera::fov)
+        .def_rw("aspect", &engine::Camera::aspect)
         .def_rw("near_plane", &engine::Camera::near_plane)
         .def_rw("far_plane", &engine::Camera::far_plane)
         .def_rw("yaw", &engine::Camera::yaw)
         .def_rw("pitch", &engine::Camera::pitch)
+        .def_prop_rw("viewport",
+            [](engine::Camera& c) -> glm::vec4& { return c.viewport; },
+            [](engine::Camera& c, const nb::object& val) {
+                if (nb::isinstance<glm::vec4>(val)) {
+                    c.viewport = nb::cast<glm::vec4>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) c.viewport = { seq[0], seq[1], seq[2], seq[3] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("scissor",
+            [](engine::Camera& c) -> glm::vec4& { return c.scissor; },
+            [](engine::Camera& c, const nb::object& val) {
+                if (nb::isinstance<glm::vec4>(val)) {
+                    c.scissor = nb::cast<glm::vec4>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) c.scissor = { seq[0], seq[1], seq[2], seq[3] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("has_scissor", &engine::Camera::has_scissor)
+        .def_prop_rw("clear_color",
+            [](engine::Camera& c) -> glm::vec4& { return c.clear_color; },
+            [](engine::Camera& c, const nb::object& val) {
+                if (nb::isinstance<glm::vec4>(val)) {
+                    c.clear_color = nb::cast<glm::vec4>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) c.clear_color = { seq[0], seq[1], seq[2], seq[3] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_rw("ortho_left", &engine::Camera::ortho_left)
+        .def_rw("ortho_right", &engine::Camera::ortho_right)
+        .def_rw("ortho_bottom", &engine::Camera::ortho_bottom)
+        .def_rw("ortho_top", &engine::Camera::ortho_top)
+        .def_rw("zoom", &engine::Camera::zoom)
         .def("set_perspective", &engine::Camera::set_perspective, "fov"_a, "aspect"_a, "near_z"_a, "far_z"_a)
+        .def("set_orthographic", &engine::Camera::set_orthographic,
+             "left"_a, "right"_a, "bottom"_a, "top"_a, "near_z"_a = 0.1f, "far_z"_a = 100.0f, "zoom_val"_a = 1.0f)
         .def("set_position", &engine::Camera::set_position, "x"_a, "y"_a, "z"_a)
         .def("set_target", &engine::Camera::set_target, "x"_a, "y"_a, "z"_a)
         .def("rotate", &engine::Camera::rotate, "delta_yaw"_a, "delta_pitch"_a)
@@ -933,6 +1013,18 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("view_projection_matrix", &engine::Camera::view_projection_matrix)
         .def("screen_to_ray", &engine::Camera::screen_to_ray,
              "mouse_x"_a, "mouse_y"_a, "screen_w"_a, "screen_h"_a);
+
+    nb::class_<engine::PerspectiveCamera, engine::Camera>(m, "PerspectiveCamera")
+        .def(nb::init<float, float, float, float>(),
+             "fov"_a = 60.0f, "aspect"_a = 1.333f, "near_z"_a = 0.1f, "far_z"_a = 1000.0f);
+
+    nb::class_<engine::OrthographicCamera, engine::Camera>(m, "OrthographicCamera")
+        .def(nb::init<float, float, float, float, float, float>(),
+             "left"_a = -10.0f, "right"_a = 10.0f, "bottom"_a = -10.0f, "top"_a = 10.0f, "near_z"_a = -100.0f, "far_z"_a = 1000.0f)
+        .def_prop_rw("left", &engine::OrthographicCamera::left, &engine::OrthographicCamera::set_left)
+        .def_prop_rw("right", &engine::OrthographicCamera::right, &engine::OrthographicCamera::set_right)
+        .def_prop_rw("bottom", &engine::OrthographicCamera::bottom, &engine::OrthographicCamera::set_bottom)
+        .def_prop_rw("top", &engine::OrthographicCamera::top, &engine::OrthographicCamera::set_top);
 
     // -----------------------------------------------------------------------
     // Light & Light Types
@@ -1182,7 +1274,7 @@ NB_MODULE(_VelocityEngine_core, m) {
             return s.instanced_meshes();
         })
         .def_prop_ro("root_node", &engine::Scene::root_node)
-        .def("add", [](engine::Scene& s, const nb::object& obj) {
+        .def("add", [](engine::Scene& s, nb::handle obj) {
             if (nb::isinstance<std::shared_ptr<engine::Node3D>>(obj)) {
                 s.add(nb::cast<std::shared_ptr<engine::Node3D>>(obj));
             } else if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
@@ -1193,7 +1285,7 @@ NB_MODULE(_VelocityEngine_core, m) {
                 s.add_light(nb::cast<std::shared_ptr<engine::Light>>(obj));
             }
         }, "obj"_a)
-        .def("remove", [](engine::Scene& s, const nb::object& obj) {
+        .def("remove", [](engine::Scene& s, nb::handle obj) {
             if (nb::isinstance<std::shared_ptr<engine::Node3D>>(obj)) {
                 s.remove(nb::cast<std::shared_ptr<engine::Node3D>>(obj));
             } else if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
@@ -1275,6 +1367,106 @@ NB_MODULE(_VelocityEngine_core, m) {
             &engine::EditorManager::selected_entity,
             &engine::EditorManager::select_entity)
         .def("enable_toggle_hotkey", &engine::EditorManager::enable_toggle_hotkey, "enable"_a, "key"_a = engine::Key::F2);
+
+    // -----------------------------------------------------------------------
+    // RenderTarget
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::RenderTargetFormat>(m, "RenderTargetFormat")
+        .value("RGBA8", engine::RenderTargetFormat::RGBA8)
+        .value("RGBA16F", engine::RenderTargetFormat::RGBA16F)
+        .value("R32F", engine::RenderTargetFormat::R32F)
+        .export_values();
+
+    nb::class_<engine::RenderTarget>(m, "RenderTarget")
+        .def(nb::init<int, int, engine::RenderTargetFormat, bool, int>(),
+             "width"_a, "height"_a, "format"_a = engine::RenderTargetFormat::RGBA8,
+             "has_depth"_a = true, "samples"_a = 1)
+        .def("resize", &engine::RenderTarget::resize, "width"_a, "height"_a)
+        .def_prop_ro("width", &engine::RenderTarget::width)
+        .def_prop_ro("height", &engine::RenderTarget::height)
+        .def_prop_ro("format", &engine::RenderTarget::format)
+        .def_prop_ro("has_depth", &engine::RenderTarget::has_depth)
+        .def_prop_ro("samples", &engine::RenderTarget::samples)
+        .def_prop_ro("color_image_id", &engine::RenderTarget::color_image_id)
+        .def_prop_ro("color_view_id", &engine::RenderTarget::color_view_id)
+        .def_prop_ro("depth_image_id", &engine::RenderTarget::depth_image_id)
+        .def_prop_ro("depth_view_id", &engine::RenderTarget::depth_view_id)
+        .def_prop_ro("depth_tex_view_id", &engine::RenderTarget::depth_tex_view_id)
+        .def_prop_ro("tex_view_id", &engine::RenderTarget::tex_view_id)
+        .def_prop_ro("sampler_id", &engine::RenderTarget::sampler_id)
+        .def("is_valid", [](const engine::RenderTarget& rt) { return rt.color_view_id() != 0; })
+        .def_prop_ro("texture", &engine::RenderTarget::texture)
+        .def("read_pixels", [](engine::RenderTarget& rt) {
+            auto pixels = rt.read_pixels();
+            return nb::bytes(pixels.data(), pixels.size());
+        });
+
+    // -----------------------------------------------------------------------
+    // Post-Processing & EffectComposer
+    // -----------------------------------------------------------------------
+    nb::enum_<engine::TonemappingMode>(m, "TonemappingMode")
+        .value("ACESFilmic", engine::TonemappingMode::ACESFilmic)
+        .value("Reinhard", engine::TonemappingMode::Reinhard)
+        .value("Cineon", engine::TonemappingMode::Cineon)
+        .value("Linear", engine::TonemappingMode::Linear)
+        .value("Neutral", engine::TonemappingMode::Neutral)
+        .export_values();
+
+    nb::class_<engine::PostProcessPass>(m, "PostProcessPass")
+        .def_rw("enabled", &engine::PostProcessPass::enabled)
+        .def_prop_ro("name", &engine::PostProcessPass::name);
+
+    nb::class_<engine::BloomPass, engine::PostProcessPass>(m, "BloomPass")
+        .def(nb::init<float, float, float>(),
+             "threshold"_a = 1.0f, "strength"_a = 1.5f, "radius"_a = 0.5f)
+        .def_rw("threshold", &engine::BloomPass::threshold)
+        .def_rw("strength", &engine::BloomPass::strength)
+        .def_rw("radius", &engine::BloomPass::radius);
+
+    nb::class_<engine::SSAOPass, engine::PostProcessPass>(m, "SSAOPass")
+        .def(nb::init<float, float, float>(),
+             "radius"_a = 0.5f, "bias"_a = 0.025f, "power"_a = 1.0f)
+        .def_rw("radius", &engine::SSAOPass::radius)
+        .def_rw("bias", &engine::SSAOPass::bias)
+        .def_rw("power", &engine::SSAOPass::power);
+
+    nb::class_<engine::FXAAPass, engine::PostProcessPass>(m, "FXAAPass")
+        .def(nb::init<>());
+
+    nb::class_<engine::TonemappingPass, engine::PostProcessPass>(m, "TonemappingPass")
+        .def(nb::init<engine::TonemappingMode, float, float>(),
+             "mode"_a = engine::TonemappingMode::ACESFilmic, "exposure"_a = 1.0f, "gamma"_a = 2.2f)
+        .def_rw("mode", &engine::TonemappingPass::mode)
+        .def_rw("exposure", &engine::TonemappingPass::exposure)
+        .def_rw("gamma", &engine::TonemappingPass::gamma);
+
+    nb::class_<engine::VignetteChromaticPass, engine::PostProcessPass>(m, "VignetteChromaticPass")
+        .def(nb::init<float, float, float>(),
+             "vignette"_a = 0.3f, "chromatic"_a = 0.005f, "grain"_a = 0.02f)
+        .def_rw("vignette", &engine::VignetteChromaticPass::vignette)
+        .def_rw("chromatic", &engine::VignetteChromaticPass::chromatic)
+        .def_rw("grain", &engine::VignetteChromaticPass::grain)
+        .def_rw("time", &engine::VignetteChromaticPass::time);
+
+    nb::class_<engine::ColorGradingPass, engine::PostProcessPass>(m, "ColorGradingPass")
+        .def(nb::init<float, float, float>(),
+             "contrast"_a = 1.0f, "saturation"_a = 1.0f, "brightness"_a = 1.0f)
+        .def_rw("contrast", &engine::ColorGradingPass::contrast)
+        .def_rw("saturation", &engine::ColorGradingPass::saturation)
+        .def_rw("brightness", &engine::ColorGradingPass::brightness);
+
+    nb::class_<engine::EffectComposer>(m, "EffectComposer")
+        .def(nb::init<>())
+        .def(nb::init<int, int>(), "width"_a, "height"_a)
+        .def(nb::init<engine::EngineApp&>(), "app"_a)
+        .def("add_pass", &engine::EffectComposer::add_pass, "pass"_a)
+        .def("remove_pass", &engine::EffectComposer::remove_pass, "pass"_a)
+        .def("clear_passes", &engine::EffectComposer::clear_passes)
+        .def("resize", &engine::EffectComposer::resize, "width"_a, "height"_a)
+        .def_rw("enabled", &engine::EffectComposer::enabled)
+        .def_prop_ro("passes", &engine::EffectComposer::passes)
+        .def("render", &engine::EffectComposer::render, "scene"_a, "camera"_a)
+        .def_prop_ro("hdr_target", &engine::EffectComposer::hdr_target, nb::rv_policy::reference_internal);
 
     // -----------------------------------------------------------------------
     // EngineApp
@@ -1395,6 +1587,13 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("clear_ui_commands", &engine::EngineApp::clear_ui_commands)
         .def_prop_ro("custom_ui_commands", &engine::EngineApp::custom_ui_commands)
         .def("evaluate_frustum_culling", &engine::EngineApp::evaluate_frustum_culling)
+        .def("render_target", &engine::EngineApp::render_target, "scene"_a, "camera"_a, "target"_a)
+        .def("read_pixels", [](engine::EngineApp& app, engine::RenderTarget& target) {
+            auto pixels = app.read_pixels(target);
+            return nb::bytes(pixels.data(), pixels.size());
+        }, "target"_a)
+        .def("set_composer", &engine::EngineApp::set_composer, "composer"_a)
+        .def_prop_rw("composer", &engine::EngineApp::composer, &engine::EngineApp::set_composer)
         .def_prop_ro("stats", [](engine::EngineApp& app) -> const engine::RenderStats& {
             return app.stats();
         }, nb::rv_policy::reference_internal);

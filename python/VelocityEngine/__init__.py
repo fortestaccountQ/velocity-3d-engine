@@ -89,6 +89,22 @@ except ImportError:
     HemisphereLight = getattr(_core, "HemisphereLight", None)
     AmbientLight = getattr(_core, "AmbientLight", None)
 
+    # Phase 3: Cameras, Viewports, RenderTargets & Post-Processing
+    CameraType = getattr(_core, "CameraType", None)
+    PerspectiveCamera = getattr(_core, "PerspectiveCamera", None)
+    OrthographicCamera = getattr(_core, "OrthographicCamera", None)
+    RenderTargetFormat = getattr(_core, "RenderTargetFormat", None)
+    RenderTarget = getattr(_core, "RenderTarget", None)
+    TonemappingMode = getattr(_core, "TonemappingMode", None)
+    PostProcessPass = getattr(_core, "PostProcessPass", None)
+    BloomPass = getattr(_core, "BloomPass", None)
+    SSAOPass = getattr(_core, "SSAOPass", None)
+    FXAAPass = getattr(_core, "FXAAPass", None)
+    TonemappingPass = getattr(_core, "TonemappingPass", None)
+    VignetteChromaticPass = getattr(_core, "VignetteChromaticPass", None)
+    ColorGradingPass = getattr(_core, "ColorGradingPass", None)
+    EffectComposer = getattr(_core, "EffectComposer", None)
+
     def DataTexture(data: Any, width: int, height: int, channels: int = 4) -> Any:
         """Create a Texture from raw bytes, bytearray, memoryview, or numpy array."""
         if hasattr(data, "tobytes"):
@@ -313,4 +329,19 @@ except ImportError:
         "SpotLight",
         "HemisphereLight",
         "AmbientLight",
+        # Phase 3: Cameras, Viewports, RenderTargets & Post-Processing
+        "CameraType",
+        "PerspectiveCamera",
+        "OrthographicCamera",
+        "RenderTargetFormat",
+        "RenderTarget",
+        "TonemappingMode",
+        "PostProcessPass",
+        "BloomPass",
+        "SSAOPass",
+        "FXAAPass",
+        "TonemappingPass",
+        "VignetteChromaticPass",
+        "ColorGradingPass",
+        "EffectComposer",
     ]

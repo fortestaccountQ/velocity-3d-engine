@@ -28,7 +28,8 @@ uint64_t PipelineManager::make_key(
     BlendMode blend_mode,
     bool wireframe,
     bool is_instanced,
-    int sample_count
+    int sample_count,
+    uint32_t pixel_format
 ) {
     uint64_t key = 0;
     key |= (static_cast<uint64_t>(shader_id) & 0xFFFF);
@@ -39,6 +40,7 @@ uint64_t PipelineManager::make_key(
     key |= (static_cast<uint64_t>(wireframe ? 1 : 0) & 0x1) << 23;
     key |= (static_cast<uint64_t>(is_instanced ? 1 : 0) & 0x1) << 24;
     key |= (static_cast<uint64_t>(sample_count) & 0xF) << 25;
+    key |= (static_cast<uint64_t>(pixel_format) & 0xFF) << 29;
     return key;
 }
 

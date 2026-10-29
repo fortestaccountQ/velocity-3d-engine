@@ -496,3 +496,30 @@ class App:
     @tone_mapping.setter
     def tone_mapping(self, value: bool) -> None:
         self._core.tone_mapping = bool(value)
+
+    def render_target(self, scene: Any, camera: Any, target: Any) -> None:
+        """Render a scene with a camera directly into an offscreen RenderTarget."""
+        native_scene = getattr(scene, "_core", scene)
+        if hasattr(native_scene, "scene"):
+            native_scene = native_scene.scene
+        native_cam = getattr(camera, "_core", camera)
+        if hasattr(native_cam, "camera"):
+            native_cam = native_cam.camera
+        self._core.render_target(native_scene, native_cam, target)
+
+    def read_pixels(self, target: Any) -> bytes:
+        """Read pixel buffer bytes from a RenderTarget."""
+        return self._core.read_pixels(target)
+
+    @property
+    def composer(self) -> Any:
+        """Active EffectComposer for post-processing."""
+        return self._core.composer
+
+    @composer.setter
+    def composer(self, comp: Any) -> None:
+        self._core.set_composer(comp)
+
+    def set_composer(self, comp: Any) -> None:
+        """Set active EffectComposer for post-processing."""
+        self._core.set_composer(comp)

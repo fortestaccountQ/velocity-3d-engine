@@ -16,9 +16,11 @@ Ray Camera::screen_to_ray(float mouse_x, float mouse_y, float screen_w, float sc
     float ndc_x = (2.0f * mouse_x) / screen_w - 1.0f;
     float ndc_y = 1.0f - (2.0f * mouse_y) / screen_h;
 
-    // View-projection matrix with current viewport aspect ratio
-    float cur_aspect = screen_w / screen_h;
-    glm::mat4 proj = glm::perspective(glm::radians(fov), cur_aspect, near_plane, far_plane);
+    glm::mat4 proj = projection_matrix();
+    if (type == CameraType::Perspective) {
+        float cur_aspect = screen_w / screen_h;
+        proj = glm::perspective(glm::radians(fov), cur_aspect, near_plane, far_plane);
+    }
     glm::mat4 inv_vp = glm::inverse(proj * view_matrix());
 
     // Unproject near point (z = 0.0f for DirectX/Metal [0, 1] clip space)

@@ -17,6 +17,9 @@
 
 namespace engine {
 
+class RenderTarget;
+class EffectComposer;
+
 // ---------------------------------------------------------------------------
 // UI Command Contract for Phase 0.1
 // ---------------------------------------------------------------------------
@@ -145,6 +148,12 @@ public:
     void set_tone_mapping(bool enable) { tone_mapping_enabled_ = enable; }
     bool tone_mapping_enabled() const { return tone_mapping_enabled_; }
 
+    // RenderTarget and Post-Processing (EffectComposer)
+    void render_target(Scene& scene, Camera& camera, RenderTarget& target);
+    std::vector<uint8_t> read_pixels(RenderTarget& target);
+    void set_composer(std::shared_ptr<EffectComposer> composer);
+    std::shared_ptr<EffectComposer> composer() const { return composer_; }
+
     // Python frame update callback
     void set_update_callback(UpdateCallback callback);
 
@@ -168,6 +177,7 @@ private:
     void init_shadow_pipeline();
     void init_hud_and_line_pipelines();
     void render_shadow_pass();
+    void render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen);
     void render_debug_hitboxes(const glm::mat4& vp);
     void render_hud(float screen_w, float screen_h, float fps);
 
@@ -245,6 +255,9 @@ private:
     std::shared_ptr<Texture> default_flat_normal_tex_{nullptr};
     std::shared_ptr<Texture> default_white_tex_{nullptr};
     std::shared_ptr<Texture> default_black_tex_{nullptr};
+
+    // EffectComposer post-processing
+    std::shared_ptr<EffectComposer> composer_{nullptr};
 };
 
 } // namespace engine

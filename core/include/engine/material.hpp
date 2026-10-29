@@ -223,7 +223,8 @@ public:
         BlendMode blend_mode,
         bool wireframe = false,
         bool is_instanced = false,
-        int sample_count = 1
+        int sample_count = 1,
+        uint32_t pixel_format = 0
     );
 
 private:

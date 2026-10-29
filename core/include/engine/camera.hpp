@@ -6,8 +6,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace engine {
+
+enum class CameraType {
+    Perspective = 0,
+    Orthographic = 1
+};
 
 class ICameraRaycast {
 public:
@@ -19,6 +25,8 @@ public:
 
 class Camera : public Node3D, public ICameraRaycast {
 public:
+    CameraType type{CameraType::Perspective};
+
     glm::vec3 position{0.0f, 2.0f, 6.0f};
     glm::vec3 target{0.0f, 0.0f, 0.0f};
     glm::vec3 up{0.0f, 1.0f, 0.0f};
@@ -29,16 +37,48 @@ public:
     float yaw{-90.0f};
     float pitch{0.0f};
 
+    // Viewport & Scissor support (normalized [0..1] or pixel coordinates)
+    glm::vec4 viewport{0.0f, 0.0f, 1.0f, 1.0f};
+    glm::vec4 scissor{0.0f, 0.0f, 1.0f, 1.0f};
+    bool has_scissor{false};
+    glm::vec4 clear_color{0.43137f, 0.62745f, 0.82353f, 1.0f};
+
+    // Orthographic parameters
+    float ortho_left{-1.0f};
+    float ortho_right{1.0f};
+    float ortho_bottom{-1.0f};
+    float ortho_top{1.0f};
+    float zoom{1.0f};
+
     Camera() : Node3D("Camera") {
         transform.position = position;
         update_vectors_from_angles();
     }
 
+    explicit Camera(const std::string& name) : Node3D(name) {
+        transform.position = position;
+        update_vectors_from_angles();
+    }
+
+    virtual ~Camera() = default;
+
     void set_perspective(float fov_deg, float aspect_ratio, float near_z, float far_z) {
+        type = CameraType::Perspective;
         fov = fov_deg;
         aspect = aspect_ratio;
         near_plane = near_z;
         far_plane = far_z;
+    }
+
+    void set_orthographic(float left, float right, float bottom, float top, float near_z = 0.1f, float far_z = 100.0f, float zoom_val = 1.0f) {
+        type = CameraType::Orthographic;
+        ortho_left = left;
+        ortho_right = right;
+        ortho_bottom = bottom;
+        ortho_top = top;
+        near_plane = near_z;
+        far_plane = far_z;
+        zoom = zoom_val;
     }
 
     void update_vectors_from_angles() {
@@ -89,7 +129,7 @@ public:
         invalidate_world_matrix();
     }
 
-    glm::mat4 view_matrix() const {
+    virtual glm::mat4 view_matrix() const {
         if (parent()) {
             glm::vec3 w_pos = world_position();
             glm::quat w_rot = world_orientation();
@@ -100,11 +140,15 @@ public:
         return glm::lookAt(position, target, up);
     }
 
-    glm::mat4 projection_matrix() const {
+    virtual glm::mat4 projection_matrix() const {
+        if (type == CameraType::Orthographic) {
+            float z = (zoom > 0.0001f) ? zoom : 1.0f;
+            return glm::ortho(ortho_left / z, ortho_right / z, ortho_bottom / z, ortho_top / z, near_plane, far_plane);
+        }
         return glm::perspective(glm::radians(fov), aspect, near_plane, far_plane);
     }
 
-    glm::mat4 view_projection_matrix() const {
+    virtual glm::mat4 view_projection_matrix() const {
         return projection_matrix() * view_matrix();
     }
 
@@ -142,6 +186,42 @@ public:
     }
 
     Ray screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const override;
+};
+
+class PerspectiveCamera : public Camera {
+public:
+    PerspectiveCamera(float fov_deg = 55.0f, float aspect_ratio = 1.333333f, float near_z = 0.20f, float far_z = 100.0f)
+        : Camera("PerspectiveCamera") {
+        type = CameraType::Perspective;
+        fov = fov_deg;
+        aspect = aspect_ratio;
+        near_plane = near_z;
+        far_plane = far_z;
+    }
+};
+
+class OrthographicCamera : public Camera {
+public:
+    OrthographicCamera(float left = -1.0f, float right = 1.0f, float bottom = -1.0f, float top = 1.0f, float near_z = 0.1f, float far_z = 100.0f, float zoom_val = 1.0f)
+        : Camera("OrthographicCamera") {
+        type = CameraType::Orthographic;
+        ortho_left = left;
+        ortho_right = right;
+        ortho_bottom = bottom;
+        ortho_top = top;
+        near_plane = near_z;
+        far_plane = far_z;
+        zoom = zoom_val;
+    }
+
+    float left() const { return ortho_left; }
+    void set_left(float val) { ortho_left = val; }
+    float right() const { return ortho_right; }
+    void set_right(float val) { ortho_right = val; }
+    float bottom() const { return ortho_bottom; }
+    void set_bottom(float val) { ortho_bottom = val; }
+    float top() const { return ortho_top; }
+    void set_top(float val) { ortho_top = val; }
 };
 
 } // namespace engine
