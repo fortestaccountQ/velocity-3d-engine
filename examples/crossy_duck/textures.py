@@ -706,77 +706,67 @@ def create_rail_tie_image(size: int = 64, seed: int = 999) -> Image.Image:
 
 
 def create_car_grille_image(size: int = 64, seed: int = 321) -> Image.Image:
-    """Generate vehicle radiator grille and tinted windshield/windows detailing."""
+    """Generate authentic vehicle front fascia: chrome bumper, radiator grille, and emblem."""
     arr = np.zeros((size, size, 4), dtype=np.uint8)
 
-    h_windshield = int(size * 0.42)
-    h_hood = int(size * 0.52)
-    h_grille_bottom = int(size * 0.88)
+    # 1. Top Chrome Hood Trim
+    h_trim = max(3, int(size * 0.14))
+    arr[:h_trim, :, 0] = 220
+    arr[:h_trim, :, 1] = 228
+    arr[:h_trim, :, 2] = 238
+    arr[:h_trim, :, 3] = 255
+    arr[0, :, :3] = [255, 255, 255]
+    arr[h_trim - 1, :, :3] = [130, 140, 155]
 
-    # 1. Windshield: reflective cyan tinted glass
-    arr[:h_windshield, :, 0] = 24
-    arr[:h_windshield, :, 1] = 46
-    arr[:h_windshield, :, 2] = 66
-    arr[:h_windshield, :, 3] = 255
-
-    # Diagonal glare streaks across windshield
-    y_ws, x_ws = np.mgrid[:h_windshield, :size]
-    glare1 = np.abs((x_ws - y_ws * 1.5) - int(size * 0.2)) < max(1, size // 32)
-    glare2 = np.abs((x_ws - y_ws * 1.5) - int(size * 0.5)) < max(2, size // 20)
-    arr[:h_windshield, :][glare1, :3] = [86, 146, 186]
-    arr[:h_windshield, :][glare2, :3] = [206, 236, 255]
-
-    # Windshield rubber seal
-    arr[0, :, :3] = [18, 20, 24]
-    arr[h_windshield - 1, :, :3] = [18, 20, 24]
-    arr[:h_windshield, 0, :3] = [18, 20, 24]
-    arr[:h_windshield, size - 1, :3] = [18, 20, 24]
-
-    # 2. Hood / Chrome Trim divider
-    arr[h_windshield:h_hood, :, 0] = 196
-    arr[h_windshield:h_hood, :, 1] = 202
-    arr[h_windshield:h_hood, :, 2] = 212
-    arr[h_windshield:h_hood, :, 3] = 255
+    # Center Gold Emblem badge
     cx = size // 2
-    emblem_w = max(2, size // 16)
-    arr[h_windshield + 1 : h_hood - 1, cx - emblem_w : cx + emblem_w, :3] = [242, 212, 62]
+    emblem_w = max(2, size // 14)
+    emblem_h = max(2, h_trim - 2)
+    arr[1 : 1 + emblem_h, cx - emblem_w : cx + emblem_w, :3] = [245, 215, 65]
 
-    # 3. Grille and Headlights
-    for cy in range(h_hood, h_grille_bottom):
+    # 2. Main Honeycomb / Horizontal Slat Radiator Grille
+    h_grille_bottom = int(size * 0.78)
+    for cy in range(h_trim, h_grille_bottom):
         slat = (cy % 3 == 0)
-        col = [22, 24, 28] if slat else [50, 54, 62]
+        col = [18, 20, 24] if slat else [42, 46, 54]
         arr[cy, :, :3] = col
         arr[cy, :, 3] = 255
 
-    gx0 = int(size * 0.25)
-    gx1 = int(size * 0.75)
-    for px in range(gx0, gx1, max(3, size // 16)):
-        arr[h_hood:h_grille_bottom, px, :3] = [142, 152, 166]
+    # Chrome vertical grille border bars
+    gx0 = int(size * 0.16)
+    gx1 = int(size * 0.84)
+    arr[h_trim:h_grille_bottom, gx0, :3] = [180, 190, 205]
+    arr[h_trim:h_grille_bottom, gx1 - 1, :3] = [180, 190, 205]
 
-    hl_w = max(6, int(size * 0.16))
-    hl_left_x0 = int(size * 0.06)
+    # Dual Headlights (Integrated on grille left & right)
+    hl_w = max(6, int(size * 0.18))
+    hl_left_x0 = int(size * 0.04)
     hl_left_x1 = hl_left_x0 + hl_w
-    hl_right_x1 = size - int(size * 0.06)
+    hl_right_x1 = size - int(size * 0.04)
     hl_right_x0 = hl_right_x1 - hl_w
 
-    hl_y0 = h_hood + max(2, int(size * 0.05))
-    hl_y1 = h_grille_bottom - max(2, int(size * 0.05))
+    hl_y0 = h_trim + max(2, int(size * 0.06))
+    hl_y1 = h_grille_bottom - max(2, int(size * 0.06))
 
     for hx0, hx1 in [(hl_left_x0, hl_left_x1), (hl_right_x0, hl_right_x1)]:
-        arr[hl_y0:hl_y1, hx0:hx1, :3] = [172, 182, 196]
-        arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx1 - 1, :3] = [255, 248, 176]
+        # Chrome bezel
+        arr[hl_y0:hl_y1, hx0:hx1, :3] = [180, 190, 205]
+        # Bright yellow/white headlight lens
+        arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx1 - 1, :3] = [255, 252, 190]
+        # Amber indicator turn signal on outer edge
         sig_w = max(1, (hx1 - hx0) // 3)
         if hx0 == hl_left_x0:
-            arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx0 + 1 + sig_w, :3] = [255, 142, 16]
+            arr[hl_y0 + 1 : hl_y1 - 1, hx0 + 1 : hx0 + 1 + sig_w, :3] = [255, 145, 20]
         else:
-            arr[hl_y0 + 1 : hl_y1 - 1, hx1 - 1 - sig_w : hx1 - 1, :3] = [255, 142, 16]
+            arr[hl_y0 + 1 : hl_y1 - 1, hx1 - 1 - sig_w : hx1 - 1, :3] = [255, 145, 20]
 
-    # 4. Bumper
-    arr[h_grille_bottom:, :, 0] = 42
-    arr[h_grille_bottom:, :, 1] = 46
-    arr[h_grille_bottom:, :, 2] = 52
+    # 3. Lower Front Bumper and Air Dam
+    arr[h_grille_bottom:, :, 0] = 36
+    arr[h_grille_bottom:, :, 1] = 40
+    arr[h_grille_bottom:, :, 2] = 46
     arr[h_grille_bottom:, :, 3] = 255
-    arr[h_grille_bottom, :, :3] = [162, 172, 186]
+    arr[h_grille_bottom, :, :3] = [170, 180, 195]  # Bumper top highlight
+    arr[-1, :, :3] = [18, 20, 24]  # Undercarriage shadow
 
     return Image.fromarray(arr)
 
@@ -896,97 +886,77 @@ def create_lilypad_image(size: int = 64) -> Image.Image:
 
 
 def create_car_paint_image(size: int = 64, seed: int = 101) -> Image.Image:
-    """Generate glossy automotive car paint with clearcoat sheen, micro-flakes, and panel bevel."""
+    """Generate sleek, solid automotive pearl car paint with crisp voxel bevels and zero noisy streaks."""
     rng = np.random.RandomState(seed)
     y, x = np.mgrid[:size, :size]
 
-    # Neutral high-key pearl/metallic silver-white base for universal tintability
-    vert_grad = 1.0 - (y / float(size)) * 0.12
-    base_luma = 232.0 * vert_grad
+    # 1. Clean, uniform high-key pearl white base for vibrant, unpolluted tinting
+    vert_grad = 1.0 - (y / float(size)) * 0.05
+    base_luma = 244.0 * vert_grad
 
-    # Metallic micro-flakes (+/- 4.5)
-    flakes = rng.uniform(-4.5, 4.5, (size, size))
-
-    # Subtle diagonal clear-coat highlight streak across body
-    diag = (x * 0.7 + y * 0.3) / float(size)
-    clearcoat = 14.0 * np.exp(-((diag - 0.45) ** 2) / 0.04)
-
-    luma = np.clip(base_luma + flakes + clearcoat, 0, 255)
+    # Very subtle micro-luster shimmer (+/- 1.5 luma max)
+    luster = rng.uniform(-1.5, 1.5, (size, size))
+    luma = np.clip(base_luma + luster, 0, 255)
 
     arr = np.zeros((size, size, 4), dtype=np.uint8)
-    arr[..., 0] = np.clip(luma - 1.0, 0, 255).astype(np.uint8)  # slight cool pearl undertone
+    arr[..., 0] = np.clip(luma - 1.0, 0, 255).astype(np.uint8)
     arr[..., 1] = np.clip(luma, 0, 255).astype(np.uint8)
-    arr[..., 2] = np.clip(luma + 3.0, 0, 255).astype(np.uint8)
+    arr[..., 2] = np.clip(luma + 2.0, 0, 255).astype(np.uint8)
     arr[..., 3] = 255
 
-    # Top & Left bevel specular highlight (car panel edge reflection)
+    # 2. Crisp perimeter bevels (3D blocky arcade edges without random interior streaks)
     bevel_w = max(1, size // 32)
-    arr[:bevel_w, :, :3] = [255, 255, 255]
-    arr[:, :bevel_w, :3] = [255, 255, 255]
+    # Top & Left highlight reflection
+    arr[:bevel_w, :, :3] = np.clip(arr[:bevel_w, :, :3].astype(int) + 12, 0, 255).astype(np.uint8)
+    arr[:, :bevel_w, :3] = np.clip(arr[:, :bevel_w, :3].astype(int) + 12, 0, 255).astype(np.uint8)
+    # Bottom & Right ambient occlusion shadow
+    arr[-bevel_w:, :, :3] = np.clip(arr[-bevel_w:, :, :3].astype(int) - 22, 0, 255).astype(np.uint8)
+    arr[:, -bevel_w:, :3] = np.clip(arr[:, -bevel_w:, :3].astype(int) - 22, 0, 255).astype(np.uint8)
 
-    # Bottom & Right subtle ambient occlusion shadow
-    arr[-bevel_w:, :, :3] = np.clip(arr[-bevel_w:, :, :3].astype(int) - 38, 0, 255).astype(np.uint8)
-    arr[:, -bevel_w:, :3] = np.clip(arr[:, -bevel_w:, :3].astype(int) - 38, 0, 255).astype(np.uint8)
-
-    # Stylized panel seam / shutline near lower quarter
-    seam_y = int(size * 0.78)
-    if 0 <= seam_y < size:
-        arr[seam_y, :, :3] = [170, 175, 185]
-        if seam_y + 1 < size:
-            arr[seam_y + 1, :, :3] = [252, 252, 255]
+    # 3. Grounded rocker panel sill along bottom edge
+    sill_h = max(2, int(size * 0.06))
+    arr[-sill_h:, :, :3] = [148, 154, 166]
+    arr[-sill_h, :, :3] = [118, 124, 134]
 
     return Image.fromarray(arr)
 
 
 def create_car_cabin_image(size: int = 64, seed: int = 202) -> Image.Image:
-    """Generate tinted cyan/charcoal automotive glass with diagonal glare streaks and seals."""
+    """Generate clean tinted automotive glass with crisp window framing and zero diagonal stripes."""
     arr = np.zeros((size, size, 4), dtype=np.uint8)
     y, x = np.mgrid[:size, :size]
 
-    # Base tinted charcoal glass with cyan depth undertone
+    # 1. Base tinted glass: sleek slate-cyan gradient (smooth vertical reflection)
     y_norm = y / float(size)
-    r_base = 22.0 + y_norm * 14.0
-    g_base = 38.0 + y_norm * 22.0
-    b_base = 56.0 + y_norm * 28.0
+    r_base = 26.0 - y_norm * 10.0
+    g_base = 42.0 - y_norm * 16.0
+    b_base = 62.0 - y_norm * 22.0
 
     arr[..., 0] = np.clip(r_base, 0, 255).astype(np.uint8)
     arr[..., 1] = np.clip(g_base, 0, 255).astype(np.uint8)
     arr[..., 2] = np.clip(b_base, 0, 255).astype(np.uint8)
     arr[..., 3] = 255
 
-    # Diagonal glare streaks across the glass
-    dist1 = np.abs((x - y * 1.2) - int(size * 0.25))
-    glare1_core = dist1 < max(1, size // 32)
-    glare1_glow = (dist1 < max(2, size // 16)) & (~glare1_core)
-    arr[glare1_glow, 0] = 85
-    arr[glare1_glow, 1] = 160
-    arr[glare1_glow, 2] = 210
-    arr[glare1_core, 0] = 215
-    arr[glare1_core, 1] = 245
-    arr[glare1_core, 2] = 255
+    # 2. Subtle soft horizontal sky reflection band across upper half
+    sky_band_y0 = int(size * 0.18)
+    sky_band_y1 = int(size * 0.38)
+    sky_grad = np.sin(np.pi * (y[sky_band_y0:sky_band_y1, :] - sky_band_y0) / float(sky_band_y1 - sky_band_y0))
+    arr[sky_band_y0:sky_band_y1, :, 0] = np.clip(arr[sky_band_y0:sky_band_y1, :, 0] + sky_grad * 12.0, 0, 255).astype(np.uint8)
+    arr[sky_band_y0:sky_band_y1, :, 1] = np.clip(arr[sky_band_y0:sky_band_y1, :, 1] + sky_grad * 22.0, 0, 255).astype(np.uint8)
+    arr[sky_band_y0:sky_band_y1, :, 2] = np.clip(arr[sky_band_y0:sky_band_y1, :, 2] + sky_grad * 32.0, 0, 255).astype(np.uint8)
 
-    dist2 = np.abs((x - y * 1.2) - int(size * 0.65))
-    glare2_core = dist2 < max(1, size // 32)
-    glare2_glow = (dist2 < max(2, size // 18)) & (~glare2_core)
-    arr[glare2_glow, 0] = 70
-    arr[glare2_glow, 1] = 140
-    arr[glare2_glow, 2] = 185
-    arr[glare2_core, 0] = 180
-    arr[glare2_core, 1] = 225
-    arr[glare2_core, 2] = 248
-
-    # A/B Pillar: vertical structural window divider
-    pillar_x = int(size * 0.44)
+    # 3. Clean B-Pillar: vertical structural divider in middle
+    pillar_x = size // 2
     pillar_w = max(2, size // 24)
-    arr[:, pillar_x : pillar_x + pillar_w, :3] = [28, 32, 40]
-    arr[:, pillar_x, :3] = [58, 64, 76]
+    arr[:, pillar_x : pillar_x + pillar_w, :3] = [20, 24, 32]
+    arr[:, pillar_x, :3] = [38, 44, 56]
 
-    # Dark perimeter rubber weatherstrip / window seal
+    # 4. Perimeter rubber weatherstrip / window frame seal
     seal_w = max(1, size // 32)
-    arr[:seal_w, :, :3] = [18, 20, 26]
-    arr[-seal_w:, :, :3] = [18, 20, 26]
-    arr[:, :seal_w, :3] = [18, 20, 26]
-    arr[:, -seal_w:, :3] = [18, 20, 26]
+    arr[:seal_w, :, :3] = [14, 18, 24]
+    arr[-seal_w:, :, :3] = [14, 18, 24]
+    arr[:, :seal_w, :3] = [14, 18, 24]
+    arr[:, -seal_w:, :3] = [14, 18, 24]
 
     return Image.fromarray(arr)
 

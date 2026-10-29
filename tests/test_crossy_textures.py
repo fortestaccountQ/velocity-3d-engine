@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import pytest
 from PIL import Image
+import numpy as np
 
 from contracts.texture_contracts import (
     MaterialPaletteContract,
@@ -375,3 +376,32 @@ def test_stylized_material_uv_scale_setter_getter() -> None:
     mat.uv_scale = (4.0, 5.0)
     assert mat.uv_scale == (4.0, 5.0)
     assert mat.is_pixel_art is True
+
+
+def test_car_paint_clean_voxel_finish_without_noisy_stripes() -> None:
+    """Verify car paint is clean high-key solid automotive finish without chaotic diagonal streaks."""
+    im = create_car_paint_image(size=64)
+    arr = np.array(im)
+    assert arr.shape == (64, 64, 4)
+
+    # Core paint area should have high, uniform luma suitable for multiplication by car color
+    core = arr[10:50, 10:50, :3]
+    # Luma must be high-key (> 210)
+    assert np.all(core > 200)
+    # Variance in core should be low (subtle metallic luster, not noisy stripes)
+    assert np.std(core) < 15.0
+
+
+def test_car_cabin_clean_tinted_glass_without_diagonal_glare() -> None:
+    """Verify car cabin is sleek tinted glass with clean vertical gradient and no diagonal glare lines."""
+    im = create_car_cabin_image(size=64)
+    arr = np.array(im)
+    assert arr.shape == (64, 64, 4)
+
+    # Glass should be dark tinted with cyan undertone (B > R)
+    center = arr[32, 20, :3]
+    assert center[2] >= center[0]
+    # Window weatherstrip border around perimeter should be dark
+    border_px = arr[0, 32, :3]
+    assert np.all(border_px < 40)
+

@@ -256,6 +256,18 @@ class CrossyBot:
                         visited.add((nx, nz))
                         queue.append((nx, nz, first_move, depth + 1))
 
+        # Fallback: If directly facing a solid tree, actively navigate laterally toward nearest open column
+        is_tree_ahead = hasattr(world, "is_cell_blocked") and world.is_cell_blocked(start_gx, start_gz + 1)
+        if is_tree_ahead and hasattr(world, "is_cell_blocked"):
+            open_cols = [x for x in range(CELL_MIN_X, CELL_MAX_X + 1) if not world.is_cell_blocked(x, start_gz + 1)]
+            if open_cols:
+                best_x = min(open_cols, key=lambda x: (abs(x - start_gx), abs(x)))
+                dir_x = 1 if best_x > start_gx else -1
+                if self._is_cell_safe(world, start_gx + dir_x, start_gz, self.hop_predict_time):
+                    return (dir_x, 0)
+                if self._is_cell_safe(world, start_gx - dir_x, start_gz, self.hop_predict_time):
+                    return (-dir_x, 0)
+
         return None
 
     def _check_emergency_escape(
@@ -343,8 +355,8 @@ class CrossyBot:
                 for sample_t in (0.0, t_predict * 0.5, t_predict, t_predict + 0.12):
                     future_obs_x = getattr(obs, "x", 0.0) + obs_speed * sample_t
                     # Screen wrap simulation
-                    min_wrap = getattr(obs, "min_wrap_x", -18.0)
-                    max_wrap = getattr(obs, "max_wrap_x", 18.0)
+                    min_wrap = getattr(obs, "min_wrap_x", -48.0)
+                    max_wrap = getattr(obs, "max_wrap_x", 48.0)
                     span = max_wrap - min_wrap
                     if span > 0.0:
                         while future_obs_x < min_wrap:
@@ -368,8 +380,8 @@ class CrossyBot:
                 half_w = max(0.2, (obs_w * 0.5) - 0.25)  # Stay safely on log body
 
                 future_log_x = getattr(obs, "x", 0.0) + obs_speed * t_predict
-                min_wrap = getattr(obs, "min_wrap_x", -19.0)
-                max_wrap = getattr(obs, "max_wrap_x", 19.0)
+                min_wrap = getattr(obs, "min_wrap_x", -38.0)
+                max_wrap = getattr(obs, "max_wrap_x", 38.0)
                 span = max_wrap - min_wrap
                 if span > 0.0:
                     while future_log_x < min_wrap:

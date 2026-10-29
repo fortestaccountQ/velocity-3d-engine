@@ -174,8 +174,8 @@ class BaseObstacle:
         depth: float,
         speed: float,
         is_log: bool = False,
-        min_wrap_x: float = -18.0,
-        max_wrap_x: float = 18.0,
+        min_wrap_x: float = -48.0,
+        max_wrap_x: float = 48.0,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
     ) -> None:
@@ -269,8 +269,8 @@ class CarObstacle(BaseObstacle):
         z: float,
         speed: float,
         color: Optional[Color] = None,
-        min_wrap_x: float = -18.0,
-        max_wrap_x: float = 18.0,
+        min_wrap_x: float = -48.0,
+        max_wrap_x: float = 48.0,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
     ) -> None:
@@ -399,8 +399,8 @@ class TruckObstacle(BaseObstacle):
         z: float,
         speed: float,
         color: Optional[Color] = None,
-        min_wrap_x: float = -18.0,
-        max_wrap_x: float = 18.0,
+        min_wrap_x: float = -48.0,
+        max_wrap_x: float = 48.0,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
     ) -> None:
@@ -549,8 +549,8 @@ class LogObstacle(BaseObstacle):
         z: float,
         speed: float,
         width: float = 3.2,
-        min_wrap_x: float = -19.0,
-        max_wrap_x: float = 19.0,
+        min_wrap_x: float = -38.0,
+        max_wrap_x: float = 38.0,
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
     ) -> None:
@@ -843,6 +843,12 @@ class BaseRow:
         self.obstacles.clear()
 
 
+BOUNDARY_FOREST_LANES: List[int] = [
+    -54, -48, -42, -36, -30, -25, -24, -20, -17, -15, -13, -12, -11,
+    11, 12, 13, 15, 17, 20, 24, 25, 30, 36, 42, 48, 54,
+]
+
+
 class StartRow(BaseRow):
     """Safe starting zone row with wide green ground and boundary trees."""
 
@@ -869,7 +875,7 @@ class StartRow(BaseRow):
             self.entities.append(ground)
 
         # Place dense outer perimeter trees outside playable width [-10, 10] to create infinite forest borders
-        for bx in [-24, -20, -17, -15, -13, -12, -11, 11, 12, 13, 15, 17, 20, 24]:
+        for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
@@ -911,7 +917,7 @@ class GrassRow(BaseRow):
             self.entities.append(ground)
 
         # Dense boundary forest outside playable grid
-        for bx in [-24, -20, -17, -15, -13, -12, -11, 11, 12, 13, 15, 17, 20, 24]:
+        for bx in BOUNDARY_FOREST_LANES:
             self.blocked_lanes.add(bx)
             tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
@@ -1100,19 +1106,44 @@ class RoadRow(BaseRow):
                         )
                         self.entities.append(marker)
 
-        # 2. Vehicles (1-2 cars or trucks)
-        count = vehicle_count if vehicle_count is not None else r.choice([1, 2])
-        wrap_min = -18.0
-        wrap_max = 18.0
+            # Roadside safety barriers along outer road verges and flanking woodland pines
+            for fx in [-58.0, -53.0, -49.0, 49.0, 53.0, 58.0]:
+                barrier_s = scene.create_box(
+                    size=(0.35, 0.42, 0.08),
+                    position=(fx, 0.05, float(self.z_index) - 0.46),
+                    color=Color.from_hex("#94a3b8"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"RoadBarrierS_{z_index}_{int(fx)}",
+                )
+                barrier_n = scene.create_box(
+                    size=(0.35, 0.42, 0.08),
+                    position=(fx, 0.05, float(self.z_index) + 0.46),
+                    color=Color.from_hex("#94a3b8"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"RoadBarrierN_{z_index}_{int(fx)}",
+                )
+                self.entities.extend([barrier_s, barrier_n])
+            for tx in [-55.0, 55.0]:
+                tree = VoxelTree(tx, float(self.z_index) + 0.46, scene=scene, material_registry=self.material_registry)
+                self.entities.extend(tree.entities)
 
-        if count == 1:
-            spawn_x_positions = [r.uniform(-10.0, 10.0)]
-        else:
-            first_x = r.uniform(-14.0, -4.0)
-            second_x = first_x + r.uniform(14.0, 18.0)
-            if second_x > wrap_max:
-                second_x -= (wrap_max - wrap_min)
-            spawn_x_positions = [first_x, second_x]
+        # 2. Vehicles (3-4 cars or trucks spawning and wrapping far off-screen)
+        count = vehicle_count if vehicle_count is not None else r.choice([3, 4])
+        wrap_min = -48.0
+        wrap_max = 48.0
+        span = wrap_max - wrap_min
+
+        spacing = span / float(max(1, count))
+        start_offset = r.uniform(0.0, spacing)
+
+        spawn_x_positions = []
+        for i in range(count):
+            vx = wrap_min + start_offset + (i * spacing)
+            if vx > wrap_max:
+                vx -= span
+            spawn_x_positions.append(vx)
 
         for vx in spawn_x_positions:
             is_truck = r.random() < 0.35
@@ -1184,13 +1215,28 @@ class RiverRow(BaseRow):
             )
             self.entities.append(water)
 
-        # 2. Wooden logs (2-3 logs spaced out)
-        count = log_count if log_count is not None else r.choice([2, 3])
-        wrap_min = -24.0
-        wrap_max = 24.0
+            # Riverbank stone boulders and weeping woodland pines outside water channel
+            for rx in [-54.0, -46.0, -40.0, 40.0, 46.0, 54.0]:
+                boulder = scene.create_box(
+                    size=(1.1, 0.55, 0.9),
+                    position=(rx, -0.05, float(self.z_index)),
+                    color=Color.from_hex("#64748b"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"RiverBoulder_{z_index}_{int(rx)}",
+                )
+                self.entities.append(boulder)
+            for tx in [-48.0, 48.0]:
+                tree = VoxelTree(tx, float(self.z_index), scene=scene, material_registry=self.material_registry)
+                self.entities.extend(tree.entities)
+
+        # 2. Wooden logs (3-4 logs spaced out across widened span)
+        count = log_count if log_count is not None else r.choice([3, 4])
+        wrap_min = -38.0
+        wrap_max = 38.0
         span = wrap_max - wrap_min
 
-        spacing = span / float(count)
+        spacing = span / float(max(1, count))
         start_offset = r.uniform(0.0, spacing)
 
         for i in range(count):
@@ -1351,6 +1397,21 @@ class RailRow(BaseRow):
             )
             self.entities.extend([base, post, crossbuck, head, self.beacon_light_entity, self.beacon_light_r])
 
+            # Railway telegraph poles and embankment trees outside tracks
+            for px in [-52.0, -42.0, -35.0, 35.0, 42.0, 52.0]:
+                pole = scene.create_box(
+                    size=(0.25, 2.2, 0.25),
+                    position=(px, 0.85, float(self.z_index) + 0.42),
+                    color=Color.from_hex("#475569"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"TelegraphPole_{z_index}_{int(px)}",
+                )
+                self.entities.append(pole)
+            for tx in [-46.0, 46.0]:
+                tree = VoxelTree(tx, float(self.z_index), scene=scene, material_registry=self.material_registry)
+                self.entities.extend(tree.entities)
+
         # 5. Bullet train obstacle (starts off-screen)
         initial_train_x = -999.0
         self.train = TrainObstacle(
@@ -1380,13 +1441,14 @@ class RailRow(BaseRow):
         if getattr(self, "beacon_light_r", None) is not None:
             self.beacon_light_r.color = COLOR_BEACON_ACTIVE
 
-        # Position train at approach edge
+        # Position train at approach edge (far off-screen)
+        spawn_edge = 60.0
         if self.train_direction > 0.0:
             self.train.speed = self.train_speed
-            self.train.set_position(-32.0, self.train.y, self.train.z)
+            self.train.set_position(-spawn_edge, self.train.y, self.train.z)
         else:
             self.train.speed = -self.train_speed
-            self.train.set_position(32.0, self.train.y, self.train.z)
+            self.train.set_position(spawn_edge, self.train.y, self.train.z)
 
     def update(self, dt: float) -> None:
         if dt <= 0.0:
@@ -1415,10 +1477,11 @@ class RailRow(BaseRow):
         if self.is_train_passing:
             self.train.update(dt)
 
-            # Check if train has fully exited the visible area
+            # Check if train has fully exited the visible area (far off-screen)
+            spawn_edge = 60.0
             has_exited = (
-                (self.train_direction > 0.0 and self.train.x > 32.0 + self.train.width * 0.5)
-                or (self.train_direction < 0.0 and self.train.x < -32.0 - self.train.width * 0.5)
+                (self.train_direction > 0.0 and self.train.x > spawn_edge + self.train.width * 0.5)
+                or (self.train_direction < 0.0 and self.train.x < -spawn_edge - self.train.width * 0.5)
             )
 
             if has_exited:
@@ -1437,6 +1500,177 @@ class RailRow(BaseRow):
             if self.is_train_passing and self.train.check_hit(px, pz, radius=0.35):
                 return True, "squashed", None
         return False, None, None
+
+
+# =============================================================================
+# Panoramic Alpine Mountain Horizon Backdrop
+# =============================================================================
+class HorizonBackdrop:
+    """Majestic low-poly voxel alpine mountain range and rolling foothill ridges framing the horizon."""
+
+    def __init__(
+        self,
+        scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
+    ) -> None:
+        self.scene: Optional[Any] = scene
+        self.material_registry: Optional[Any] = material_registry
+        self.entities: List[Any] = []
+        self.peak_data: List[Tuple[Any, float, float, float]] = []  # (entity, rel_x, y, rel_z)
+        self.current_forward_z: float = 24.0
+
+        if scene is not None:
+            self._build_mountain_range()
+
+    def _build_mountain_range(self) -> None:
+        """Construct tiered voxel alpine mountain peaks across the panoramic horizon."""
+        if self.scene is None:
+            return
+
+        mat_grass = _get_mat(self.material_registry, "grass")
+        mat_rock = _get_mat(self.material_registry, "rail_gravel")
+
+        # 15 Majestic mountain peaks spanning X from -68 to +68
+        peak_x_positions = [
+            -66.0, -56.0, -46.0, -36.0, -26.0, -18.0, -10.0,
+            0.0, 10.0, 18.0, 26.0, 36.0, 46.0, 56.0, 66.0,
+        ]
+
+        col_base = Color.from_hex("#1b3b24")    # Deep alpine evergreen forest
+        col_crag = Color.from_hex("#475569")    # Slate granite rock
+        col_snow = Color.from_hex("#f8fafc")    # Crisp alpine snow peak
+
+        for i, px in enumerate(peak_x_positions):
+            # Vary dimensions per peak for organic skyline
+            w1 = 12.0 + float((i * 7) % 8)
+            h1 = 4.5 + float((i * 3) % 4)
+            d1 = 7.0 + float((i * 5) % 3)
+
+            w2 = w1 * 0.65
+            h2 = 5.0 + float((i * 5) % 4)
+            d2 = d1 * 0.70
+
+            w3 = w2 * 0.55
+            h3 = 4.0 + float((i * 2) % 3)
+            d3 = d2 * 0.65
+
+            rel_z = float(((i * 11) % 5) * 1.6)
+
+            y_base = -0.5 + (h1 * 0.5)
+            y_crag = -0.5 + h1 + (h2 * 0.5)
+            y_snow = -0.5 + h1 + h2 + (h3 * 0.5)
+
+            # Tier 1: Foothill Forest Base
+            base_box = self.scene.create_box(
+                size=(w1, h1, d1),
+                position=(px, y_base, self.current_forward_z + rel_z),
+                color=col_base if mat_grass is None else WHITE,
+                material=mat_grass,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"HorizonMountainBase_{i}",
+            )
+            self.entities.append(base_box)
+            self.peak_data.append((base_box, px, y_base, rel_z))
+
+            # Tier 2: Granite Crag Body
+            crag_box = self.scene.create_box(
+                size=(w2, h2, d2),
+                position=(px, y_crag, self.current_forward_z + rel_z),
+                color=col_crag if mat_rock is None else WHITE,
+                material=mat_rock,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"HorizonMountainCrag_{i}",
+            )
+            self.entities.append(crag_box)
+            self.peak_data.append((crag_box, px, y_crag, rel_z))
+
+            # Tier 3: Snow-capped Summit
+            snow_box = self.scene.create_box(
+                size=(w3, h3, d3),
+                position=(px, y_snow, self.current_forward_z + rel_z),
+                color=col_snow,
+                cast_shadows=False,
+                has_collision=False,
+                name=f"HorizonMountainSnow_{i}",
+            )
+            self.entities.append(snow_box)
+            self.peak_data.append((snow_box, px, y_snow, rel_z))
+
+            # Mountain Shoulder Pine Trees
+            for sign in (-1.0, 1.0):
+                tree_x = px + (sign * w1 * 0.35)
+                tree_y = -0.5 + h1 + 0.6
+                pine_trunk = self.scene.create_box(
+                    size=(0.5, 1.4, 0.5),
+                    position=(tree_x, tree_y, self.current_forward_z + rel_z + (sign * 1.5)),
+                    color=Color.from_hex("#3b2413"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"MountainPineTrunk_{i}_{int(sign)}",
+                )
+                pine_foliage = self.scene.create_box(
+                    size=(1.8, 2.6, 1.8),
+                    position=(tree_x, tree_y + 1.6, self.current_forward_z + rel_z + (sign * 1.5)),
+                    color=Color.from_hex("#14321d"),
+                    cast_shadows=False,
+                    has_collision=False,
+                    name=f"MountainPineFoliage_{i}_{int(sign)}",
+                )
+                self.entities.extend([pine_trunk, pine_foliage])
+                self.peak_data.append((pine_trunk, tree_x, tree_y, rel_z + (sign * 1.5)))
+                self.peak_data.append((pine_foliage, tree_x, tree_y + 1.6, rel_z + (sign * 1.5)))
+
+        # Side Flank Rolling Foothills along the borders
+        flank_offsets = [
+            (-32.0, -6.0), (-28.0, 2.0), (-34.0, 10.0), (-26.0, 18.0),
+            (32.0, -6.0), (28.0, 2.0), (34.0, 10.0), (26.0, 18.0),
+        ]
+        for fi, (fx, fz) in enumerate(flank_offsets):
+            fh1 = 3.5 + float((fi * 3) % 3)
+            fh2 = 3.0
+            hill_base = self.scene.create_box(
+                size=(12.0, fh1, 8.0),
+                position=(fx, -0.5 + fh1 * 0.5, self.current_forward_z - 24.0 + fz),
+                color=Color.from_hex("#235732"),
+                cast_shadows=False,
+                has_collision=False,
+                name=f"FlankHillBase_{fi}",
+            )
+            hill_mid = self.scene.create_box(
+                size=(7.0, fh2, 5.0),
+                position=(fx, -0.5 + fh1 + fh2 * 0.5, self.current_forward_z - 24.0 + fz),
+                color=Color.from_hex("#475569"),
+                cast_shadows=False,
+                has_collision=False,
+                name=f"FlankHillMid_{fi}",
+            )
+            self.entities.extend([hill_base, hill_mid])
+            self.peak_data.append((hill_base, fx, -0.5 + fh1 * 0.5, fz - 24.0))
+            self.peak_data.append((hill_mid, fx, -0.5 + fh1 + fh2 * 0.5, fz - 24.0))
+
+    def update(self, forward_z: float) -> None:
+        """Stream forward mountain range to remain seamlessly aligned with the horizon."""
+        base_z = float(forward_z)
+        if abs(base_z - self.current_forward_z) < 0.2:
+            return
+
+        self.current_forward_z = base_z
+        for ent, rel_x, y, rel_z in self.peak_data:
+            if ent is not None and hasattr(ent, "transform"):
+                ent.transform.set_position(rel_x, y, base_z + rel_z)
+
+    def cleanup(self) -> None:
+        """Remove all backdrop mountain entities from scene."""
+        if self.scene is not None:
+            for ent in self.entities:
+                try:
+                    self.scene.remove_entity(ent)
+                except Exception:
+                    pass
+        self.entities.clear()
+        self.peak_data.clear()
 
 
 # =============================================================================
@@ -1470,6 +1704,7 @@ class WorldGenerator:
         self.active_rows: Dict[int, WorldRowContract] = {}
         self.max_generated_z: int = -1
         self.min_active_z: int = 0
+        self.backdrop: Optional[HorizonBackdrop] = None
 
         # Clumping state machine for procedural generation
         self._current_clump_type: RowType = RowType.GRASS
@@ -1484,6 +1719,10 @@ class WorldGenerator:
         for row in list(self.active_rows.values()):
             row.cleanup(self.scene)
         self.active_rows.clear()
+
+        if self.backdrop is not None:
+            self.backdrop.cleanup()
+        self.backdrop = HorizonBackdrop(scene=self.scene, material_registry=self.material_registry)
 
         if self.seed is not None:
             self.rng = random.Random(self.seed)
@@ -1596,6 +1835,9 @@ class WorldGenerator:
             self.max_generated_z = next_z
             self._clump_remaining -= 1
 
+        if getattr(self, "backdrop", None) is not None:
+            self.backdrop.update(float(player_z + 24.0))
+
     def prune_behind(self, player_z: int, keep_behind: int = 8) -> None:
         """Remove and cleanup rows behind player_z - keep_behind to maintain 500+ FPS."""
         min_retained_z = int(player_z - keep_behind)
@@ -1635,3 +1877,11 @@ class WorldGenerator:
         """Update simulation for all active rows."""
         for row in list(self.active_rows.values()):
             row.update(dt)
+
+    def cleanup(self) -> None:
+        """Clean up all active rows and horizon backdrop."""
+        for row in list(self.active_rows.values()):
+            row.cleanup(self.scene)
+        self.active_rows.clear()
+        if getattr(self, "backdrop", None) is not None:
+            self.backdrop.cleanup()

@@ -762,3 +762,53 @@ def test_road_markings_consecutive_opposing_directions() -> None:
     assert pytest.approx(div_b.transform.position[2], abs=0.1) == 2.5
 
 
+def test_vehicle_and_train_offscreen_spawning_and_wrap() -> None:
+    """Verify vehicles wrap at [-48, 48], trains at ±60, and logs at [-38, 38] to stay off-screen."""
+    # 1. RoadRow cars & trucks wrap outside visible screen
+    road = world.RoadRow(z_index=3, speed=8.0, vehicle_count=2)
+    for obs in road.obstacles:
+        assert obs.min_wrap_x == -48.0
+        assert obs.max_wrap_x == 48.0
+
+    # 2. RailRow train pass starts and exits far off-screen (±60.0)
+    rail = world.RailRow(z_index=5, train_speed=45.0)
+    rail._start_train_pass()
+    assert abs(rail.train.x) >= 60.0  # Spawn position far off-screen
+    assert rail.is_train_passing is True
+
+    # 3. RiverRow logs wrap at [-38, 38]
+    river = world.RiverRow(z_index=6, speed=3.5, log_count=2)
+    for obs in river.obstacles:
+        assert obs.min_wrap_x == -38.0
+        assert obs.max_wrap_x == 38.0
+
+
+def test_horizon_mountain_backdrop() -> None:
+    """Verify panoramic voxel mountain backdrop initializes, streams with lookahead, and cleans up."""
+    scene = MockScene()
+    backdrop = world.HorizonBackdrop(scene=scene)
+    assert len(backdrop.entities) > 30
+
+    # Check peaks span panoramic width [-72 .. 72]
+    xs = [rel_x for _, rel_x, _, _ in backdrop.peak_data]
+    assert min(xs) <= -60.0
+    assert max(xs) >= 60.0
+
+    # Update forward Z coordinate
+    backdrop.update(forward_z=80.0)
+    assert backdrop.current_forward_z == 80.0
+
+    # Cleanup removes all backdrop entities
+    backdrop.cleanup()
+    assert len(backdrop.entities) == 0
+    assert len(backdrop.peak_data) == 0
+
+    # WorldGenerator seamlessly manages backdrop
+    wg = world.WorldGenerator(scene=scene, seed=42)
+    assert wg.backdrop is not None
+    assert len(wg.backdrop.entities) > 0
+    wg.generate_ahead(0, lookahead=50)
+    assert wg.backdrop.current_forward_z >= 24.0
+
+
+
