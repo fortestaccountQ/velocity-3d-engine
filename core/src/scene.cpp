@@ -2,6 +2,10 @@
 #include "engine/model_loader.hpp"
 #include "engine/helpers.hpp"
 #include "engine/lod.hpp"
+#include "engine/skinned_mesh.hpp"
+#include "engine/sprite.hpp"
+#include "engine/points.hpp"
+#include "engine/particle.hpp"
 
 #include <algorithm>
 
@@ -81,6 +85,30 @@ void Scene::add(std::shared_ptr<Node3D> node) {
                 lods_.push_back(lod);
             }
         }
+        auto skm = std::dynamic_pointer_cast<SkinnedMesh>(n);
+        if (skm) {
+            if (std::find(skinned_meshes_.begin(), skinned_meshes_.end(), skm) == skinned_meshes_.end()) {
+                skinned_meshes_.push_back(skm);
+            }
+        }
+        auto spr = std::dynamic_pointer_cast<Sprite>(n);
+        if (spr) {
+            if (std::find(sprites_.begin(), sprites_.end(), spr) == sprites_.end()) {
+                sprites_.push_back(spr);
+            }
+        }
+        auto pts = std::dynamic_pointer_cast<Points>(n);
+        if (pts) {
+            if (std::find(points_.begin(), points_.end(), pts) == points_.end()) {
+                points_.push_back(pts);
+            }
+        }
+        auto pe = std::dynamic_pointer_cast<ParticleEmitter>(n);
+        if (pe) {
+            if (std::find(particle_emitters_.begin(), particle_emitters_.end(), pe) == particle_emitters_.end()) {
+                particle_emitters_.push_back(pe);
+            }
+        }
         auto sky = std::dynamic_pointer_cast<ProceduralSky>(n);
         if (sky) {
             set_procedural_sky(sky);
@@ -125,6 +153,26 @@ void Scene::remove(std::shared_ptr<Node3D> node) {
         if (lod) {
             auto it = std::find(lods_.begin(), lods_.end(), lod);
             if (it != lods_.end()) lods_.erase(it);
+        }
+        auto skm = std::dynamic_pointer_cast<SkinnedMesh>(n);
+        if (skm) {
+            auto it = std::find(skinned_meshes_.begin(), skinned_meshes_.end(), skm);
+            if (it != skinned_meshes_.end()) skinned_meshes_.erase(it);
+        }
+        auto spr = std::dynamic_pointer_cast<Sprite>(n);
+        if (spr) {
+            auto it = std::find(sprites_.begin(), sprites_.end(), spr);
+            if (it != sprites_.end()) sprites_.erase(it);
+        }
+        auto pts = std::dynamic_pointer_cast<Points>(n);
+        if (pts) {
+            auto it = std::find(points_.begin(), points_.end(), pts);
+            if (it != points_.end()) points_.erase(it);
+        }
+        auto pe = std::dynamic_pointer_cast<ParticleEmitter>(n);
+        if (pe) {
+            auto it = std::find(particle_emitters_.begin(), particle_emitters_.end(), pe);
+            if (it != particle_emitters_.end()) particle_emitters_.erase(it);
         }
         for (const auto& child : n->children()) {
             purge(child);
@@ -212,6 +260,38 @@ void Scene::remove_light(std::shared_ptr<Light> l) {
     remove(l);
 }
 
+void Scene::add_skinned_mesh(std::shared_ptr<SkinnedMesh> sm) {
+    add(sm);
+}
+
+void Scene::remove_skinned_mesh(std::shared_ptr<SkinnedMesh> sm) {
+    remove(sm);
+}
+
+void Scene::add_sprite(std::shared_ptr<Sprite> spr) {
+    add(spr);
+}
+
+void Scene::remove_sprite(std::shared_ptr<Sprite> spr) {
+    remove(spr);
+}
+
+void Scene::add_points(std::shared_ptr<Points> pts) {
+    add(pts);
+}
+
+void Scene::remove_points(std::shared_ptr<Points> pts) {
+    remove(pts);
+}
+
+void Scene::add_particle_emitter(std::shared_ptr<ParticleEmitter> pe) {
+    add(pe);
+}
+
+void Scene::remove_particle_emitter(std::shared_ptr<ParticleEmitter> pe) {
+    remove(pe);
+}
+
 void Scene::clear() {
     if (root_node_) {
         root_node_->clear();
@@ -221,6 +301,10 @@ void Scene::clear() {
     lights_.clear();
     helpers_.clear();
     lods_.clear();
+    skinned_meshes_.clear();
+    sprites_.clear();
+    points_.clear();
+    particle_emitters_.clear();
     procedural_sky_ = nullptr;
     background_cube_ = nullptr;
     environment_ = nullptr;

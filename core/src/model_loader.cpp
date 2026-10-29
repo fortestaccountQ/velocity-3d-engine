@@ -5,6 +5,8 @@
 
 #include "engine/model_loader.hpp"
 #include "engine/scene.hpp"
+#include "engine/animation.hpp"
+#include "engine/skinned_mesh.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
@@ -36,6 +38,39 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
     auto model = std::make_shared<Model>(root_entity, model_name);
 
     std::filesystem::path base_dir = std::filesystem::path(filepath).parent_path();
+
+    // 0. Parse Skins & Skeletons
+    std::unordered_map<const cgltf_node*, std::shared_ptr<Bone>> node_to_bone;
+    std::shared_ptr<Skeleton> skeleton = nullptr;
+
+    if (data->skins_count > 0) {
+        cgltf_skin* gltf_skin = &data->skins[0];
+        std::vector<std::shared_ptr<Bone>> bones;
+        std::vector<glm::mat4> inv_bind_matrices;
+
+        for (cgltf_size j = 0; j < gltf_skin->joints_count; ++j) {
+            cgltf_node* jnode = gltf_skin->joints[j];
+            std::string bname = (jnode && jnode->name) ? jnode->name : ("Bone_" + std::to_string(j));
+            auto bone = std::make_shared<Bone>(bname, static_cast<int>(j));
+            bones.push_back(bone);
+            if (jnode) {
+                node_to_bone[jnode] = bone;
+            }
+        }
+
+        if (gltf_skin->inverse_bind_matrices) {
+            cgltf_accessor* ibm_acc = gltf_skin->inverse_bind_matrices;
+            inv_bind_matrices.resize(gltf_skin->joints_count, glm::mat4(1.0f));
+            for (cgltf_size j = 0; j < gltf_skin->joints_count; ++j) {
+                float m[16];
+                cgltf_accessor_read_float(ibm_acc, j, m, 16);
+                inv_bind_matrices[j] = glm::make_mat4(m);
+            }
+        }
+
+        skeleton = std::make_shared<Skeleton>(bones, inv_bind_matrices);
+        model->skeleton = skeleton;
+    }
 
     // 1. Texture Cache
     std::unordered_map<const cgltf_image*, std::shared_ptr<Texture>> texture_cache;
@@ -170,6 +205,23 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
         node_entity->parent = parent;
         node_entity->local_matrix = local_m;
 
+        if (node_to_bone.count(node)) {
+            auto bone = node_to_bone[node];
+            if (node->has_translation) {
+                bone->transform.position = glm::vec3(node->translation[0], node->translation[1], node->translation[2]);
+            }
+            if (node->has_rotation) {
+                bone->transform.set_orientation(glm::quat(node->rotation[3], node->rotation[0], node->rotation[1], node->rotation[2]));
+            }
+            if (node->has_scale) {
+                bone->transform.scale = glm::vec3(node->scale[0], node->scale[1], node->scale[2]);
+            }
+            if (node->has_matrix) {
+                bone->transform.set_matrix(local_m);
+            }
+            node_entity->add(bone);
+        }
+
         if (node->mesh) {
             for (cgltf_size pi = 0; pi < node->mesh->primitives_count; ++pi) {
                 const cgltf_primitive& prim = node->mesh->primitives[pi];
@@ -182,6 +234,8 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 const cgltf_accessor* uv_acc = nullptr;
                 const cgltf_accessor* col_acc = nullptr;
                 const cgltf_accessor* tan_acc = nullptr;
+                const cgltf_accessor* joints_acc = nullptr;
+                const cgltf_accessor* weights_acc = nullptr;
 
                 for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai) {
                     const auto& attr = prim.attributes[ai];
@@ -195,6 +249,10 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                         col_acc = attr.data;
                     } else if (attr.type == cgltf_attribute_type_tangent && attr.index == 0) {
                         tan_acc = attr.data;
+                    } else if (attr.type == cgltf_attribute_type_joints && attr.index == 0) {
+                        joints_acc = attr.data;
+                    } else if (attr.type == cgltf_attribute_type_weights && attr.index == 0) {
+                        weights_acc = attr.data;
                     }
                 }
 
@@ -231,6 +289,18 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                         cgltf_accessor_read_float(tan_acc, vi, &v.tangent.x, 4);
                     } else {
                         v.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                    }
+
+                    if (joints_acc) {
+                        cgltf_accessor_read_float(joints_acc, vi, &v.joints.x, 4);
+                    } else {
+                        v.joints = glm::vec4(0.0f);
+                    }
+
+                    if (weights_acc) {
+                        cgltf_accessor_read_float(weights_acc, vi, &v.weights.x, 4);
+                    } else {
+                        v.weights = glm::vec4(0.0f);
                     }
                 }
 
@@ -325,6 +395,14 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 prim_entity->mesh = mesh;
                 prim_entity->material = get_or_load_material(prim.material);
                 model->meshes.push_back(prim_entity);
+
+                if ((joints_acc || node->skin) && skeleton) {
+                    auto skinned_mesh = std::make_shared<SkinnedMesh>(mesh, skeleton, prim_entity->material);
+                    skinned_mesh->name = node_name + "_SkinnedMesh";
+                    node_entity->add(skinned_mesh);
+                    scene.add_skinned_mesh(skinned_mesh);
+                    model->skinned_meshes.push_back(skinned_mesh);
+                }
             }
         }
 
@@ -344,6 +422,59 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 process_node(&data->nodes[ni], root_entity);
             }
         }
+    }
+
+    // 4. Parse Animations
+    for (cgltf_size ai = 0; ai < data->animations_count; ++ai) {
+        const cgltf_animation& gltf_anim = data->animations[ai];
+        std::string clip_name = gltf_anim.name ? gltf_anim.name : ("Animation_" + std::to_string(ai));
+        auto clip = std::make_shared<AnimationClip>(clip_name);
+
+        for (cgltf_size ci = 0; ci < gltf_anim.channels_count; ++ci) {
+            const cgltf_animation_channel& chan = gltf_anim.channels[ci];
+            if (!chan.target_node || !chan.sampler || !chan.sampler->input || !chan.sampler->output) {
+                continue;
+            }
+
+            std::string target_name = chan.target_node->name ? chan.target_node->name : "";
+            std::string prop_name = "";
+            if (chan.target_path == cgltf_animation_path_type_translation) {
+                prop_name = "translation";
+            } else if (chan.target_path == cgltf_animation_path_type_rotation) {
+                prop_name = "rotation";
+            } else if (chan.target_path == cgltf_animation_path_type_scale) {
+                prop_name = "scale";
+            }
+            if (prop_name.empty()) continue;
+
+            Interpolation interp = Interpolation::Linear;
+            if (chan.sampler->interpolation == cgltf_interpolation_type_step) {
+                interp = Interpolation::Step;
+            } else if (chan.sampler->interpolation == cgltf_interpolation_type_cubic_spline) {
+                interp = Interpolation::CubicSpline;
+            }
+
+            cgltf_size key_count = chan.sampler->input->count;
+            std::vector<float> times(key_count);
+            for (cgltf_size ti = 0; ti < key_count; ++ti) {
+                cgltf_accessor_read_float(chan.sampler->input, ti, &times[ti], 1);
+            }
+
+            size_t num_comps = (prop_name == "rotation") ? 4 : 3;
+            if (interp == Interpolation::CubicSpline) {
+                num_comps *= 3;
+            }
+            std::vector<float> values(key_count * num_comps);
+            for (cgltf_size vi = 0; vi < key_count; ++vi) {
+                cgltf_accessor_read_float(chan.sampler->output, vi, &values[vi * num_comps], num_comps);
+            }
+
+            KeyframeTrack track(target_name, prop_name, times, values, interp);
+            clip->add_track(track);
+        }
+
+        clip->reset_duration_from_tracks();
+        model->animations.push_back(clip);
     }
 
     cgltf_free(data);

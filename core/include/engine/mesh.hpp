@@ -17,6 +17,8 @@ struct Vertex {
     glm::vec2 uv{0.0f};
     glm::vec4 color{1.0f};
     glm::vec4 tangent{1.0f, 0.0f, 0.0f, 1.0f};
+    glm::vec4 joints{0.0f};
+    glm::vec4 weights{0.0f};
 };
 
 struct InstanceData {
@@ -82,6 +84,20 @@ public:
 
     void mark_dynamic() { is_dynamic = true; }
     void update_vertices_raw(const float* raw_data, size_t num_floats);
+
+    // Morph Targets
+    std::vector<float> morph_target_influences;
+
+    struct MorphTarget {
+        std::string name;
+        std::vector<glm::vec3> positions;
+        std::vector<glm::vec3> normals;
+    };
+    std::vector<MorphTarget> morph_targets;
+    std::vector<Vertex> base_cpu_vertices;
+
+    void add_morph_target(const std::string& name, const std::vector<glm::vec3>& positions, const std::vector<glm::vec3>& normals = {});
+    void apply_morph_targets();
 
     bool ensure_gpu_buffers();
     void destroy();

@@ -6,6 +6,11 @@
 #include "engine/cube_camera.hpp"
 #include "engine/helpers.hpp"
 #include "engine/lod.hpp"
+#include "engine/animation.hpp"
+#include "engine/skinned_mesh.hpp"
+#include "engine/sprite.hpp"
+#include "engine/points.hpp"
+#include "engine/particle.hpp"
 
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -2796,37 +2801,81 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 
     // Split visible entities into opaque and transparent queues
     struct RenderItem {
-        std::shared_ptr<Entity> entity;
-        float dist_sq;
+        std::shared_ptr<Mesh> mesh;
+        std::shared_ptr<Material> material;
+        glm::mat4 model;
+        glm::mat4 normal_mat;
+        glm::vec4 color{1.0f};
+        float dist_sq{0.0f};
     };
 
     std::vector<RenderItem> opaque_queue;
     std::vector<RenderItem> transparent_queue;
 
-    for (const auto& entity : scene.entities()) {
-        if (!entity || !entity->visible || !entity->mesh) continue;
-        if ((camera.layers & entity->layers) == 0) continue;
-
-        AABB aabb = entity->world_aabb();
+    auto push_item = [&](std::shared_ptr<Mesh> mesh, std::shared_ptr<Material> mat, const glm::mat4& model, const glm::mat4& normal_mat, const glm::vec4& color, const glm::vec3& wpos, const AABB& aabb) {
+        if (!mesh) return;
         if (aabb.is_valid()) {
             if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
                 stats_.culled_objects++;
-                continue;
+                return;
             }
         }
+        if (!mesh->ensure_gpu_buffers()) return;
 
-        if (!entity->mesh->ensure_gpu_buffers()) continue;
-
-        glm::vec3 wpos = entity->world_position();
         glm::vec3 diff = camera.position - wpos;
         float d2 = glm::dot(diff, diff);
-
-        auto mat = entity->material ? entity->material : default_mat;
-        bool is_trans = mat && (mat->transparent || mat->opacity < 0.999f || mat->blend_mode != BlendMode::Opaque);
+        auto m = mat ? mat : default_mat;
+        bool is_trans = m && (m->transparent || m->opacity < 0.999f || m->blend_mode != BlendMode::Opaque);
         if (is_trans) {
-            transparent_queue.push_back({ entity, d2 });
+            transparent_queue.push_back({ mesh, m, model, normal_mat, color, d2 });
         } else {
-            opaque_queue.push_back({ entity, d2 });
+            opaque_queue.push_back({ mesh, m, model, normal_mat, color, d2 });
+        }
+    };
+
+    // 1. Entities
+    for (const auto& entity : scene.entities()) {
+        if (!entity || !entity->visible || !entity->mesh) continue;
+        if ((camera.layers & entity->layers) == 0) continue;
+        push_item(entity->mesh, entity->material, entity->world_model_matrix(), entity->world_normal_matrix(), entity->color, entity->world_position(), entity->world_aabb());
+    }
+
+    // 2. Skinned Meshes
+    for (const auto& skm : scene.skinned_meshes()) {
+        if (!skm || !skm->visible || !skm->mesh) continue;
+        if ((camera.layers & skm->layers) == 0) continue;
+        skm->compute_cpu_skinning();
+        push_item(skm->mesh, skm->material, skm->world_model_matrix(), skm->world_normal_matrix(), skm->color, skm->world_position(), skm->world_aabb());
+    }
+
+    // 3. Points
+    for (const auto& pts : scene.points()) {
+        if (!pts || !pts->visible || !pts->mesh || pts->mesh->num_indices == 0) continue;
+        if ((camera.layers & pts->layers) == 0) continue;
+        push_item(pts->mesh, pts->material, pts->world_matrix(), glm::mat4(1.0f), glm::vec4(1.0f), pts->world_position(), pts->world_aabb());
+    }
+
+    // 4. Sprites
+    for (const auto& spr : scene.sprites()) {
+        if (!spr || !spr->visible || !spr->material) continue;
+        if ((camera.layers & spr->layers) == 0) continue;
+        auto q = Sprite::quad_mesh();
+        glm::mat4 bm = spr->compute_billboard_matrix(camera);
+        push_item(q, spr->material, bm, glm::mat4(1.0f), glm::vec4(1.0f), spr->world_position(), spr->world_aabb());
+    }
+
+    // 5. Particle Emitters
+    for (const auto& pe : scene.particle_emitters()) {
+        if (!pe || !pe->visible || pe->active_count() == 0) continue;
+        if ((camera.layers & pe->layers) == 0) continue;
+        pe->update_mesh(camera);
+        auto pmesh = pe->get_particle_mesh();
+        if (pmesh && pmesh->num_indices > 0) {
+            auto pmat = std::make_shared<Material>(pe->texture, 1.0f, 0.0f);
+            pmat->transparent = true;
+            pmat->blend_mode = pe->blend_mode;
+            pmat->depth_write = false;
+            push_item(pmesh, pmat, glm::mat4(1.0f), glm::mat4(1.0f), glm::vec4(1.0f), pe->world_position(), pe->world_aabb());
         }
     }
 
@@ -2844,8 +2893,9 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 
     auto render_entities = [&](const std::vector<RenderItem>& queue, bool is_transparent_pass) {
         for (const auto& item : queue) {
-            const auto& entity = item.entity;
-            auto mat = entity->material ? entity->material : default_mat;
+            const auto& mesh = item.mesh;
+            if (!mesh || !mesh->ensure_gpu_buffers()) continue;
+            auto mat = item.material ? item.material : default_mat;
 
             SideMode side = mat ? mat->side : SideMode::Front;
             bool depth_write = is_transparent_pass ? false : (mat ? mat->depth_write : true);
@@ -2925,16 +2975,16 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             if (tex_ao_tex) tex_ao_tex->ensure_gpu_resources();
             if (!tex_ao_tex || !tex_ao_tex->is_valid()) tex_ao_tex = default_white_tex_;
 
-            glm::mat4 model = entity->world_model_matrix();
-            glm::mat4 normal_mat = entity->world_normal_matrix();
+            glm::mat4 model = item.model;
+            glm::mat4 normal_mat = item.normal_mat;
             glm::mat4 mvp = vp * model;
             glm::mat4 l_mvp = light_vp_ * model;
 
             VSParams vs_params{ mvp, model, normal_mat, l_mvp };
 
             sg_bindings bind{};
-            bind.vertex_buffers[0] = sg_buffer{ entity->mesh->vbuf_id };
-            bind.index_buffer = sg_buffer{ entity->mesh->ibuf_id };
+            bind.vertex_buffers[0] = sg_buffer{ mesh->vbuf_id };
+            bind.index_buffer = sg_buffer{ mesh->ibuf_id };
             bind.views[0] = sg_view{ tex_alb ? tex_alb->view_id : 0 };
             bind.samplers[0] = sg_sampler{ tex_alb ? tex_alb->sampler_id : 0 };
             bind.views[1] = sg_view{ shadow_tex_view_id_ };
@@ -2959,7 +3009,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
 
             FSParams ent_fs = fs_params;
-            ent_fs.material_color = (mat ? mat->base_color : glm::vec4(1.0f)) * entity->color;
+            ent_fs.material_color = (mat ? mat->base_color : glm::vec4(1.0f)) * item.color;
             ent_fs.material_params = glm::vec4(mat ? mat->roughness : 0.5f, mat ? mat->metallic : 0.0f, mat ? mat->uv_scale.x : 1.0f, mat ? mat->uv_scale.y : 1.0f);
             ent_fs.material_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, mat ? mat->normal_scale : 1.0f, mat ? mat->ao_intensity : 1.0f);
             ent_fs.emissive_params = glm::vec4(mat ? (mat->emissive_color * mat->emissive_intensity) : glm::vec3(0.0f), (mat && mat->alpha_test) ? mat->alpha_cutoff : -1.0f);
@@ -2998,9 +3048,9 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 
             sg_apply_uniforms(1, SG_RANGE_REF(ent_fs));
 
-            sg_draw(0, entity->mesh->num_indices, 1);
+            sg_draw(0, mesh->num_indices, 1);
             stats_.draw_calls++;
-            stats_.total_triangles += entity->mesh->num_indices / 3;
+            stats_.total_triangles += mesh->num_indices / 3;
         }
     };
 

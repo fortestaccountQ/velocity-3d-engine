@@ -18,6 +18,10 @@ namespace engine {
 
 class Helper;
 class LOD;
+class SkinnedMesh;
+class Sprite;
+class Points;
+class ParticleEmitter;
 
 class Scene {
 public:
@@ -59,6 +63,27 @@ public:
 
     const std::vector<std::shared_ptr<LOD>>& lods() const { return lods_; }
     std::vector<std::shared_ptr<LOD>>& lods() { return lods_; }
+
+    const std::vector<std::shared_ptr<SkinnedMesh>>& skinned_meshes() const { return skinned_meshes_; }
+    std::vector<std::shared_ptr<SkinnedMesh>>& skinned_meshes() { return skinned_meshes_; }
+
+    const std::vector<std::shared_ptr<Sprite>>& sprites() const { return sprites_; }
+    std::vector<std::shared_ptr<Sprite>>& sprites() { return sprites_; }
+
+    const std::vector<std::shared_ptr<Points>>& points() const { return points_; }
+    std::vector<std::shared_ptr<Points>>& points() { return points_; }
+
+    const std::vector<std::shared_ptr<ParticleEmitter>>& particle_emitters() const { return particle_emitters_; }
+    std::vector<std::shared_ptr<ParticleEmitter>>& particle_emitters() { return particle_emitters_; }
+
+    void add_skinned_mesh(std::shared_ptr<SkinnedMesh> sm);
+    void remove_skinned_mesh(std::shared_ptr<SkinnedMesh> sm);
+    void add_sprite(std::shared_ptr<Sprite> spr);
+    void remove_sprite(std::shared_ptr<Sprite> spr);
+    void add_points(std::shared_ptr<Points> pts);
+    void remove_points(std::shared_ptr<Points> pts);
+    void add_particle_emitter(std::shared_ptr<ParticleEmitter> pe);
+    void remove_particle_emitter(std::shared_ptr<ParticleEmitter> pe);
 
     std::shared_ptr<Mesh> default_cube_mesh();
     std::shared_ptr<Texture> default_checker_texture();
@@ -103,6 +128,10 @@ private:
     std::vector<std::shared_ptr<Light>> lights_;
     std::vector<std::shared_ptr<Helper>> helpers_;
     std::vector<std::shared_ptr<LOD>> lods_;
+    std::vector<std::shared_ptr<SkinnedMesh>> skinned_meshes_;
+    std::vector<std::shared_ptr<Sprite>> sprites_;
+    std::vector<std::shared_ptr<Points>> points_;
+    std::vector<std::shared_ptr<ParticleEmitter>> particle_emitters_;
 
     BackgroundType background_type_{BackgroundType::Color};
     std::shared_ptr<CubeTexture> background_cube_{nullptr};

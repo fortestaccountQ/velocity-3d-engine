@@ -28,6 +28,10 @@ void Mesh::destroy() {
 
 bool Mesh::ensure_gpu_buffers() {
     if (vbuf_id != 0 && ibuf_id != 0) {
+        if (is_dynamic && sg_isvalid() && !cpu_vertices.empty()) {
+            sg_range range{ cpu_vertices.data(), cpu_vertices.size() * sizeof(Vertex) };
+            sg_update_buffer(sg_buffer{ vbuf_id }, &range);
+        }
         return true;
     }
     if (!sg_isvalid()) {
@@ -58,6 +62,44 @@ bool Mesh::ensure_gpu_buffers() {
     return (vbuf_id != 0 && ibuf_id != 0);
 }
 
+void Mesh::add_morph_target(const std::string& name, const std::vector<glm::vec3>& positions, const std::vector<glm::vec3>& normals) {
+    morph_targets.push_back({ name, positions, normals });
+    morph_target_influences.push_back(0.0f);
+    if (base_cpu_vertices.empty()) {
+        base_cpu_vertices = cpu_vertices;
+        mark_dynamic();
+    }
+}
+
+void Mesh::apply_morph_targets() {
+    if (morph_targets.empty() || morph_target_influences.empty()) return;
+    if (base_cpu_vertices.empty()) {
+        base_cpu_vertices = cpu_vertices;
+        mark_dynamic();
+    }
+    cpu_vertices = base_cpu_vertices;
+    size_t count = std::min(morph_targets.size(), morph_target_influences.size());
+    for (size_t t = 0; t < count; ++t) {
+        float weight = morph_target_influences[t];
+        if (std::abs(weight) < 1e-5f) continue;
+        const auto& mt = morph_targets[t];
+        for (size_t i = 0; i < cpu_vertices.size(); ++i) {
+            if (i < mt.positions.size()) {
+                cpu_vertices[i].position += weight * mt.positions[i];
+            }
+            if (i < mt.normals.size()) {
+                cpu_vertices[i].normal += weight * mt.normals[i];
+            }
+        }
+    }
+    for (auto& v : cpu_vertices) {
+        float l = glm::length(v.normal);
+        if (l > 1e-5f) v.normal /= l;
+    }
+    calculate_aabb();
+    ensure_gpu_buffers();
+}
+
 void Mesh::update_vertices_raw(const float* raw_data, size_t num_floats) {
     if (!raw_data || num_floats == 0) return;
     mark_dynamic();
@@ -68,7 +110,9 @@ void Mesh::update_vertices_raw(const float* raw_data, size_t num_floats) {
         if (cpu_vertices.size() < vert_count) {
             cpu_vertices.resize(vert_count);
         }
-        std::memcpy(cpu_vertices.data(), raw_data, byte_size);
+        if (reinterpret_cast<const void*>(cpu_vertices.data()) != reinterpret_cast<const void*>(raw_data)) {
+            std::memcpy(cpu_vertices.data(), raw_data, std::min(byte_size, cpu_vertices.size() * sizeof(Vertex)));
+        }
         ensure_gpu_buffers();
     } else if (sg_isvalid()) {
         sg_range range{ raw_data, byte_size };

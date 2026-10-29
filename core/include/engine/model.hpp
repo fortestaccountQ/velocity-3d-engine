@@ -1,17 +1,24 @@
 #pragma once
 
 #include "engine/entity.hpp"
+#include "engine/skinned_mesh.hpp"
 #include <string>
 #include <vector>
 #include <memory>
 
 namespace engine {
 
+class AnimationClip;
+class Skeleton;
+
 class Model {
 public:
     std::string name;
     std::shared_ptr<Entity> root_entity;
     std::vector<std::shared_ptr<Entity>> meshes;
+    std::vector<std::shared_ptr<AnimationClip>> animations;
+    std::shared_ptr<Skeleton> skeleton{nullptr};
+    std::vector<std::shared_ptr<SkinnedMesh>> skinned_meshes;
 
     Model(std::shared_ptr<Entity> root, const std::string& name = "Model")
         : root_entity(root), name(name) {}
@@ -28,6 +35,9 @@ public:
         for (auto& m : meshes) {
             if (m) m->visible = v;
         }
+        for (auto& sm : skinned_meshes) {
+            if (sm) sm->visible = v;
+        }
     }
 
     bool is_visible() const { return root_entity->visible; }
@@ -37,6 +47,11 @@ public:
         for (const auto& m : meshes) {
             if (m && m->visible) {
                 box.expand(m->world_aabb());
+            }
+        }
+        for (const auto& sm : skinned_meshes) {
+            if (sm && sm->visible) {
+                box.expand(sm->world_aabb());
             }
         }
         return box;

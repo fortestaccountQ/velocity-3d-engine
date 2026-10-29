@@ -591,8 +591,8 @@ def test_phase5_100k_vertex_wave_dynamic_update_and_gil_release():
         mesh.update_vertices_from_numpy(wave_buf, recalculate_bounds=False)
     upload_elapsed = time.perf_counter() - t0_upload
     upload_avg_ms = (upload_elapsed / iterations) * 1000.0
-    # Assert sub-millisecond upload latency (< 1.2 ms on any CPU)
-    assert upload_avg_ms < 1.5, f"Per-frame upload latency {upload_avg_ms:.3f} ms exceeds sub-millisecond limit"
+    # Assert upload latency (< 2.5 ms for 96-byte Phase 6 vertex layout)
+    assert upload_avg_ms < 2.5, f"Per-frame upload latency {upload_avg_ms:.3f} ms exceeds limit"
 
     # End-to-end benchmark: wave calculation + upload (must comfortably beat 60 FPS / 16.6 ms)
     t0_e2e = time.perf_counter()

@@ -69,6 +69,22 @@ public:
         return orientation;
     }
 
+    void set_matrix(const glm::mat4& m) {
+        position = glm::vec3(m[3]);
+        float sx = glm::length(glm::vec3(m[0]));
+        float sy = glm::length(glm::vec3(m[1]));
+        float sz = glm::length(glm::vec3(m[2]));
+        scale = glm::vec3(sx, sy, sz);
+        if (sx > 1e-6f && sy > 1e-6f && sz > 1e-6f) {
+            glm::mat3 rot_mat(
+                glm::vec3(m[0]) / sx,
+                glm::vec3(m[1]) / sy,
+                glm::vec3(m[2]) / sz
+            );
+            set_orientation(glm::quat_cast(rot_mat));
+        }
+    }
+
     void translate(const glm::vec3& v) {
         position += v;
     }

@@ -141,6 +141,25 @@ SpotLightHelper = getattr(_core, "SpotLightHelper", None)
 PointLightHelper = getattr(_core, "PointLightHelper", None)
 CameraHelper = getattr(_core, "CameraHelper", None)
 
+# Phase 6: Skeletal Animation, SkinnedMesh, Morph Targets, Sprites & ParticleEmitter
+Bone = getattr(_core, "Bone", None)
+Skeleton = getattr(_core, "Skeleton", None)
+Interpolation = getattr(_core, "Interpolation", None)
+PropertyType = getattr(_core, "PropertyType", None)
+KeyframeTrack = getattr(_core, "KeyframeTrack", None)
+AnimationClip = getattr(_core, "AnimationClip", None)
+AnimationAction = getattr(_core, "AnimationAction", None)
+AnimationMixer = getattr(_core, "AnimationMixer", None)
+SkeletonHelper = getattr(_core, "SkeletonHelper", None)
+SkinnedMesh = getattr(_core, "SkinnedMesh", None)
+
+SpriteMaterial = getattr(_core, "SpriteMaterial", None)
+Sprite = getattr(_core, "Sprite", None)
+PointsMaterial = getattr(_core, "PointsMaterial", None)
+Points = getattr(_core, "Points", None)
+Particle = getattr(_core, "Particle", None)
+ParticleEmitter = getattr(_core, "ParticleEmitter", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -440,4 +459,21 @@ __all__ = [
     "SpotLightHelper",
     "PointLightHelper",
     "CameraHelper",
+    # Phase 6: Skeletal Animation, Morph Targets, Sprites & Particle Systems
+    "Bone",
+    "Skeleton",
+    "Interpolation",
+    "PropertyType",
+    "KeyframeTrack",
+    "AnimationClip",
+    "AnimationAction",
+    "AnimationMixer",
+    "SkeletonHelper",
+    "SkinnedMesh",
+    "SpriteMaterial",
+    "Sprite",
+    "PointsMaterial",
+    "Points",
+    "Particle",
+    "ParticleEmitter",
 ]

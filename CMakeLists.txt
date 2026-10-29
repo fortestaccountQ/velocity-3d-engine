@@ -99,6 +99,11 @@ add_library(velocity_engine_core STATIC
     core/src/curve.cpp
     core/src/helpers.cpp
     core/src/lod.cpp
+    core/src/animation.cpp
+    core/src/skinned_mesh.cpp
+    core/src/sprite.cpp
+    core/src/points.cpp
+    core/src/particle.cpp
     core/src/app.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp

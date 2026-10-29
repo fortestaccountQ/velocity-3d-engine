@@ -15,6 +15,11 @@
 #include "engine/cube_camera.hpp"
 #include "engine/helpers.hpp"
 #include "engine/lod.hpp"
+#include "engine/animation.hpp"
+#include "engine/skinned_mesh.hpp"
+#include "engine/sprite.hpp"
+#include "engine/points.hpp"
+#include "engine/particle.hpp"
 
 static inline glm::vec3 parse_scene_vec3(nb::handle h) {
     if (nb::isinstance<glm::vec3>(h)) return nb::cast<glm::vec3>(h);
@@ -64,7 +69,29 @@ void bind_scene(nb::module_& m) {
         .def("world_direction", &engine::Node3D::world_direction)
         .def("world_to_local", &engine::Node3D::world_to_local, "point"_a)
         .def("local_to_world", &engine::Node3D::local_to_world, "point"_a)
-        .def("world_aabb", &engine::Node3D::world_aabb);
+        .def("world_aabb", &engine::Node3D::world_aabb)
+        .def("set_position", [](engine::Node3D& n, float x, float y, float z) {
+            n.transform.set_position(x, y, z);
+            n.invalidate_world_matrix();
+        }, "x"_a, "y"_a, "z"_a)
+        .def("set_rotation", [](engine::Node3D& n, float rx, float ry, float rz) {
+            n.transform.set_rotation(rx, ry, rz);
+            n.invalidate_world_matrix();
+        }, "rx"_a, "ry"_a, "rz"_a)
+        .def("set_scale", [](engine::Node3D& n, float sx, float sy, float sz) {
+            n.transform.set_scale(sx, sy, sz);
+            n.invalidate_world_matrix();
+        }, "sx"_a, "sy"_a, "sz"_a)
+        .def("update_world_matrix", [](engine::Node3D& n, bool update_children) {
+            n.invalidate_world_matrix();
+            (void)n.world_matrix();
+            if (update_children) {
+                n.traverse([](engine::Node3D& child) {
+                    child.invalidate_world_matrix();
+                    (void)child.world_matrix();
+                });
+            }
+        }, "update_children"_a = true);
 
     nb::class_<engine::Group, engine::Node3D>(m, "Group")
         .def(nb::init<const std::string&>(), "name"_a = "Group");
@@ -544,7 +571,19 @@ void bind_scene(nb::module_& m) {
             s.set_environment(env, intensity);
         }, "env"_a.none() = nb::none(), "intensity"_a = 1.0f)
         .def_prop_ro("helpers", [](engine::Scene& s) { return s.helpers(); })
-        .def_prop_ro("lods", [](engine::Scene& s) { return s.lods(); });
+        .def_prop_ro("lods", [](engine::Scene& s) { return s.lods(); })
+        .def_prop_ro("skinned_meshes", [](engine::Scene& s) { return s.skinned_meshes(); })
+        .def_prop_ro("sprites", [](engine::Scene& s) { return s.sprites(); })
+        .def_prop_ro("points", [](engine::Scene& s) { return s.points(); })
+        .def_prop_ro("particle_emitters", [](engine::Scene& s) { return s.particle_emitters(); })
+        .def("add_skinned_mesh", &engine::Scene::add_skinned_mesh, "skinned_mesh"_a)
+        .def("remove_skinned_mesh", &engine::Scene::remove_skinned_mesh, "skinned_mesh"_a)
+        .def("add_sprite", &engine::Scene::add_sprite, "sprite"_a)
+        .def("remove_sprite", &engine::Scene::remove_sprite, "sprite"_a)
+        .def("add_points", &engine::Scene::add_points, "points"_a)
+        .def("remove_points", &engine::Scene::remove_points, "points"_a)
+        .def("add_particle_emitter", &engine::Scene::add_particle_emitter, "emitter"_a)
+        .def("remove_particle_emitter", &engine::Scene::remove_particle_emitter, "emitter"_a);
 
     // -----------------------------------------------------------------------
     // Level of Detail (LOD)
@@ -648,4 +687,148 @@ void bind_scene(nb::module_& m) {
         .def_rw("camera", &engine::CameraHelper::camera)
         .def_rw("color", &engine::CameraHelper::color)
         .def("update", &engine::CameraHelper::update);
+
+    // -----------------------------------------------------------------------
+    // Phase 6: Skeletal Animation & Skinned Mesh
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Bone, engine::Node3D>(m, "Bone")
+        .def(nb::init<const std::string&, int>(), "name"_a = "Bone", "bone_index"_a = -1)
+        .def_rw("bone_index", &engine::Bone::bone_index)
+        .def("get_bone_index", &engine::Bone::get_bone_index)
+        .def("set_bone_index", &engine::Bone::set_bone_index, "index"_a);
+
+    nb::class_<engine::Skeleton>(m, "Skeleton")
+        .def(nb::init<>())
+        .def(nb::init<const std::vector<std::shared_ptr<engine::Bone>>&, const std::vector<glm::mat4>&>(),
+             "bones"_a, "inverse_bind_matrices"_a = std::vector<glm::mat4>{})
+        .def_rw("bones", &engine::Skeleton::bones)
+        .def_rw("inverse_bind_matrices", &engine::Skeleton::inverse_bind_matrices)
+        .def_rw("bone_matrices", &engine::Skeleton::bone_matrices)
+        .def("calculate_inverse_bind_matrices", &engine::Skeleton::calculate_inverse_bind_matrices)
+        .def("compute_bone_matrices", &engine::Skeleton::compute_bone_matrices, "root_inv_world"_a = glm::mat4(1.0f))
+        .def("update", &engine::Skeleton::update, "root_inv_world"_a = glm::mat4(1.0f))
+        .def("pose", &engine::Skeleton::pose)
+        .def("get_bone_by_name", &engine::Skeleton::get_bone_by_name, "name"_a)
+        .def("get_bone_by_index", &engine::Skeleton::get_bone_by_index, "index"_a)
+        .def("num_bones", &engine::Skeleton::num_bones)
+        .def_prop_ro("num_bones", &engine::Skeleton::num_bones);
+
+    nb::enum_<engine::Interpolation>(m, "Interpolation")
+        .value("Linear", engine::Interpolation::Linear)
+        .value("Step", engine::Interpolation::Step)
+        .value("CubicSpline", engine::Interpolation::CubicSpline)
+        .export_values();
+
+    nb::enum_<engine::PropertyType>(m, "PropertyType")
+        .value("Translation", engine::PropertyType::Translation)
+        .value("Rotation", engine::PropertyType::Rotation)
+        .value("Scale", engine::PropertyType::Scale)
+        .export_values();
+
+    nb::class_<engine::KeyframeTrack>(m, "KeyframeTrack")
+        .def(nb::init<>())
+        .def(nb::init<const std::string&, const std::string&, const std::vector<float>&, const std::vector<float>&, engine::Interpolation>(),
+             "name"_a, "property"_a, "times"_a, "values"_a, "interpolation"_a = engine::Interpolation::Linear)
+        .def("__init__", [](engine::KeyframeTrack* track, const std::string& name, const std::vector<float>& times, const std::vector<float>& values, engine::Interpolation interp, engine::PropertyType prop_type) {
+            std::string prop_name = "position";
+            if (prop_type == engine::PropertyType::Rotation) prop_name = "rotation";
+            else if (prop_type == engine::PropertyType::Scale) prop_name = "scale";
+            new (track) engine::KeyframeTrack(name, prop_name, times, values, interp);
+            track->property = prop_type;
+        }, "name"_a, "times"_a, "values"_a, "interpolation"_a = engine::Interpolation::Linear, "property_type"_a = engine::PropertyType::Translation)
+        .def_rw("name", &engine::KeyframeTrack::name)
+        .def_rw("property_name", &engine::KeyframeTrack::property_name)
+        .def_rw("property", &engine::KeyframeTrack::property)
+        .def_rw("times", &engine::KeyframeTrack::times)
+        .def_rw("values", &engine::KeyframeTrack::values)
+        .def_rw("interpolation", &engine::KeyframeTrack::interpolation)
+        .def("sample_vec3", &engine::KeyframeTrack::sample_vec3, "time"_a)
+        .def("sample_quat", &engine::KeyframeTrack::sample_quat, "time"_a)
+        .def("sample_translation", &engine::KeyframeTrack::sample_translation, "time"_a)
+        .def("sample_rotation", &engine::KeyframeTrack::sample_rotation, "time"_a)
+        .def("sample_scale", &engine::KeyframeTrack::sample_scale, "time"_a);
+
+    nb::class_<engine::AnimationClip>(m, "AnimationClip")
+        .def(nb::init<const std::string&, float>(), "name"_a = "", "duration"_a = 0.0f)
+        .def("__init__", [](engine::AnimationClip* clip, const std::string& name, float duration, const std::vector<engine::KeyframeTrack>& tracks) {
+            new (clip) engine::AnimationClip(name, duration);
+            clip->tracks = tracks;
+        }, "name"_a = "", "duration"_a = 0.0f, "tracks"_a = std::vector<engine::KeyframeTrack>{})
+        .def_rw("name", &engine::AnimationClip::name)
+        .def_rw("duration", &engine::AnimationClip::duration)
+        .def_rw("tracks", &engine::AnimationClip::tracks)
+        .def("add_track", &engine::AnimationClip::add_track, "track"_a)
+        .def("find_track", &engine::AnimationClip::find_track, "node_name"_a, "prop"_a, nb::rv_policy::reference_internal)
+        .def("reset_duration_from_tracks", &engine::AnimationClip::reset_duration_from_tracks);
+
+    nb::class_<engine::AnimationAction>(m, "AnimationAction")
+        .def(nb::init<std::shared_ptr<engine::AnimationClip>>(), "clip"_a = nullptr)
+        .def_rw("clip", &engine::AnimationAction::clip)
+        .def_rw("name", &engine::AnimationAction::name)
+        .def_rw("time", &engine::AnimationAction::time)
+        .def_rw("time_scale", &engine::AnimationAction::time_scale)
+        .def_rw("weight", &engine::AnimationAction::weight)
+        .def_rw("is_running", &engine::AnimationAction::is_running)
+        .def_rw("loop", &engine::AnimationAction::loop)
+        .def_rw("paused", &engine::AnimationAction::paused)
+        .def("is_playing", [](const engine::AnimationAction& a) { return a.is_running && !a.paused; })
+        .def("play", &engine::AnimationAction::play)
+        .def("stop", &engine::AnimationAction::stop)
+        .def("pause", &engine::AnimationAction::pause)
+        .def("resume", &engine::AnimationAction::resume)
+        .def("reset", &engine::AnimationAction::reset)
+        .def("set_time_scale", &engine::AnimationAction::set_time_scale, "speed"_a)
+        .def("set_weight", &engine::AnimationAction::set_weight, "weight"_a)
+        .def("set_loop", &engine::AnimationAction::set_loop, "loop"_a)
+        .def("crossfade_to", &engine::AnimationAction::crossfade_to, "target_action"_a, "duration"_a = 0.3f)
+        .def("fade_in", &engine::AnimationAction::fade_in, "duration"_a)
+        .def("fade_out", &engine::AnimationAction::fade_out, "duration"_a);
+
+    nb::class_<engine::AnimationMixer>(m, "AnimationMixer")
+        .def(nb::init<std::shared_ptr<engine::Node3D>>(), "root"_a = nullptr)
+        .def_rw("root", &engine::AnimationMixer::root)
+        .def("clip_action", nb::overload_cast<std::shared_ptr<engine::AnimationClip>>(&engine::AnimationMixer::clip_action), "clip"_a)
+        .def("clip_action", nb::overload_cast<const std::string&>(&engine::AnimationMixer::clip_action), "name"_a)
+        .def("play", &engine::AnimationMixer::play, "name"_a)
+        .def("stop", &engine::AnimationMixer::stop, "name"_a)
+        .def("stop_all_action", &engine::AnimationMixer::stop_all_action)
+        .def("crossfade_to", &engine::AnimationMixer::crossfade_to, "target_name"_a, "duration"_a = 0.3f)
+        .def("update", &engine::AnimationMixer::update, "dt"_a)
+        .def("get_action", &engine::AnimationMixer::get_action, "name"_a)
+        .def_prop_ro("actions", &engine::AnimationMixer::get_actions);
+
+    nb::class_<engine::SkeletonHelper, engine::Helper>(m, "SkeletonHelper")
+        .def("__init__", [](engine::SkeletonHelper* h, std::shared_ptr<engine::Node3D> root, std::shared_ptr<engine::Skeleton> skel, nb::handle color_h) {
+            new (h) engine::SkeletonHelper(root, skel, parse_scene_vec4(color_h));
+        }, "root"_a = nullptr, "skeleton"_a = nullptr, "color"_a = nb::make_tuple(0.2f, 1.0f, 0.2f, 1.0f))
+        .def_rw("root_node", &engine::SkeletonHelper::root_node)
+        .def_prop_rw("root", [](engine::SkeletonHelper& h) { return h.root_node; }, [](engine::SkeletonHelper& h, std::shared_ptr<engine::Node3D> r) { h.root_node = r; })
+        .def_rw("skeleton", &engine::SkeletonHelper::skeleton)
+        .def_rw("bone_color", &engine::SkeletonHelper::bone_color)
+        .def("update", &engine::SkeletonHelper::update)
+        .def_prop_ro("line_vertices", [](const engine::SkeletonHelper& h) {
+            std::vector<engine::LineVertex> out_verts;
+            h.get_line_vertices(out_verts);
+            nb::list res;
+            for (const auto& v : out_verts) {
+                res.append(nb::make_tuple(v.pos.x, v.pos.y, v.pos.z));
+            }
+            return res;
+        });
+
+    nb::class_<engine::SkinnedMesh, engine::Node3D>(m, "SkinnedMesh")
+        .def(nb::init<std::shared_ptr<engine::Mesh>, std::shared_ptr<engine::Skeleton>, std::shared_ptr<engine::Material>>(),
+             "mesh"_a = nullptr, "skeleton"_a = nullptr, "material"_a = nullptr)
+        .def_rw("mesh", &engine::SkinnedMesh::mesh)
+        .def_rw("skeleton", &engine::SkinnedMesh::skeleton)
+        .def_rw("material", &engine::SkinnedMesh::material)
+        .def_prop_rw("color",
+            [](engine::SkinnedMesh& sm) -> glm::vec4& { return sm.color; },
+            [](engine::SkinnedMesh& sm, nb::handle val) { sm.color = parse_scene_vec4(val); },
+            nb::rv_policy::reference_internal)
+        .def_rw("bind_matrix", &engine::SkinnedMesh::bind_matrix)
+        .def_rw("bind_matrix_inverse", &engine::SkinnedMesh::bind_matrix_inverse)
+        .def("bind", &engine::SkinnedMesh::bind, "skeleton"_a, "bind_matrix"_a = glm::mat4(1.0f))
+        .def("pose", &engine::SkinnedMesh::pose)
+        .def("compute_cpu_skinning", &engine::SkinnedMesh::compute_cpu_skinning);
 }

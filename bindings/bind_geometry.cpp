@@ -6,7 +6,11 @@
 #include "engine/transform.hpp"
 #include "engine/model.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/sprite.hpp"
+#include "engine/points.hpp"
+#include "engine/particle.hpp"
 #include <cstring>
+#include <immintrin.h>
 
 static inline glm::vec2 parse_vec2(nb::handle h) {
     if (nb::isinstance<glm::vec2>(h)) return nb::cast<glm::vec2>(h);
@@ -66,7 +70,9 @@ void bind_geometry(nb::module_& m) {
         .def_rw("normal", &engine::Vertex::normal)
         .def_rw("uv", &engine::Vertex::uv)
         .def_rw("color", &engine::Vertex::color)
-        .def_rw("tangent", &engine::Vertex::tangent);
+        .def_rw("tangent", &engine::Vertex::tangent)
+        .def_rw("joints", &engine::Vertex::joints)
+        .def_rw("weights", &engine::Vertex::weights);
 
     nb::class_<engine::Mesh>(m, "Mesh")
         .def(nb::init<>())
@@ -80,11 +86,28 @@ void bind_geometry(nb::module_& m) {
         .def_prop_ro("aabb", [](const engine::Mesh& mesh) {
             return mesh.local_aabb;
         })
-        .def_ro("cpu_vertices", &engine::Mesh::cpu_vertices)
-        .def_ro("cpu_indices", &engine::Mesh::cpu_indices)
+        .def_rw("cpu_vertices", &engine::Mesh::cpu_vertices)
+        .def_rw("cpu_indices", &engine::Mesh::cpu_indices)
         .def("calculate_aabb", &engine::Mesh::calculate_aabb)
         .def_rw("is_dynamic", &engine::Mesh::is_dynamic)
         .def("mark_dynamic", &engine::Mesh::mark_dynamic)
+        .def_rw("morph_target_influences", &engine::Mesh::morph_target_influences)
+        .def("add_morph_target", [](engine::Mesh& mesh, const std::string& name, nb::handle pos_h, nb::handle norm_h) {
+            std::vector<glm::vec3> pos;
+            if (nb::isinstance<nb::sequence>(pos_h)) {
+                for (auto item : nb::cast<nb::sequence>(pos_h)) {
+                    pos.push_back(parse_vec3(item));
+                }
+            }
+            std::vector<glm::vec3> norms;
+            if (nb::isinstance<nb::sequence>(norm_h)) {
+                for (auto item : nb::cast<nb::sequence>(norm_h)) {
+                    norms.push_back(parse_vec3(item));
+                }
+            }
+            mesh.add_morph_target(name, pos, norms);
+        }, "name"_a, "positions"_a, "normals"_a = nb::list())
+        .def("apply_morph_targets", &engine::Mesh::apply_morph_targets)
         .def("update_vertices_raw", [](engine::Mesh& mesh, nb::ndarray<float, nb::c_contig> data) {
             nb::gil_scoped_release release;
             mesh.update_vertices_raw(data.data(), data.size());
@@ -121,8 +144,45 @@ void bind_geometry(nb::module_& m) {
                     mesh.cpu_vertices.resize(n);
                 }
                 size_t stride = array.shape(1);
-                if (stride == 16) {
+                if (stride == sizeof(engine::Vertex) / sizeof(float)) {
                     std::memcpy(mesh.cpu_vertices.data(), ptr, n * sizeof(engine::Vertex));
+                } else if (stride == 16) {
+                    const float* s = ptr;
+                    float* d = reinterpret_cast<float*>(mesh.cpu_vertices.data());
+                    constexpr size_t dst_stride_floats = sizeof(engine::Vertex) / sizeof(float);
+                    size_t i = 0;
+                    for (; i + 3 < n; i += 4) {
+                        __m256 a0 = _mm256_loadu_ps(s + 0);
+                        __m256 a1 = _mm256_loadu_ps(s + 8);
+                        _mm256_storeu_ps(d + 0, a0);
+                        _mm256_storeu_ps(d + 8, a1);
+
+                        __m256 b0 = _mm256_loadu_ps(s + 16);
+                        __m256 b1 = _mm256_loadu_ps(s + 24);
+                        _mm256_storeu_ps(d + dst_stride_floats + 0, b0);
+                        _mm256_storeu_ps(d + dst_stride_floats + 8, b1);
+
+                        __m256 c0 = _mm256_loadu_ps(s + 32);
+                        __m256 c1 = _mm256_loadu_ps(s + 40);
+                        _mm256_storeu_ps(d + dst_stride_floats * 2 + 0, c0);
+                        _mm256_storeu_ps(d + dst_stride_floats * 2 + 8, c1);
+
+                        __m256 d0 = _mm256_loadu_ps(s + 48);
+                        __m256 d1 = _mm256_loadu_ps(s + 56);
+                        _mm256_storeu_ps(d + dst_stride_floats * 3 + 0, d0);
+                        _mm256_storeu_ps(d + dst_stride_floats * 3 + 8, d1);
+
+                        s += 64;
+                        d += dst_stride_floats * 4;
+                    }
+                    for (; i < n; ++i) {
+                        __m256 m0 = _mm256_loadu_ps(s + 0);
+                        __m256 m1 = _mm256_loadu_ps(s + 8);
+                        _mm256_storeu_ps(d + 0, m0);
+                        _mm256_storeu_ps(d + 8, m1);
+                        s += 16;
+                        d += dst_stride_floats;
+                    }
                 } else {
                     for (size_t i = 0; i < n; ++i) {
                         const float* vp = ptr + i * stride;
@@ -130,6 +190,9 @@ void bind_geometry(nb::module_& m) {
                         mesh.cpu_vertices[i].normal   = { vp[3], vp[4], vp[5] };
                         mesh.cpu_vertices[i].uv       = { vp[6], vp[7] };
                         mesh.cpu_vertices[i].color    = { vp[8], vp[9], vp[10], vp[11] };
+                        if (stride >= 16) mesh.cpu_vertices[i].tangent = { vp[12], vp[13], vp[14], vp[15] };
+                        if (stride >= 20) mesh.cpu_vertices[i].joints = { vp[16], vp[17], vp[18], vp[19] };
+                        if (stride >= 24) mesh.cpu_vertices[i].weights = { vp[20], vp[21], vp[22], vp[23] };
                     }
                 }
                 mesh.update_vertices_raw(reinterpret_cast<const float*>(mesh.cpu_vertices.data()), mesh.cpu_vertices.size() * (sizeof(engine::Vertex) / sizeof(float)));
@@ -462,7 +525,10 @@ void bind_geometry(nb::module_& m) {
         .def("set_collision_scale", &engine::Model::set_collision_scale, "scale"_a)
         .def("set_collision_padding", &engine::Model::set_collision_padding, "px"_a, "py"_a, "pz"_a)
         .def("set_cast_shadows", &engine::Model::set_cast_shadows, "cast"_a)
-        .def("world_aabb", &engine::Model::world_aabb);
+        .def("world_aabb", &engine::Model::world_aabb)
+        .def_rw("animations", &engine::Model::animations)
+        .def_rw("skeleton", &engine::Model::skeleton)
+        .def_rw("skinned_meshes", &engine::Model::skinned_meshes);
 
     // -----------------------------------------------------------------------
     // Curves (Phase 5)
@@ -515,4 +581,129 @@ void bind_geometry(nb::module_& m) {
     m.def("create_extrude", [](nb::handle poly_h, float depth, float bevel_thickness) {
         return engine::create_extrude(parse_vec2_list(poly_h), depth, bevel_thickness);
     }, "polygon"_a, "depth"_a = 1.0f, "bevel_thickness"_a = 0.0f);
+
+    // -----------------------------------------------------------------------
+    // Phase 6: Sprite & SpriteMaterial
+    // -----------------------------------------------------------------------
+    nb::class_<engine::SpriteMaterial, engine::Material>(m, "SpriteMaterial")
+        .def("__init__", [](engine::SpriteMaterial* sm, std::shared_ptr<engine::Texture> tex, nb::handle col_h, float rotation, bool attenuation) {
+            new (sm) engine::SpriteMaterial(tex, parse_vec4(col_h));
+            sm->rotation = rotation;
+            sm->size_attenuation = attenuation;
+        }, "texture"_a = nullptr, "color"_a = glm::vec4(1.0f), "rotation"_a = 0.0f, "size_attenuation"_a = true)
+        .def_rw("color", &engine::Material::base_color)
+        .def_rw("rotation", &engine::SpriteMaterial::rotation)
+        .def_rw("size_attenuation", &engine::SpriteMaterial::size_attenuation);
+
+    nb::class_<engine::Sprite, engine::Node3D>(m, "Sprite")
+        .def(nb::init<std::shared_ptr<engine::SpriteMaterial>>(), "material"_a = nullptr)
+        .def_rw("material", &engine::Sprite::material)
+        .def_rw("center", &engine::Sprite::center)
+        .def_prop_rw("scale",
+            [](engine::Sprite& s) { return glm::vec2(s.transform.scale.x, s.transform.scale.y); },
+            [](engine::Sprite& s, const glm::vec2& sc) { s.transform.set_scale(sc.x, sc.y, 1.0f); })
+        .def("compute_billboard_matrix", &engine::Sprite::compute_billboard_matrix, "camera"_a)
+        .def_static("quad_mesh", &engine::Sprite::quad_mesh)
+        .def_prop_ro("quad_mesh", [](const engine::Sprite&) { return engine::Sprite::quad_mesh(); });
+
+    // -----------------------------------------------------------------------
+    // Phase 6: Points & PointsMaterial
+    // -----------------------------------------------------------------------
+    nb::class_<engine::PointsMaterial, engine::Material>(m, "PointsMaterial")
+        .def("__init__", [](engine::PointsMaterial* pm, float size, nb::handle col_h, bool attenuation) {
+            new (pm) engine::PointsMaterial(size, parse_vec4(col_h));
+            pm->size_attenuation = attenuation;
+        }, "size"_a = 1.0f, "color"_a = glm::vec4(1.0f), "size_attenuation"_a = true)
+        .def_rw("color", &engine::Material::base_color)
+        .def_rw("size", &engine::PointsMaterial::size)
+        .def_rw("point_size", &engine::PointsMaterial::size)
+        .def_rw("size_attenuation", &engine::PointsMaterial::size_attenuation);
+
+    nb::class_<engine::Points, engine::Node3D>(m, "Points")
+        .def(nb::init<std::shared_ptr<engine::Mesh>, std::shared_ptr<engine::Material>>(), "geometry"_a = nullptr, "material"_a = nullptr)
+        .def_rw("mesh", &engine::Points::mesh)
+        .def_prop_rw("geometry",
+            [](engine::Points& p) { return p.mesh; },
+            [](engine::Points& p, std::shared_ptr<engine::Mesh> g) { p.mesh = g; })
+        .def_rw("material", &engine::Points::material)
+        .def_rw("size", &engine::Points::size)
+        .def_rw("size_attenuation", &engine::Points::size_attenuation)
+        .def_prop_ro("count", [](const engine::Points& p) { return p.mesh ? p.mesh->cpu_vertices.size() : 0; })
+        .def("set_positions", [](engine::Points& pts, nb::handle h) {
+            if (nb::isinstance<nb::ndarray<float, nb::c_contig>>(h)) {
+                auto arr = nb::cast<nb::ndarray<float, nb::c_contig>>(h);
+                if (arr.ndim() == 2 && arr.shape(1) == 3) {
+                    pts.set_positions_from_numpy(arr.data(), arr.shape(0));
+                } else {
+                    pts.set_positions_from_numpy(arr.data(), arr.size() / 3);
+                }
+            } else if (nb::isinstance<nb::sequence>(h)) {
+                auto seq = nb::cast<std::vector<float>>(h);
+                pts.set_positions(seq);
+            }
+        }, "positions"_a)
+        .def("set_colors", [](engine::Points& pts, nb::handle h) {
+            if (nb::isinstance<nb::ndarray<float, nb::c_contig>>(h)) {
+                auto arr = nb::cast<nb::ndarray<float, nb::c_contig>>(h);
+                if (arr.ndim() == 2 && arr.shape(1) == 4) {
+                    pts.set_colors_from_numpy(arr.data(), arr.shape(0));
+                } else {
+                    pts.set_colors_from_numpy(arr.data(), arr.size() / 4);
+                }
+            } else if (nb::isinstance<nb::sequence>(h)) {
+                auto seq = nb::cast<std::vector<float>>(h);
+                pts.set_colors(seq);
+            }
+        }, "colors"_a);
+
+    // -----------------------------------------------------------------------
+    // Phase 6: Particle & ParticleEmitter
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Particle>(m, "Particle")
+        .def(nb::init<>())
+        .def_rw("position", &engine::Particle::position)
+        .def_rw("velocity", &engine::Particle::velocity)
+        .def_rw("color", &engine::Particle::color)
+        .def_rw("size", &engine::Particle::size)
+        .def_rw("age", &engine::Particle::age)
+        .def_rw("lifetime", &engine::Particle::lifetime)
+        .def_rw("alive", &engine::Particle::alive);
+
+    nb::class_<engine::ParticleEmitter, engine::Node3D>(m, "ParticleEmitter")
+        .def(nb::init<size_t>(), "max_particles"_a = 1000)
+        .def_rw("max_particles", &engine::ParticleEmitter::max_particles)
+        .def_rw("spawn_rate", &engine::ParticleEmitter::spawn_rate)
+        .def_prop_rw("emission_rate",
+            [](engine::ParticleEmitter& pe) { return pe.spawn_rate; },
+            [](engine::ParticleEmitter& pe, float r) { pe.spawn_rate = r; })
+        .def_rw("lifetime_range", &engine::ParticleEmitter::lifetime_range)
+        .def_prop_rw("lifespan",
+            [](engine::ParticleEmitter& pe) { return pe.lifetime_range.second; },
+            [](engine::ParticleEmitter& pe, float l) { pe.lifetime_range = { l, l }; })
+        .def_rw("velocity_range", &engine::ParticleEmitter::velocity_range)
+        .def_prop_rw("velocity",
+            [](engine::ParticleEmitter& pe) { return (pe.velocity_range.first + pe.velocity_range.second) * 0.5f; },
+            [](engine::ParticleEmitter& pe, const glm::vec3& v) { pe.velocity_range = { v, v }; })
+        .def_prop_rw("spread",
+            [](engine::ParticleEmitter& pe) { return (pe.velocity_range.second - pe.velocity_range.first) * 0.5f; },
+            [](engine::ParticleEmitter& pe, const glm::vec3& s) {
+                glm::vec3 center = (pe.velocity_range.first + pe.velocity_range.second) * 0.5f;
+                pe.velocity_range = { center - s, center + s };
+            })
+        .def_rw("gravity", &engine::ParticleEmitter::gravity)
+        .def_rw("start_color", &engine::ParticleEmitter::start_color)
+        .def_rw("end_color", &engine::ParticleEmitter::end_color)
+        .def_rw("start_size", &engine::ParticleEmitter::start_size)
+        .def_rw("end_size", &engine::ParticleEmitter::end_size)
+        .def_rw("texture", &engine::ParticleEmitter::texture)
+        .def_rw("blend_mode", &engine::ParticleEmitter::blend_mode)
+        .def_rw("emitting", &engine::ParticleEmitter::emitting)
+        .def("burst", &engine::ParticleEmitter::burst, "count"_a)
+        .def("update", &engine::ParticleEmitter::update, "dt"_a)
+        .def("reset", &engine::ParticleEmitter::reset)
+        .def("active_count", &engine::ParticleEmitter::active_count)
+        .def_prop_ro("active_particle_count", &engine::ParticleEmitter::active_count)
+        .def_prop_ro("particles", [](const engine::ParticleEmitter& pe) { return pe.particles(); })
+        .def_prop_ro("mesh", &engine::ParticleEmitter::get_particle_mesh)
+        .def("update_mesh", &engine::ParticleEmitter::update_mesh, "camera"_a);
 }
