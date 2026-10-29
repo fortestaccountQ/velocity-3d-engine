@@ -6,6 +6,7 @@
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/pair.h>
 
 #include "engine/transform.hpp"
 #include "engine/camera.hpp"
@@ -372,7 +373,17 @@ NB_MODULE(_VelocityEngine_core, m) {
     // -----------------------------------------------------------------------
     nb::class_<engine::Texture>(m, "Texture")
         .def(nb::init<>())
-        .def_static("load_from_file", &engine::Texture::load_from_file, "filepath"_a)
+        .def_static("load_from_file", [](const std::string& filepath, bool is_pixel_art) {
+            return engine::Texture::load_from_file(filepath, is_pixel_art);
+        }, "filepath"_a, "is_pixel_art"_a = false)
+        .def_static("create_from_rgba", [](int width, int height, const nb::bytes& data, bool is_pixel_art) {
+            return engine::Texture::create_from_rgba(
+                width,
+                height,
+                reinterpret_cast<const uint8_t*>(data.data()),
+                is_pixel_art
+            );
+        }, "width"_a, "height"_a, "data"_a, "is_pixel_art"_a = false)
         .def_static("create_checkerboard", &engine::Texture::create_checkerboard,
             "width"_a = 64, "height"_a = 64, "tile_size"_a = 8,
             "color1"_a = 0xFFFFFFFF, "color2"_a = 0xFF2A2A38)
@@ -381,6 +392,7 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_ro("width", &engine::Texture::width)
         .def_ro("height", &engine::Texture::height)
         .def_ro("channels", &engine::Texture::channels)
+        .def_rw("is_pixel_art", &engine::Texture::is_pixel_art)
         .def("is_valid", &engine::Texture::is_valid);
 
     // -----------------------------------------------------------------------
@@ -414,8 +426,19 @@ NB_MODULE(_VelocityEngine_core, m) {
                     if (seq.size() >= 2) mat.uv_scale = { seq[0], seq[1] };
                 }
             })
+        .def_prop_rw("uv_offset",
+            [](engine::Material& mat) -> std::pair<float, float> {
+                return { mat.uv_offset.x, mat.uv_offset.y };
+            },
+            [](engine::Material& mat, const nb::object& val) {
+                if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 2) mat.uv_offset = { seq[0], seq[1] };
+                }
+            })
         .def("set_color", &engine::Material::set_color, "r"_a, "g"_a, "b"_a, "a"_a = 1.0f)
-        .def("set_uv_scale", &engine::Material::set_uv_scale, "u"_a, "v"_a);
+        .def("set_uv_scale", &engine::Material::set_uv_scale, "u"_a, "v"_a)
+        .def("set_uv_offset", &engine::Material::set_uv_offset, "u"_a, "v"_a);
 
     // -----------------------------------------------------------------------
     // Transform

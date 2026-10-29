@@ -67,6 +67,49 @@ except ImportError:
     WARM_WHITE = Color(1.0, 0.95, 0.85, 1.0)
 
 
+try:
+    from examples.crossy_duck.textures import MaterialRegistry
+except ImportError:
+    try:
+        from crossy_duck.textures import MaterialRegistry
+    except ImportError:
+        MaterialRegistry = None
+
+
+_DEFAULT_REGISTRY: Optional[Any] = None
+
+
+def get_default_material_registry() -> Optional[Any]:
+    """Provide a singleton fallback MaterialRegistry for standalone row/obstacle usage."""
+    global _DEFAULT_REGISTRY
+    if _DEFAULT_REGISTRY is None and MaterialRegistry is not None:
+        try:
+            _DEFAULT_REGISTRY = MaterialRegistry()
+        except Exception:
+            _DEFAULT_REGISTRY = None
+    return _DEFAULT_REGISTRY
+
+
+def _get_mat(registry: Any, name: str, uv_scale: Optional[Tuple[float, float]] = None) -> Any:
+    """Safely fetch material from registry with optional uv_scale override."""
+    if registry is None:
+        return None
+    try:
+        if uv_scale is not None:
+            try:
+                return registry.get_material(name, uv_scale=uv_scale)
+            except TypeError:
+                mat = registry.get_material(name)
+                if hasattr(mat, "uv_scale"):
+                    mat.uv_scale = uv_scale
+                elif hasattr(mat, "set_uv_scale"):
+                    mat.set_uv_scale(*uv_scale)
+                return mat
+        return registry.get_material(name)
+    except Exception:
+        return None
+
+
 # =============================================================================
 # Color Palette for Voxel Aesthetics
 # =============================================================================
@@ -131,6 +174,7 @@ class BaseObstacle:
         min_wrap_x: float = -18.0,
         max_wrap_x: float = 18.0,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         self.x: float = float(x)
         self.y: float = float(y)
@@ -142,6 +186,10 @@ class BaseObstacle:
         self.is_log: bool = bool(is_log)
         self.min_wrap_x: float = float(min_wrap_x)
         self.max_wrap_x: float = float(max_wrap_x)
+        self.material_registry: Optional[Any] = (
+            material_registry if material_registry is not None
+            else (get_default_material_registry() if scene is not None else None)
+        )
         self.entity: Any = None
         self.sub_entities: List[Tuple[Any, Tuple[float, float, float]]] = []
 
@@ -210,6 +258,7 @@ class CarObstacle(BaseObstacle):
         min_wrap_x: float = -18.0,
         max_wrap_x: float = 18.0,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         width = 2.0
         height = 0.75
@@ -227,16 +276,19 @@ class CarObstacle(BaseObstacle):
             min_wrap_x=min_wrap_x,
             max_wrap_x=max_wrap_x,
             scene=scene,
+            material_registry=material_registry,
         )
 
         car_col = color if color is not None else random.choice(COLOR_CAR_PALETTE)
 
         if scene is not None:
+            veh_mat = _get_mat(self.material_registry, "vehicle")
             # 1. Main chassis
             self.entity = scene.create_box(
                 size=(width, 0.45, depth),
                 position=(self.x, self.y, self.z),
-                color=car_col,
+                color=car_col if veh_mat is None else WHITE,
+                material=veh_mat,
                 cast_shadows=True,
                 name="CarChassis",
             )
@@ -283,6 +335,7 @@ class TruckObstacle(BaseObstacle):
         min_wrap_x: float = -18.0,
         max_wrap_x: float = 18.0,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         width = 3.6
         height = 1.15
@@ -300,11 +353,13 @@ class TruckObstacle(BaseObstacle):
             min_wrap_x=min_wrap_x,
             max_wrap_x=max_wrap_x,
             scene=scene,
+            material_registry=material_registry,
         )
 
         cab_col = color if color is not None else random.choice(COLOR_CAR_PALETTE)
 
         if scene is not None:
+            veh_mat = _get_mat(self.material_registry, "vehicle")
             facing_dir = 1.0 if speed >= 0 else -1.0
             cargo_w = width * 0.65
             cab_w = width * 0.35
@@ -316,7 +371,8 @@ class TruckObstacle(BaseObstacle):
             self.entity = scene.create_box(
                 size=(cargo_w, height, depth),
                 position=(self.x + cargo_ox, self.y, self.z),
-                color=COLOR_TRUCK_CARGO,
+                color=COLOR_TRUCK_CARGO if veh_mat is None else WHITE,
+                material=veh_mat,
                 cast_shadows=True,
                 name="TruckCargo",
             )
@@ -325,7 +381,8 @@ class TruckObstacle(BaseObstacle):
             cab = scene.create_box(
                 size=(cab_w, height * 0.75, depth * 0.88),
                 position=(self.x + cab_ox, self.y - 0.12, self.z),
-                color=cab_col,
+                color=cab_col if veh_mat is None else WHITE,
+                material=veh_mat,
                 cast_shadows=True,
                 name="TruckCab",
             )
@@ -363,6 +420,7 @@ class LogObstacle(BaseObstacle):
         min_wrap_x: float = -19.0,
         max_wrap_x: float = 19.0,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         height = 0.35
         depth = 0.78
@@ -379,14 +437,19 @@ class LogObstacle(BaseObstacle):
             min_wrap_x=min_wrap_x,
             max_wrap_x=max_wrap_x,
             scene=scene,
+            material_registry=material_registry,
         )
 
         if scene is not None:
+            bark_mat = _get_mat(self.material_registry, "wood_bark", uv_scale=(self.width, 1.0))
+            rings_mat = _get_mat(self.material_registry, "wood_rings")
+
             # 1. Main log trunk
             self.entity = scene.create_box(
                 size=(width, height, depth),
                 position=(self.x, self.y, self.z),
-                color=COLOR_LOG_WOOD,
+                color=COLOR_LOG_WOOD if bark_mat is None else WHITE,
+                material=bark_mat,
                 cast_shadows=True,
                 name="RiverLog",
             )
@@ -395,14 +458,16 @@ class LogObstacle(BaseObstacle):
             ring_l = scene.create_box(
                 size=(ring_w, height * 0.85, depth * 0.85),
                 position=(self.x - width * 0.5 + ring_w * 0.5, self.y, self.z),
-                color=COLOR_LOG_END_RING,
+                color=COLOR_LOG_END_RING if rings_mat is None else WHITE,
+                material=rings_mat,
                 cast_shadows=False,
                 name="LogRingL",
             )
             ring_r = scene.create_box(
                 size=(ring_w, height * 0.85, depth * 0.85),
                 position=(self.x + width * 0.5 - ring_w * 0.5, self.y, self.z),
-                color=COLOR_LOG_END_RING,
+                color=COLOR_LOG_END_RING if rings_mat is None else WHITE,
+                material=rings_mat,
                 cast_shadows=False,
                 name="LogRingR",
             )
@@ -420,6 +485,7 @@ class TrainObstacle(BaseObstacle):
         speed: float = 45.0,
         width: float = 24.0,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         height = 1.25
         depth = 0.85
@@ -436,6 +502,7 @@ class TrainObstacle(BaseObstacle):
             min_wrap_x=-100.0,
             max_wrap_x=100.0,
             scene=scene,
+            material_registry=material_registry,
         )
 
         if scene is not None:
@@ -470,16 +537,25 @@ class VoxelTree:
         z: float,
         foliage_color: Optional[Color] = None,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         self.x: float = float(x)
         self.z: float = float(z)
+        self.material_registry: Optional[Any] = (
+            material_registry if material_registry is not None
+            else (get_default_material_registry() if scene is not None else None)
+        )
         self.entities: List[Any] = []
 
         if scene is not None:
+            trunk_mat = _get_mat(self.material_registry, "wood_bark")
+            foliage_mat = _get_mat(self.material_registry, "tree_leaves")
+
             trunk = scene.create_box(
                 size=(0.4, 0.7, 0.4),
                 position=(self.x, 0.35, self.z),
-                color=COLOR_TREE_TRUNK,
+                color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                material=trunk_mat,
                 cast_shadows=True,
                 has_collision=True,
                 name="TreeTrunk",
@@ -488,7 +564,8 @@ class VoxelTree:
             foliage = scene.create_box(
                 size=(0.92, 1.15, 0.92),
                 position=(self.x, 1.25, self.z),
-                color=fol_col,
+                color=fol_col if foliage_mat is None else WHITE,
+                material=foliage_mat,
                 cast_shadows=True,
                 has_collision=True,
                 name="TreeFoliage",
@@ -511,12 +588,22 @@ class VoxelTree:
 class BaseRow:
     """Base class for all procedural terrain rows."""
 
-    def __init__(self, z_index: int, row_type: RowType, scene: Optional[Any] = None) -> None:
+    def __init__(
+        self,
+        z_index: int,
+        row_type: RowType,
+        scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
+    ) -> None:
         self.z_index: int = int(z_index)
         self.row_type: RowType = row_type
         self.entities: List[Any] = []
         self.obstacles: List[ObstacleContract] = []
         self.scene: Optional[Any] = scene
+        self.material_registry: Optional[Any] = (
+            material_registry if material_registry is not None
+            else (get_default_material_registry() if scene is not None else None)
+        )
 
     def update(self, dt: float) -> None:
         """Update all active obstacles in this row."""
@@ -550,15 +637,22 @@ class BaseRow:
 class StartRow(BaseRow):
     """Safe starting zone row with wide green ground and boundary trees."""
 
-    def __init__(self, z_index: int, scene: Optional[Any] = None) -> None:
-        super().__init__(z_index, RowType.START, scene)
+    def __init__(
+        self,
+        z_index: int,
+        scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
+    ) -> None:
+        super().__init__(z_index, RowType.START, scene, material_registry)
         self.blocked_lanes: Set[int] = set()
 
         if scene is not None:
+            mat = _get_mat(self.material_registry, "grass", uv_scale=(44.0, 1.0))
             ground = scene.create_box(
                 size=(44.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
-                color=COLOR_START_ZONE,
+                color=COLOR_START_ZONE if mat is None else WHITE,
+                material=mat,
                 cast_shadows=False,
                 has_collision=False,
                 name="StartGround",
@@ -568,7 +662,7 @@ class StartRow(BaseRow):
         # Place outer perimeter trees outside playable width [-10, 10]
         for bx in [-13, -12, -11, 11, 12, 13]:
             self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene)
+            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
 
     def is_blocked(self, px: float, pz: float) -> bool:
@@ -586,18 +680,21 @@ class GrassRow(BaseRow):
         tree_density: float = 0.22,
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
-        super().__init__(z_index, RowType.GRASS, scene)
+        super().__init__(z_index, RowType.GRASS, scene, material_registry)
         r = rng if rng is not None else random.Random()
         self.blocked_lanes: Set[int] = set()
 
         # Alternate strip color slightly for satisfying voxel checkerboard pattern
         ground_col = COLOR_GRASS_EVEN if (abs(z_index) % 2 == 0) else COLOR_GRASS_ODD
         if scene is not None:
+            mat = _get_mat(self.material_registry, "grass", uv_scale=(44.0, 1.0))
             ground = scene.create_box(
                 size=(44.0, 0.45, 1.0),
                 position=(0.0, -0.225, float(self.z_index)),
-                color=ground_col,
+                color=ground_col if mat is None else WHITE,
+                material=mat,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"GrassGround_{z_index}",
@@ -607,7 +704,7 @@ class GrassRow(BaseRow):
         # Boundary trees outside playable grid
         for bx in [-13, -12, -11, 11, 12, 13]:
             self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene)
+            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
 
         # In-bounds trees: pick 2 to 4 lanes to block, ensuring at least 3 contiguous paths exist
@@ -625,7 +722,7 @@ class GrassRow(BaseRow):
 
             self.blocked_lanes.add(cand_x)
             fol_col = r.choice(COLOR_TREE_FOLIAGE)
-            tree = VoxelTree(cand_x, float(self.z_index), foliage_color=fol_col, scene=scene)
+            tree = VoxelTree(cand_x, float(self.z_index), foliage_color=fol_col, scene=scene, material_registry=self.material_registry)
             self.entities.extend(tree.entities)
             placed_count += 1
 
@@ -648,8 +745,9 @@ class RoadRow(BaseRow):
         vehicle_count: Optional[int] = None,
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
-        super().__init__(z_index, RowType.ROAD, scene)
+        super().__init__(z_index, RowType.ROAD, scene, material_registry)
         r = rng if rng is not None else random.Random()
 
         # Direction and speed
@@ -659,10 +757,12 @@ class RoadRow(BaseRow):
 
         # 1. Dark asphalt strip
         if scene is not None:
+            asphalt_mat = _get_mat(self.material_registry, "asphalt", uv_scale=(44.0, 1.0))
             asphalt = scene.create_box(
                 size=(44.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
-                color=COLOR_ROAD_ASPHALT,
+                color=COLOR_ROAD_ASPHALT if asphalt_mat is None else WHITE,
+                material=asphalt_mat,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"RoadAsphalt_{z_index}",
@@ -707,6 +807,7 @@ class RoadRow(BaseRow):
                     min_wrap_x=wrap_min,
                     max_wrap_x=wrap_max,
                     scene=scene,
+                    material_registry=self.material_registry,
                 )
                 self.obstacles.append(truck)
             else:
@@ -718,6 +819,7 @@ class RoadRow(BaseRow):
                     min_wrap_x=wrap_min,
                     max_wrap_x=wrap_max,
                     scene=scene,
+                    material_registry=self.material_registry,
                 )
                 self.obstacles.append(car)
 
@@ -739,8 +841,9 @@ class RiverRow(BaseRow):
         log_count: Optional[int] = None,
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
-        super().__init__(z_index, RowType.RIVER, scene)
+        super().__init__(z_index, RowType.RIVER, scene, material_registry)
         r = rng if rng is not None else random.Random()
 
         # Water speed direction alternates per river row
@@ -750,10 +853,12 @@ class RiverRow(BaseRow):
 
         # 1. Vibrant water box (slightly lowered)
         if scene is not None:
+            water_mat = _get_mat(self.material_registry, "water", uv_scale=(44.0, 1.0))
             water = scene.create_box(
                 size=(44.0, 0.35, 1.0),
                 position=(0.0, -0.22, float(self.z_index)),
-                color=COLOR_RIVER_WATER,
+                color=COLOR_RIVER_WATER if water_mat is None else WHITE,
+                material=water_mat,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"RiverWater_{z_index}",
@@ -782,6 +887,7 @@ class RiverRow(BaseRow):
                 min_wrap_x=wrap_min,
                 max_wrap_x=wrap_max,
                 scene=scene,
+                material_registry=self.material_registry,
             )
             self.obstacles.append(log)
 
@@ -806,8 +912,9 @@ class RailRow(BaseRow):
         train_speed: float = 45.0,
         rng: Optional[random.Random] = None,
         scene: Optional[Any] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
-        super().__init__(z_index, RowType.RAIL, scene)
+        super().__init__(z_index, RowType.RAIL, scene, material_registry)
         r = rng if rng is not None else random.Random()
 
         self.cycle_interval: float = float(cycle_interval)
@@ -824,11 +931,15 @@ class RailRow(BaseRow):
         self.beacon_light_entity: Optional[Any] = None
 
         if scene is not None:
+            gravel_mat = _get_mat(self.material_registry, "rail_gravel", uv_scale=(44.0, 1.0))
+            tie_mat = _get_mat(self.material_registry, "rail_tie")
+
             # 1. Gravel strip
             gravel = scene.create_box(
                 size=(44.0, 0.40, 1.0),
                 position=(0.0, -0.20, float(self.z_index)),
-                color=COLOR_RAIL_GRAVEL,
+                color=COLOR_RAIL_GRAVEL if gravel_mat is None else WHITE,
+                material=gravel_mat,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"RailGravel_{z_index}",
@@ -840,7 +951,8 @@ class RailRow(BaseRow):
                 tie = scene.create_box(
                     size=(0.4, 0.05, 0.85),
                     position=(float(tx), 0.028, float(self.z_index)),
-                    color=COLOR_RAIL_TIE,
+                    color=COLOR_RAIL_TIE if tie_mat is None else WHITE,
+                    material=tie_mat,
                     cast_shadows=False,
                     has_collision=False,
                     name=f"RailTie_{z_index}_{tx}",
@@ -890,6 +1002,7 @@ class RailRow(BaseRow):
             z=float(self.z_index),
             speed=0.0,
             scene=scene,
+            material_registry=self.material_registry,
         )
         self.obstacles.append(self.train)
 
@@ -977,10 +1090,23 @@ class WorldGenerator:
         self,
         scene: Optional[Any] = None,
         seed: Optional[int] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         self.scene: Optional[Any] = scene
         self.seed: Optional[int] = seed
         self.rng: random.Random = random.Random(seed)
+
+        if material_registry is not None:
+            self.material_registry = material_registry
+        elif MaterialRegistry is not None and scene is not None:
+            try:
+                self.material_registry = MaterialRegistry()
+            except Exception:
+                self.material_registry = None
+        else:
+            self.material_registry = None
+
+        self.registry = self.material_registry
 
         self.active_rows: Dict[int, WorldRowContract] = {}
         self.max_generated_z: int = -1
@@ -1011,7 +1137,7 @@ class WorldGenerator:
 
         # 1. Safe start rows behind and around spawn [-5 .. 0]
         for z in range(-5, 1):
-            start_row = StartRow(z, scene=self.scene)
+            start_row = StartRow(z, scene=self.scene, material_registry=self.material_registry)
             self.active_rows[z] = start_row
             self.max_generated_z = z
 
@@ -1052,15 +1178,15 @@ class WorldGenerator:
     def _create_row_by_type(self, z: int, row_type: RowType) -> BaseRow:
         """Instantiate row of specified type."""
         if row_type == RowType.GRASS:
-            return GrassRow(z, rng=self.rng, scene=self.scene)
+            return GrassRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         elif row_type == RowType.ROAD:
-            return RoadRow(z, rng=self.rng, scene=self.scene)
+            return RoadRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         elif row_type == RowType.RIVER:
-            return RiverRow(z, rng=self.rng, scene=self.scene)
+            return RiverRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         elif row_type == RowType.RAIL:
-            return RailRow(z, rng=self.rng, scene=self.scene)
+            return RailRow(z, rng=self.rng, scene=self.scene, material_registry=self.material_registry)
         else:
-            return StartRow(z, scene=self.scene)
+            return StartRow(z, scene=self.scene, material_registry=self.material_registry)
 
     def generate_ahead(self, player_z: int, lookahead: int = 25) -> None:
         """Stream new rows forward up to player_z + lookahead."""

@@ -107,12 +107,19 @@ bool Texture::ensure_gpu_resources() {
     sg_image img = sg_make_image(&img_desc);
     image_id = img.id;
 
-    // 2. Create GPU Sampler (Trilinear + Anisotropy 8x)
+    // 2. Create GPU Sampler (Trilinear + Anisotropy 8x or Nearest for Pixel-Art)
     sg_sampler_desc smp_desc{};
-    smp_desc.min_filter = SG_FILTER_LINEAR;
-    smp_desc.mag_filter = SG_FILTER_LINEAR;
-    smp_desc.mipmap_filter = SG_FILTER_LINEAR;
-    smp_desc.max_anisotropy = 8;
+    if (is_pixel_art) {
+        smp_desc.min_filter = SG_FILTER_NEAREST;
+        smp_desc.mag_filter = SG_FILTER_NEAREST;
+        smp_desc.mipmap_filter = SG_FILTER_NEAREST;
+        smp_desc.max_anisotropy = 1;
+    } else {
+        smp_desc.min_filter = SG_FILTER_LINEAR;
+        smp_desc.mag_filter = SG_FILTER_LINEAR;
+        smp_desc.mipmap_filter = SG_FILTER_LINEAR;
+        smp_desc.max_anisotropy = 8;
+    }
     smp_desc.wrap_u = SG_WRAP_REPEAT;
     smp_desc.wrap_v = SG_WRAP_REPEAT;
     smp_desc.label = "texture-rgba-sampler";
@@ -129,7 +136,7 @@ bool Texture::ensure_gpu_resources() {
     return is_valid();
 }
 
-std::shared_ptr<Texture> Texture::create_from_rgba(int width, int height, const uint8_t* pixels) {
+std::shared_ptr<Texture> Texture::create_from_rgba(int width, int height, const uint8_t* pixels, bool is_pixel_art) {
     if (!pixels || width <= 0 || height <= 0) {
         return nullptr;
     }
@@ -138,13 +145,14 @@ std::shared_ptr<Texture> Texture::create_from_rgba(int width, int height, const 
     tex->width = width;
     tex->height = height;
     tex->channels = 4;
+    tex->is_pixel_art = is_pixel_art;
     tex->cpu_pixels.assign(pixels, pixels + (width * height * 4));
 
     tex->ensure_gpu_resources();
     return tex;
 }
 
-std::shared_ptr<Texture> Texture::load_from_file(const std::string& filepath) {
+std::shared_ptr<Texture> Texture::load_from_file(const std::string& filepath, bool is_pixel_art) {
     int w = 0, h = 0, comp = 0;
     stbi_set_flip_vertically_on_load(false);
     uint8_t* data = stbi_load(filepath.c_str(), &w, &h, &comp, 4);
@@ -155,7 +163,7 @@ std::shared_ptr<Texture> Texture::load_from_file(const std::string& filepath) {
         return create_checkerboard();
     }
 
-    auto tex = create_from_rgba(w, h, data);
+    auto tex = create_from_rgba(w, h, data, is_pixel_art);
     stbi_image_free(data);
     return tex;
 }

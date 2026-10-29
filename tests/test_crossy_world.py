@@ -32,9 +32,11 @@ if str(crossy_dir) not in sys.path:
     sys.path.insert(0, str(crossy_dir))
 
 try:
-    from examples.crossy_duck import world
+    from examples.crossy_duck import world, textures, player
 except ImportError:
     import world
+    import textures
+    import player
 
 from contracts.crossy_contracts import (
     GRID_STEP,
@@ -261,6 +263,7 @@ def test_log_movement_carries_player() -> None:
     """Verify logs move dynamically with update(dt) and player collision tracks moving log."""
     river = world.RiverRow(z_index=7, speed=4.0, log_count=1)
     log = river.obstacles[0]
+    log.x = 0.0
     initial_x = log.x
 
     dt = 0.5
@@ -412,3 +415,227 @@ def test_generator_query_helpers() -> None:
     hazard, reason, _ = wg.check_hazard(0.0, 0.0)
     assert hazard is False
     assert reason is None
+
+
+# =============================================================================
+# 11. Stylized Material Wiring & TextureRegistry Integration
+# =============================================================================
+class MockTransform:
+    def __init__(self, position=(0.0, 0.0, 0.0)):
+        self.position = position
+        self.scale = (1.0, 1.0, 1.0)
+        self.rotation = (0.0, 0.0, 0.0)
+
+    def set_position(self, x: float, y: float, z: float) -> None:
+        self.position = (x, y, z)
+
+    def set_rotation(self, x: float, y: float, z: float) -> None:
+        self.rotation = (x, y, z)
+
+
+class MockEntity:
+    def __init__(
+        self,
+        name: str = "",
+        size=(1.0, 1.0, 1.0),
+        position=(0.0, 0.0, 0.0),
+        color=None,
+        material=None,
+        cast_shadows: bool = False,
+        has_collision: bool = False,
+    ):
+        self.name = name
+        self.size = size
+        self.color = color
+        self.material = material
+        self.cast_shadows = cast_shadows
+        self.has_collision = has_collision
+        self.transform = MockTransform(position)
+        self.parent = None
+        self.root_entity = None
+
+
+class MockScene:
+    def __init__(self):
+        self.entities = []
+
+    def create_box(
+        self,
+        size=(1.0, 1.0, 1.0),
+        position=(0.0, 0.0, 0.0),
+        color=None,
+        material=None,
+        cast_shadows: bool = False,
+        has_collision: bool = False,
+        name: str = "",
+    ) -> MockEntity:
+        ent = MockEntity(
+            name=name,
+            size=size,
+            position=position,
+            color=color,
+            material=material,
+            cast_shadows=cast_shadows,
+            has_collision=has_collision,
+        )
+        self.entities.append(ent)
+        return ent
+
+    def create_entity(self, name: str = "") -> MockEntity:
+        ent = MockEntity(name=name)
+        self.entities.append(ent)
+        return ent
+
+    def remove_entity(self, ent: Any) -> None:
+        if ent in self.entities:
+            self.entities.remove(ent)
+
+
+def test_material_wiring_on_rows() -> None:
+    """Verify that rows assign stylized materials with expected uv_scale."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    # 1. StartRow and GrassRow: material "grass" with uv_scale=(44.0, 1.0)
+    start_row = world.StartRow(0, scene=scene, material_registry=reg)
+    assert len(start_row.entities) > 0
+    ground_start = start_row.entities[0]
+    assert ground_start.material is not None
+    assert ground_start.material.name == "grass"
+    assert ground_start.material.uv_scale == (44.0, 1.0)
+
+    grass_row = world.GrassRow(1, scene=scene, material_registry=reg)
+    ground_grass = grass_row.entities[0]
+    assert ground_grass.material is not None
+    assert ground_grass.material.name == "grass"
+    assert ground_grass.material.uv_scale == (44.0, 1.0)
+
+    # 2. RoadRow: material "asphalt" with uv_scale=(44.0, 1.0)
+    road_row = world.RoadRow(2, scene=scene, material_registry=reg)
+    ground_road = road_row.entities[0]
+    assert ground_road.material is not None
+    assert ground_road.material.name == "asphalt"
+    assert ground_road.material.uv_scale == (44.0, 1.0)
+
+    # 3. RiverRow: material "water" with uv_scale=(44.0, 1.0)
+    river_row = world.RiverRow(3, scene=scene, material_registry=reg)
+    ground_river = river_row.entities[0]
+    assert ground_river.material is not None
+    assert ground_river.material.name == "water"
+    assert ground_river.material.uv_scale == (44.0, 1.0)
+
+    # 4. RailRow: gravel with material "rail_gravel" (uv_scale=(44.0, 1.0)) and rail ties with "rail_tie"
+    rail_row = world.RailRow(4, scene=scene, material_registry=reg)
+    ground_rail = rail_row.entities[0]
+    assert ground_rail.material is not None
+    assert ground_rail.material.name == "rail_gravel"
+    assert ground_rail.material.uv_scale == (44.0, 1.0)
+
+    tie_materials = [e.material.name for e in rail_row.entities[1:] if e.material is not None]
+    assert "rail_tie" in tie_materials
+
+
+def test_material_wiring_on_obstacles() -> None:
+    """Verify obstacle materials (wood bark/rings, trees, stylized vehicle textures)."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    # 1. LogObstacle: log trunk with material "wood_bark" (uv_scale=(width, 1.0)) and end rings "wood_rings"
+    width = 3.5
+    log = world.LogObstacle(0.0, 0.0, speed=2.0, width=width, scene=scene, material_registry=reg)
+    assert log.entity is not None
+    assert log.entity.material is not None
+    assert log.entity.material.name == "wood_bark"
+    assert log.entity.material.uv_scale == (width, 1.0)
+
+    assert len(log.sub_entities) >= 2
+    for ring_ent, _ in log.sub_entities:
+        assert ring_ent.material is not None
+        assert ring_ent.material.name == "wood_rings"
+
+    # 2. VoxelTree: trunk with material "wood_bark" and foliage with "tree_leaves"
+    tree = world.VoxelTree(0.0, 0.0, scene=scene, material_registry=reg)
+    assert len(tree.entities) == 2
+    trunk, foliage = tree.entities[0], tree.entities[1]
+    assert trunk.material is not None
+    assert trunk.material.name == "wood_bark"
+    assert foliage.material is not None
+    assert foliage.material.name == "tree_leaves"
+
+    # 3. CarObstacle and TruckObstacle: cab/chassis with stylized vehicle textures
+    car = world.CarObstacle(0.0, 0.0, speed=5.0, scene=scene, material_registry=reg)
+    assert car.entity is not None
+    assert car.entity.material is not None
+    assert car.entity.material.name in ("vehicle", "car_grille")
+
+    truck = world.TruckObstacle(0.0, 0.0, speed=4.0, scene=scene, material_registry=reg)
+    assert truck.entity is not None
+    assert truck.entity.material is not None
+    assert truck.entity.material.name in ("vehicle", "car_grille")
+
+
+def test_material_wiring_on_player() -> None:
+    """Verify duck material application on PlayerController fallback voxel duck."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    p = player.PlayerController(scene=scene, material_registry=reg)
+    assert p.entity is not None
+    assert p.entity.material is not None
+    assert p.entity.material.name == "duck"
+
+    # Verify voxel body and head parts received duck material
+    duck_parts_with_mat = [part for part in p.voxel_parts if getattr(part, "material", None) is not None]
+    assert len(duck_parts_with_mat) >= 2
+    for part in duck_parts_with_mat:
+        assert part.material.name == "duck"
+
+
+def test_world_generator_material_propagation() -> None:
+    """Verify WorldGenerator propagates material_registry to newly streamed rows."""
+    scene = MockScene()
+    reg = textures.MaterialRegistry()
+
+    wg = world.WorldGenerator(scene=scene, material_registry=reg, seed=99)
+    wg.generate_ahead(0, lookahead=15)
+
+    for z, row in wg.active_rows.items():
+        assert row.material_registry is reg
+        if row.entities:
+            ground = row.entities[0]
+            assert ground.material is not None
+
+
+def test_backward_compatibility_none_scene_and_registry() -> None:
+    """Verify full backward compatibility when scene and material_registry are None."""
+    rows = [
+        world.StartRow(0, scene=None, material_registry=None),
+        world.GrassRow(1, scene=None, material_registry=None),
+        world.RoadRow(2, scene=None, material_registry=None),
+        world.RiverRow(3, scene=None, material_registry=None),
+        world.RailRow(4, scene=None, material_registry=None),
+    ]
+    for r in rows:
+        assert len(r.entities) == 0
+        r.update(0.016)
+        r.cleanup(None)
+
+    obstacles = [
+        world.CarObstacle(0.0, 0.0, speed=5.0, scene=None, material_registry=None),
+        world.TruckObstacle(0.0, 0.0, speed=4.0, scene=None, material_registry=None),
+        world.LogObstacle(0.0, 0.0, speed=2.0, scene=None, material_registry=None),
+        world.TrainObstacle(0.0, 0.0, speed=40.0, scene=None, material_registry=None),
+    ]
+    for obs in obstacles:
+        obs.update(0.016)
+        obs.cleanup(None)
+
+    tree = world.VoxelTree(0.0, 0.0, scene=None, material_registry=None)
+    assert len(tree.entities) == 0
+    tree.cleanup(None)
+
+    p = player.PlayerController(scene=None, material_registry=None)
+    assert p.entity is None
+    p.hop(0, 1)
+    p.update(0.016)
+

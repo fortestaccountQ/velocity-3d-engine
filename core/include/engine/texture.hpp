@@ -15,6 +15,7 @@ public:
     int width{0};
     int height{0};
     int channels{0};
+    bool is_pixel_art{false};
 
     std::vector<uint8_t> cpu_pixels;
 
@@ -25,8 +26,8 @@ public:
     void destroy();
     bool is_valid() const { return image_id != 0 && view_id != 0 && sampler_id != 0; }
 
-    static std::shared_ptr<Texture> load_from_file(const std::string& filepath);
-    static std::shared_ptr<Texture> create_from_rgba(int width, int height, const uint8_t* pixels);
+    static std::shared_ptr<Texture> load_from_file(const std::string& filepath, bool is_pixel_art = false);
+    static std::shared_ptr<Texture> create_from_rgba(int width, int height, const uint8_t* pixels, bool is_pixel_art = false);
     static std::shared_ptr<Texture> create_checkerboard(
         int width = 64,
         int height = 64,

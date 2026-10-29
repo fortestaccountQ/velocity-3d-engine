@@ -13,6 +13,7 @@ public:
     float roughness{0.5f};
     float metallic{0.0f};
     glm::vec2 uv_scale{1.0f, 1.0f};
+    glm::vec2 uv_offset{0.0f, 0.0f};
 
     Material() = default;
     Material(std::shared_ptr<Texture> texture, float roughness = 0.5f, float metallic = 0.0f)
@@ -24,6 +25,10 @@ public:
 
     void set_uv_scale(float u, float v) {
         uv_scale = { u, v };
+    }
+
+    void set_uv_offset(float u, float v) {
+        uv_offset = { u, v };
     }
 };
 

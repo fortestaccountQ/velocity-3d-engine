@@ -26,6 +26,19 @@ from contracts.crossy_contracts import (
     WorldRowContract,
 )
 
+try:
+    from examples.crossy_duck.textures import MaterialRegistry
+except ImportError:
+    try:
+        from crossy_duck.textures import MaterialRegistry
+    except ImportError:
+        MaterialRegistry = None
+
+try:
+    from VelocityEngine import WHITE
+except ImportError:
+    WHITE = None
+
 # Gameplay Constants
 HOP_DURATION: float = 0.15     # Snappy hop time in seconds
 JUMP_HEIGHT: float = 0.65      # Peak height of parabolic jump arc
@@ -44,11 +57,25 @@ class PlayerController(PlayerControllerContract):
         grid_x: int = 0,
         grid_z: int = 0,
         idle_timeout: Optional[float] = None,
+        material_registry: Optional[Any] = None,
     ) -> None:
         self.app = app
         self.scene = scene or (getattr(app, "scene", None) if app else None)
         self.audio = audio or (getattr(app, "audio", None) if app else None)
         self.idle_timeout: float = float(idle_timeout if idle_timeout is not None else IDLE_TIMEOUT)
+
+        # Resolve Material Registry
+        if material_registry is not None:
+            self.material_registry = material_registry
+        elif hasattr(app, "material_registry") and app.material_registry is not None:
+            self.material_registry = app.material_registry
+        elif MaterialRegistry is not None and self.scene is not None:
+            try:
+                self.material_registry = MaterialRegistry()
+            except Exception:
+                self.material_registry = None
+        else:
+            self.material_registry = None
 
         # Grid Coordinates
         self.grid_x: int = int(grid_x)
@@ -94,6 +121,15 @@ class PlayerController(PlayerControllerContract):
         if self.scene is not None:
             self._init_duck_visual()
 
+    def _get_duck_material(self) -> Any:
+        """Fetch cached duck material from registry if available."""
+        if self.material_registry is not None:
+            try:
+                return self.material_registry.get_material("duck")
+            except Exception:
+                pass
+        return None
+
     def _init_duck_visual(self) -> None:
         """Load duck.glb 3D model or build composite voxel duck fallback."""
         if self.scene is None:
@@ -119,6 +155,20 @@ class PlayerController(PlayerControllerContract):
                 except Exception:
                     pass
 
+        # Apply duck material from registry to loaded model if available
+        duck_mat = self._get_duck_material()
+        if loaded and self.entity is not None and duck_mat is not None:
+            if hasattr(self.entity, "root_entity") and self.entity.root_entity is not None:
+                try:
+                    self.entity.root_entity.material = duck_mat
+                except Exception:
+                    pass
+            if hasattr(self.entity, "material"):
+                try:
+                    self.entity.material = duck_mat
+                except Exception:
+                    pass
+
         # 2. Fallback to composite voxel duck if model missing or failed
         if not loaded or self.entity is None:
             self._build_voxel_duck()
@@ -129,6 +179,8 @@ class PlayerController(PlayerControllerContract):
         """Create a procedural composite voxel duck using scene boxes."""
         if self.scene is None:
             return
+
+        duck_mat = self._get_duck_material()
 
         try:
             from VelocityEngine.color import Color
@@ -142,11 +194,20 @@ class PlayerController(PlayerControllerContract):
             beak_col = (1.0, 0.43, 0.0, 1.0)
             eye_col = (0.07, 0.07, 0.07, 1.0)
 
+        white_col = WHITE if WHITE is not None else (1.0, 1.0, 1.0, 1.0)
+
         try:
             root = self.scene.create_entity("VoxelDuck")
         except Exception:
             try:
-                root = self.scene.create_box(size=(0.6, 0.6, 0.6), name="VoxelDuck")
+                root = self.scene.create_box(
+                    size=(0.6, 0.6, 0.6),
+                    color=white_col if duck_mat is not None else body_col,
+                    material=duck_mat,
+                    name="VoxelDuck",
+                )
+                if duck_mat is not None and hasattr(root, "material"):
+                    root.material = duck_mat
                 self.entity = root
                 self.is_voxel_duck = True
                 return
@@ -155,14 +216,30 @@ class PlayerController(PlayerControllerContract):
 
         root.transform.position = (self.x, self.y, self.z)
         root.transform.scale = (self.scale_x, self.scale_y, self.scale_z)
+        if duck_mat is not None and hasattr(root, "material"):
+            root.material = duck_mat
 
         # Body
-        body = self.scene.create_box(size=(0.65, 0.50, 0.65), color=body_col, name="DuckBody")
+        body = self.scene.create_box(
+            size=(0.65, 0.50, 0.65),
+            color=white_col if duck_mat is not None else body_col,
+            material=duck_mat,
+            name="DuckBody",
+        )
+        if duck_mat is not None and hasattr(body, "material"):
+            body.material = duck_mat
         body.parent = root
         body.transform.position = (0.0, 0.25, 0.0)
 
         # Head
-        head = self.scene.create_box(size=(0.42, 0.42, 0.42), color=head_col, name="DuckHead")
+        head = self.scene.create_box(
+            size=(0.42, 0.42, 0.42),
+            color=white_col if duck_mat is not None else head_col,
+            material=duck_mat,
+            name="DuckHead",
+        )
+        if duck_mat is not None and hasattr(head, "material"):
+            head.material = duck_mat
         head.parent = root
         head.transform.position = (0.0, 0.58, 0.15)
 

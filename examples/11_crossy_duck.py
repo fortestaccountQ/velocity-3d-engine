@@ -38,6 +38,14 @@ from contracts.crossy_contracts import (
 from examples.crossy_duck.player import PlayerController, JUMP_HEIGHT, HOP_DURATION
 from examples.crossy_duck.camera_vfx import IsometricCamera, CrossyHUD
 
+try:
+    from examples.crossy_duck.textures import MaterialRegistry
+except ImportError:
+    try:
+        from crossy_duck.textures import MaterialRegistry
+    except ImportError:
+        MaterialRegistry = None
+
 
 def ensure_desktop_access() -> None:
     """Ensure Windows desktop station access when running from background services."""
@@ -134,10 +142,17 @@ class BasicObstacle(ObstacleContract):
 class BasicWorldRow(WorldRowContract):
     """Single horizontal terrain row (START, GRASS, ROAD, RIVER, RAIL)."""
 
-    def __init__(self, scene: Any, z_index: int, row_type: RowType) -> None:
+    def __init__(
+        self,
+        scene: Any,
+        z_index: int,
+        row_type: RowType,
+        material_registry: Optional[Any] = None,
+    ) -> None:
         self.scene = scene
         self.z_index: int = int(z_index)
         self.row_type: RowType = row_type
+        self.material_registry = material_registry
         self.entities: List[Any] = []
         self.obstacles: List[ObstacleContract] = []
 
@@ -255,8 +270,9 @@ class BasicWorldRow(WorldRowContract):
 class BasicWorldGenerator(WorldGeneratorContract):
     """Infinite streaming procedural world generator."""
 
-    def __init__(self, scene: Any) -> None:
+    def __init__(self, scene: Any, material_registry: Optional[Any] = None) -> None:
         self.scene = scene
+        self.material_registry = material_registry
         self.active_rows: Dict[int, WorldRowContract] = {}
         self.max_generated_z: int = -1
         self.min_active_z: int = 0
@@ -344,11 +360,22 @@ def main() -> None:
     app.set_hud_title(f"PYTHON {py_ver} (64-bit) | Sokol GFX D3D11")
     app.set_hud_hint("[WASD / ARROWS] Hop   [R] Restart   [ESC] Exit")
 
+    # Initialize MaterialRegistry
+    registry = MaterialRegistry() if MaterialRegistry is not None else None
+    app.material_registry = registry
+
     # 3. Instantiate Subsystems
-    world = WorldGenerator(app.scene)
+    world = WorldGenerator(app.scene, material_registry=registry)
     world.generate_ahead(0, lookahead=20)
 
-    player = PlayerController(app=app, scene=app.scene, audio=app.audio, grid_x=0, grid_z=0)
+    player = PlayerController(
+        app=app,
+        scene=app.scene,
+        audio=app.audio,
+        grid_x=0,
+        grid_z=0,
+        material_registry=registry,
+    )
     iso_camera = IsometricCamera(camera=app.camera, app=app, damping=8.5)
     iso_camera.snap_to(player)
 
@@ -370,6 +397,10 @@ def main() -> None:
     def update(dt: float) -> None:
         nonlocal frame_count
         frame_count += 1
+
+        # Animate water UVs and stylized materials
+        if registry is not None:
+            registry.update_animated_materials(dt)
 
         # ESC to close
         if app.input.is_key_down(Key.ESCAPE):

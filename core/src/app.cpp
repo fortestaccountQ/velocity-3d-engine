@@ -40,6 +40,7 @@ struct FSParams {
     glm::vec4 eye_pos;          // xyz = camera position, w = unused
     glm::vec4 material_color;   // rgba base_color
     glm::vec4 material_params;  // x = roughness, y = metallic, zw = uv_scale
+    glm::vec4 material_uv_offset; // xy = uv_offset, zw = unused
     glm::vec4 hemi_sky;         // rgb = sky ambient, w = 1.0
     glm::vec4 hemi_ground;      // rgb = ground ambient, w = 1.0
     glm::vec4 fog_color;        // rgb = fog color, w = tone_mapping_enabled (1.0 or 0.0)
@@ -214,6 +215,7 @@ static const char* hlsl_fs =
     "    float4 eye_pos;\n"
     "    float4 material_color;\n"
     "    float4 material_params;\n" // x=roughness, y=metallic, zw=uv_scale
+    "    float4 material_uv_offset;\n" // xy=uv_offset, zw=unused
     "    float4 hemi_sky;\n"
     "    float4 hemi_ground;\n"
     "    float4 fog_color;\n"       // rgb=fog color, w=tone_mapping_enabled (1.0 or 0.0)
@@ -260,7 +262,7 @@ static const char* hlsl_fs =
     "    return lerp(1.0, shadow, edge_fade);\n"
     "}\n"
     "float4 main(ps_in inp) : SV_Target0 {\n"
-    "    float2 uv = inp.uv * material_params.zw;\n"
+    "    float2 uv = inp.uv * material_params.zw + material_uv_offset.xy;\n"
     "    float4 tex_sample = tex_albedo.Sample(smp_albedo, uv);\n"
     "    float3 albedo = tex_sample.rgb * inp.color.rgb * material_color.rgb;\n"
     "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
@@ -1055,6 +1057,7 @@ void EngineApp::on_frame() {
 
         glm::vec4 last_mat_color{-999.0f};
         glm::vec4 last_mat_params{-999.0f};
+        glm::vec4 last_mat_uv_offset{-999.0f};
         bool fs_applied = false;
 
         // Draw all visible entities in Scene
@@ -1103,12 +1106,15 @@ void EngineApp::on_frame() {
 
             glm::vec4 cur_mat_color = mat->base_color;
             glm::vec4 cur_mat_params = glm::vec4(mat->roughness, mat->metallic, mat->uv_scale.x, mat->uv_scale.y);
-            if (!fs_applied || cur_mat_color != last_mat_color || cur_mat_params != last_mat_params) {
+            glm::vec4 cur_mat_uv_offset = glm::vec4(mat ? mat->uv_offset.x : 0.0f, mat ? mat->uv_offset.y : 0.0f, 0.0f, 0.0f);
+            if (!fs_applied || cur_mat_color != last_mat_color || cur_mat_params != last_mat_params || cur_mat_uv_offset != last_mat_uv_offset) {
                 fs_params.material_color = cur_mat_color;
                 fs_params.material_params = cur_mat_params;
+                fs_params.material_uv_offset = cur_mat_uv_offset;
                 sg_apply_uniforms(1, SG_RANGE_REF(fs_params));
                 last_mat_color = cur_mat_color;
                 last_mat_params = cur_mat_params;
+                last_mat_uv_offset = cur_mat_uv_offset;
                 fs_applied = true;
             }
 

@@ -29,6 +29,26 @@ from .camera_vfx import (
     IsometricCamera,
     CrossyHUD,
 )
+from .textures import (
+    TextureRegistry,
+    MaterialRegistry,
+    CrossyTextureGenerator,
+    TextureGenerator,
+    StylizedMaterial,
+    MaterialConfig,
+    ensure_textures_generated,
+    generate_grass_texture,
+    generate_asphalt_texture,
+    generate_water_texture,
+    generate_wood_bark_texture,
+    generate_wood_rings_texture,
+    generate_gravel_texture,
+    generate_rail_gravel_texture,
+    generate_rail_tie_texture,
+    generate_car_grille_texture,
+    generate_vehicle_texture,
+    generate_duck_texture,
+)
 
 try:
     from .world import WorldGenerator, WorldRow
@@ -54,5 +74,23 @@ __all__ = [
     "HOP_DURATION",
     "JUMP_HEIGHT",
     "IDLE_TIMEOUT",
+    "TextureRegistry",
+    "MaterialRegistry",
+    "CrossyTextureGenerator",
+    "TextureGenerator",
+    "StylizedMaterial",
+    "MaterialConfig",
+    "ensure_textures_generated",
+    "generate_grass_texture",
+    "generate_asphalt_texture",
+    "generate_water_texture",
+    "generate_wood_bark_texture",
+    "generate_wood_rings_texture",
+    "generate_gravel_texture",
+    "generate_rail_gravel_texture",
+    "generate_rail_tie_texture",
+    "generate_car_grille_texture",
+    "generate_vehicle_texture",
+    "generate_duck_texture",
 ] + _WORLD_EXPORTS
 
