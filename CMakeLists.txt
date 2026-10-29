@@ -171,6 +171,13 @@ endif()
 nanobind_add_module(_VelocityEngine_core
     NB_STATIC
     bindings/bindings.cpp
+    bindings/bind_math.cpp
+    bindings/bind_materials.cpp
+    bindings/bind_geometry.cpp
+    bindings/bind_scene.cpp
+    bindings/bind_environment.cpp
+    bindings/bind_postprocess.cpp
+    bindings/bind_app.cpp
 )
 
 target_link_libraries(_VelocityEngine_core PRIVATE velocity_engine_core)
