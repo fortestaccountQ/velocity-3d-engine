@@ -3,8 +3,11 @@
 namespace engine {
 
 Ray Camera::screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const {
+    glm::vec3 origin = parent() ? world_position() : position;
+    glm::vec3 fwd = parent() ? world_direction() : forward();
+
     if (screen_w <= 0.0f || screen_h <= 0.0f) {
-        return Ray(position, forward());
+        return Ray(origin, fwd);
     }
 
     // Normalized Device Coordinates:
@@ -33,7 +36,7 @@ Ray Camera::screen_to_ray(float mouse_x, float mouse_y, float screen_w, float sc
         return Ray(near_world, ray_dir);
     }
 
-    return Ray(position, forward());
+    return Ray(origin, fwd);
 }
 
 } // namespace engine

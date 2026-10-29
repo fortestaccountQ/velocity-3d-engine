@@ -1516,7 +1516,45 @@ void EngineApp::render_hud(float screen_w, float screen_h, float fps) {
     sg_draw(0, static_cast<int>(count), 1);
 }
 
+void EngineApp::evaluate_frustum_culling() {
+    stats_ = RenderStats{};
+    Frustum camera_frustum;
+    camera_frustum.set_from_projection_matrix(camera_.view_projection_matrix());
+
+    for (const auto& entity : scene_.entities()) {
+        if (!entity || !entity->visible || !entity->mesh) {
+            continue;
+        }
+
+        if ((camera_.layers & entity->layers) == 0) {
+            continue;
+        }
+
+        AABB aabb = entity->world_aabb();
+        if (aabb.is_valid()) {
+            if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
+                stats_.culled_objects++;
+                continue;
+            }
+        }
+
+        stats_.draw_calls++;
+        stats_.total_triangles += entity->mesh->num_indices / 3;
+    }
+
+    for (const auto& inst_mesh : scene_.instanced_meshes()) {
+        if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
+        if ((camera_.layers & inst_mesh->layers) == 0) continue;
+        stats_.draw_calls++;
+        stats_.total_instances += static_cast<uint32_t>(inst_mesh->instance_count());
+        stats_.total_triangles += (inst_mesh->mesh->num_indices / 3) * static_cast<uint32_t>(inst_mesh->instance_count());
+    }
+}
+
 void EngineApp::on_frame() {
+    // Reset render stats for current frame
+    stats_ = RenderStats{};
+
     // 0. Frame pacing / Target FPS limiter
     if (target_fps_ > 0 && has_last_frame_) {
         double min_dt = 1.0 / static_cast<double>(target_fps_);
@@ -1616,10 +1654,28 @@ void EngineApp::on_frame() {
         glm::vec4 last_mat_uv_offset{-999.0f};
         bool fs_applied = false;
 
+        // Compute camera frustum for culling
+        Frustum camera_frustum;
+        camera_frustum.set_from_projection_matrix(camera_.view_projection_matrix());
+
         // Draw all visible entities in Scene
         for (const auto& entity : scene_.entities()) {
             if (!entity || !entity->visible || !entity->mesh) {
                 continue;
+            }
+
+            // Layer mask check
+            if ((camera_.layers & entity->layers) == 0) {
+                continue;
+            }
+
+            // Frustum Culling
+            AABB aabb = entity->world_aabb();
+            if (aabb.is_valid()) {
+                if (!camera_frustum.intersects_aabb(aabb.min_point, aabb.max_point)) {
+                    stats_.culled_objects++;
+                    continue;
+                }
             }
 
             if (!entity->mesh->ensure_gpu_buffers()) {
@@ -1675,6 +1731,8 @@ void EngineApp::on_frame() {
             }
 
             sg_draw(0, entity->mesh->num_indices, 1);
+            stats_.draw_calls++;
+            stats_.total_triangles += entity->mesh->num_indices / 3;
         }
 
         // Draw instanced meshes in Scene
@@ -1692,6 +1750,7 @@ void EngineApp::on_frame() {
 
             for (const auto& inst_mesh : scene_.instanced_meshes()) {
                 if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
+                if ((camera_.layers & inst_mesh->layers) == 0) continue;
                 if (!inst_mesh->ensure_gpu_buffers()) continue;
 
                 auto tex = default_white;
@@ -1706,6 +1765,9 @@ void EngineApp::on_frame() {
                 sg_apply_bindings(&bind);
 
                 sg_draw(0, inst_mesh->mesh->num_indices, static_cast<int>(inst_mesh->instance_count()));
+                stats_.draw_calls++;
+                stats_.total_instances += static_cast<uint32_t>(inst_mesh->instance_count());
+                stats_.total_triangles += static_cast<uint32_t>((inst_mesh->mesh->num_indices / 3) * inst_mesh->instance_count());
             }
         }
     }

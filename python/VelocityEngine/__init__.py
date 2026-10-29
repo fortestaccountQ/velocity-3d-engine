@@ -54,6 +54,21 @@ except ImportError:
     UICommandType = getattr(_core, "UICommandType", None)
     UICommand = getattr(_core, "UICommand", None)
 
+    # Phase 1: Math & Scene Graph types
+    Node3D = getattr(_core, "Node3D", None)
+    Mat4 = getattr(_core, "Mat4", None)
+    Quat = getattr(_core, "Quat", None)
+    Plane = getattr(_core, "Plane", None)
+    Frustum = getattr(_core, "Frustum", None)
+    RenderStats = getattr(_core, "RenderStats", None)
+    Light = getattr(_core, "Light", None)
+    LightType = getattr(_core, "LightType", None)
+    quat_from_euler = getattr(_core, "quat_from_euler", None)
+    quat_to_euler = getattr(_core, "quat_to_euler", None)
+    quat_from_axis_angle = getattr(_core, "quat_from_axis_angle", None)
+    quat_look_rotation = getattr(_core, "quat_look_rotation", None)
+    quat_slerp = getattr(_core, "quat_slerp", None)
+
     from .color import (
         Color,
         as_color,

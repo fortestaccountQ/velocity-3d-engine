@@ -5,6 +5,10 @@
 
 namespace engine {
 
+Scene::Scene() {
+    root_node_ = std::make_shared<Group>("SceneRoot");
+}
+
 std::shared_ptr<Model> Scene::load_model(const std::string& filepath) {
     return ModelLoader::load_model(*this, filepath);
 }
@@ -37,9 +41,74 @@ std::shared_ptr<Material> Scene::default_material() {
     return default_material_;
 }
 
+void Scene::add(std::shared_ptr<Node3D> node) {
+    if (!node) return;
+    if (root_node_) {
+        root_node_->add(node);
+    }
+
+    std::function<void(const std::shared_ptr<Node3D>&)> collect = [&](const std::shared_ptr<Node3D>& n) {
+        if (!n) return;
+        auto ent = std::dynamic_pointer_cast<Entity>(n);
+        if (ent) {
+            if (std::find(entities_.begin(), entities_.end(), ent) == entities_.end()) {
+                entities_.push_back(ent);
+            }
+        }
+        auto lit = std::dynamic_pointer_cast<Light>(n);
+        if (lit) {
+            if (std::find(lights_.begin(), lights_.end(), lit) == lights_.end()) {
+                lights_.push_back(lit);
+            }
+        }
+        auto im = std::dynamic_pointer_cast<InstancedMesh>(n);
+        if (im) {
+            if (std::find(instanced_meshes_.begin(), instanced_meshes_.end(), im) == instanced_meshes_.end()) {
+                instanced_meshes_.push_back(im);
+            }
+        }
+        for (const auto& child : n->children()) {
+            collect(child);
+        }
+    };
+
+    collect(node);
+}
+
+void Scene::remove(std::shared_ptr<Node3D> node) {
+    if (!node) return;
+    if (root_node_) {
+        root_node_->remove(node);
+    }
+
+    std::function<void(const std::shared_ptr<Node3D>&)> purge = [&](const std::shared_ptr<Node3D>& n) {
+        if (!n) return;
+        auto ent = std::dynamic_pointer_cast<Entity>(n);
+        if (ent) {
+            auto it = std::find(entities_.begin(), entities_.end(), ent);
+            if (it != entities_.end()) entities_.erase(it);
+        }
+        auto lit = std::dynamic_pointer_cast<Light>(n);
+        if (lit) {
+            auto it = std::find(lights_.begin(), lights_.end(), lit);
+            if (it != lights_.end()) lights_.erase(it);
+        }
+        auto im = std::dynamic_pointer_cast<InstancedMesh>(n);
+        if (im) {
+            auto it = std::find(instanced_meshes_.begin(), instanced_meshes_.end(), im);
+            if (it != instanced_meshes_.end()) instanced_meshes_.erase(it);
+        }
+        for (const auto& child : n->children()) {
+            purge(child);
+        }
+    };
+
+    purge(node);
+}
+
 std::shared_ptr<Entity> Scene::create_entity(const std::string& name) {
     auto entity = std::make_shared<Entity>(next_id_++, name);
-    entities_.push_back(entity);
+    add(entity);
     return entity;
 }
 
@@ -92,30 +161,36 @@ std::shared_ptr<Entity> Scene::create_plane(float size, float uv_tiling, std::sh
 }
 
 void Scene::add_entity(std::shared_ptr<Entity> entity) {
-    if (entity) {
-        entities_.push_back(entity);
-    }
+    add(entity);
 }
 
 void Scene::remove_entity(std::shared_ptr<Entity> entity) {
-    auto it = std::remove(entities_.begin(), entities_.end(), entity);
-    entities_.erase(it, entities_.end());
+    remove(entity);
 }
 
 void Scene::add_instanced_mesh(std::shared_ptr<InstancedMesh> mesh) {
-    if (mesh) {
-        instanced_meshes_.push_back(mesh);
-    }
+    add(mesh);
 }
 
 void Scene::remove_instanced_mesh(std::shared_ptr<InstancedMesh> mesh) {
-    auto it = std::remove(instanced_meshes_.begin(), instanced_meshes_.end(), mesh);
-    instanced_meshes_.erase(it, instanced_meshes_.end());
+    remove(mesh);
+}
+
+void Scene::add_light(std::shared_ptr<Light> l) {
+    add(l);
+}
+
+void Scene::remove_light(std::shared_ptr<Light> l) {
+    remove(l);
 }
 
 void Scene::clear() {
+    if (root_node_) {
+        root_node_->clear();
+    }
     entities_.clear();
     instanced_meshes_.clear();
+    lights_.clear();
     if (default_cube_mesh_) {
         default_cube_mesh_->destroy();
         default_cube_mesh_ = nullptr;
@@ -148,21 +223,14 @@ RaycastHit Scene::raycast(const Ray& ray, float max_distance) const {
             }
         }
 
-        AABB lbox = entity->local_collision_box();
-        if (!lbox.is_valid()) {
+        AABB box = entity->world_aabb();
+        if (!box.is_valid()) {
             continue;
         }
 
-        glm::mat4 model = entity->world_model_matrix();
-        glm::mat4 inv_model = glm::inverse(model);
-
-        glm::vec3 orig_local = glm::vec3(inv_model * glm::vec4(ray.origin, 1.0f));
-        glm::vec3 dir_local = glm::vec3(inv_model * glm::vec4(ray.direction, 0.0f));
-
-        Ray local_ray{ orig_local, dir_local };
         float t = 0.0f;
-        if (local_ray.intersect_aabb(lbox, t)) {
-            if (t >= 0.0f && t < closest_hit.distance) {
+        if (ray.intersect_aabb(box, t)) {
+            if (t > 0.0f && t < closest_hit.distance) {
                 closest_hit.hit = true;
                 closest_hit.distance = t;
                 closest_hit.point = ray.point_at(t);

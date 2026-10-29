@@ -1,10 +1,11 @@
 #pragma once
 
+#include "engine/node3d.hpp"
+#include "engine/physics.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
-#include "engine/physics.hpp"
 
 namespace engine {
 
@@ -16,7 +17,7 @@ public:
     virtual Ray screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const = 0;
 };
 
-class Camera : public ICameraRaycast {
+class Camera : public Node3D, public ICameraRaycast {
 public:
     glm::vec3 position{0.0f, 2.0f, 6.0f};
     glm::vec3 target{0.0f, 0.0f, 0.0f};
@@ -28,7 +29,17 @@ public:
     float yaw{-90.0f};
     float pitch{0.0f};
 
-    Camera() = default;
+    Camera() : Node3D("Camera") {
+        transform.position = position;
+        update_vectors_from_angles();
+    }
+
+    void set_perspective(float fov_deg, float aspect_ratio, float near_z, float far_z) {
+        fov = fov_deg;
+        aspect = aspect_ratio;
+        near_plane = near_z;
+        far_plane = far_z;
+    }
 
     void update_vectors_from_angles() {
         glm::vec3 front;
@@ -36,6 +47,9 @@ public:
         front.y = std::sin(glm::radians(pitch));
         front.z = std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch));
         target = position + glm::normalize(front);
+        transform.position = position;
+        transform.set_orientation(quat_look_rotation(forward(), up));
+        invalidate_world_matrix();
     }
 
     void rotate(float delta_yaw, float delta_pitch) {
@@ -55,17 +69,34 @@ public:
     void set_position(float x, float y, float z) {
         glm::vec3 fwd = forward();
         position = { x, y, z };
+        transform.position = position;
         target = position + fwd;
+        invalidate_world_matrix();
     }
+
     void set_target(float x, float y, float z) {
         target = { x, y, z };
         glm::vec3 dir = forward();
         pitch = glm::degrees(std::asin(std::clamp(dir.y, -1.0f, 1.0f)));
         yaw = glm::degrees(std::atan2(dir.z, dir.x));
+        transform.set_orientation(quat_look_rotation(dir, up));
+        invalidate_world_matrix();
     }
-    void set_up(float x, float y, float z) { up = { x, y, z }; }
+
+    void set_up(float x, float y, float z) {
+        up = { x, y, z };
+        transform.set_orientation(quat_look_rotation(forward(), up));
+        invalidate_world_matrix();
+    }
 
     glm::mat4 view_matrix() const {
+        if (parent()) {
+            glm::vec3 w_pos = world_position();
+            glm::quat w_rot = world_orientation();
+            glm::vec3 w_fwd = w_rot * glm::vec3(0.0f, 0.0f, -1.0f);
+            glm::vec3 w_up = w_rot * glm::vec3(0.0f, 1.0f, 0.0f);
+            return glm::lookAt(w_pos, w_pos + w_fwd, w_up);
+        }
         return glm::lookAt(position, target, up);
     }
 
@@ -91,17 +122,23 @@ public:
         glm::vec3 fwd = forward();
         position += fwd * distance;
         target += fwd * distance;
+        transform.position = position;
+        invalidate_world_matrix();
     }
 
     void move_right(float distance) {
         glm::vec3 r = right();
         position += r * distance;
         target += r * distance;
+        transform.position = position;
+        invalidate_world_matrix();
     }
 
     void move_up(float distance) {
         position += up * distance;
         target += up * distance;
+        transform.position = position;
+        invalidate_world_matrix();
     }
 
     Ray screen_to_ray(float mouse_x, float mouse_y, float screen_w, float screen_h) const override;

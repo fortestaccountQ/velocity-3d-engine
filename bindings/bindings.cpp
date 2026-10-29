@@ -8,6 +8,8 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/pair.h>
 
+#include "engine/math_types.hpp"
+#include "engine/node3d.hpp"
 #include "engine/transform.hpp"
 #include "engine/camera.hpp"
 #include "engine/light.hpp"
@@ -202,6 +204,77 @@ NB_MODULE(_VelocityEngine_core, m) {
             return "Vec4(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ", " + std::to_string(v.w) + ")";
         });
 
+    nb::class_<glm::mat4>(m, "Mat4")
+        .def(nb::init<>())
+        .def(nb::init<float>(), "diagonal"_a = 1.0f)
+        .def("__getitem__", [](const glm::mat4& m, size_t col) -> glm::vec4 {
+            if (col >= 4) throw nb::index_error();
+            return m[static_cast<glm::length_t>(col)];
+        })
+        .def("__len__", [](const glm::mat4&) { return 4; })
+        .def("to_list", [](const glm::mat4& m) {
+            nb::list rows;
+            for (int r = 0; r < 4; ++r) {
+                nb::list row;
+                for (int c = 0; c < 4; ++c) {
+                    row.append(m[c][r]);
+                }
+                rows.append(row);
+            }
+            return rows;
+        })
+        .def("__repr__", [](const glm::mat4& m) {
+            std::string s = "Mat4(";
+            for (int c = 0; c < 4; ++c) {
+                for (int r = 0; r < 4; ++r) {
+                    s += std::to_string(m[c][r]) + (c == 3 && r == 3 ? ")" : ", ");
+                }
+            }
+            return s;
+        });
+
+    // -----------------------------------------------------------------------
+    // GLM Math types (Quat) & Quaternion Helper Functions
+    // -----------------------------------------------------------------------
+    nb::class_<glm::quat>(m, "Quat")
+        .def(nb::init<>())
+        .def(nb::init<float, float, float, float>(), "w"_a, "x"_a, "y"_a, "z"_a)
+        .def_rw("w", &glm::quat::w)
+        .def_rw("x", &glm::quat::x)
+        .def_rw("y", &glm::quat::y)
+        .def_rw("z", &glm::quat::z)
+        .def("__len__", [](const glm::quat&) { return 4; })
+        .def("__getitem__", [](const glm::quat& q, size_t i) -> float {
+            if (i >= 4) throw nb::index_error();
+            return q[static_cast<glm::length_t>(i)];
+        })
+        .def("__mul__", [](const glm::quat& q1, const glm::quat& q2) {
+            return q1 * q2;
+        })
+        .def("__mul__", [](const glm::quat& q, const glm::vec3& v) {
+            return q * v;
+        })
+        .def("__repr__", [](const glm::quat& q) {
+            return "Quat(w=" + std::to_string(q.w) + ", x=" + std::to_string(q.x) +
+                   ", y=" + std::to_string(q.y) + ", z=" + std::to_string(q.z) + ")";
+        });
+
+    m.def("quat_from_euler", [](float pitch, float yaw, float roll, const std::string& order) {
+        return engine::quat_from_euler(pitch, yaw, roll, order);
+    }, "pitch"_a, "yaw"_a, "roll"_a, "order"_a = "YXZ");
+    m.def("quat_to_euler", [](const glm::quat& q, const std::string& order) {
+        return engine::quat_to_euler(q, order);
+    }, "q"_a, "order"_a = "YXZ");
+    m.def("quat_from_axis_angle", [](const glm::vec3& axis, float deg) {
+        return engine::quat_from_axis_angle(axis, deg);
+    }, "axis"_a, "deg"_a);
+    m.def("quat_look_rotation", [](const glm::vec3& forward, const glm::vec3& up) {
+        return engine::quat_look_rotation(forward, up);
+    }, "forward"_a, "up"_a = glm::vec3(0.0f, 1.0f, 0.0f));
+    m.def("quat_slerp", [](const glm::quat& q1, const glm::quat& q2, float t) {
+        return engine::quat_slerp(q1, q2, t);
+    }, "q1"_a, "q2"_a, "t"_a);
+
     // -----------------------------------------------------------------------
     // Physics: AABB, Ray, RaycastHit
     // -----------------------------------------------------------------------
@@ -339,6 +412,40 @@ NB_MODULE(_VelocityEngine_core, m) {
         });
 
     // -----------------------------------------------------------------------
+    // Plane, Frustum & RenderStats
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Plane>(m, "Plane")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, float>(), "normal"_a, "constant"_a)
+        .def_rw("normal", &engine::Plane::normal)
+        .def_rw("constant", &engine::Plane::constant)
+        .def("distance_to_point", &engine::Plane::distance_to_point, "point"_a);
+
+    nb::class_<engine::Frustum>(m, "Frustum")
+        .def(nb::init<>())
+        .def("set_from_projection_matrix", &engine::Frustum::set_from_projection_matrix, "matrix"_a)
+        .def("intersects_sphere", &engine::Frustum::intersects_sphere, "center"_a, "radius"_a)
+        .def("intersects_aabb", [](const engine::Frustum& f, const engine::AABB& box) {
+            return f.intersects_aabb(box.min_point, box.max_point);
+        }, "box"_a)
+        .def("intersects_aabb", [](const engine::Frustum& f, const glm::vec3& min_point, const glm::vec3& max_point) {
+            return f.intersects_aabb(min_point, max_point);
+        }, "min_point"_a, "max_point"_a);
+
+    nb::class_<engine::RenderStats>(m, "RenderStats")
+        .def(nb::init<>())
+        .def_ro("draw_calls", &engine::RenderStats::draw_calls)
+        .def_ro("culled_objects", &engine::RenderStats::culled_objects)
+        .def_ro("total_triangles", &engine::RenderStats::total_triangles)
+        .def_ro("total_instances", &engine::RenderStats::total_instances)
+        .def("__repr__", [](const engine::RenderStats& s) {
+            return "RenderStats(draw_calls=" + std::to_string(s.draw_calls) +
+                   ", culled=" + std::to_string(s.culled_objects) +
+                   ", triangles=" + std::to_string(s.total_triangles) +
+                   ", instances=" + std::to_string(s.total_instances) + ")";
+        });
+
+    // -----------------------------------------------------------------------
     // Mesh
     // -----------------------------------------------------------------------
     nb::class_<engine::Mesh>(m, "Mesh")
@@ -402,13 +509,112 @@ NB_MODULE(_VelocityEngine_core, m) {
         }, "vertex_data"_a, "index_data"_a, "stride_floats"_a = 12);
 
     // -----------------------------------------------------------------------
+    // Transform
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Transform>(m, "Transform")
+        .def(nb::init<>())
+        .def(nb::init<const glm::vec3&, const glm::vec3&, const glm::vec3&>(),
+             "position"_a = glm::vec3(0.0f), "rotation"_a = glm::vec3(0.0f), "scale"_a = glm::vec3(1.0f))
+        .def(nb::init<const glm::vec3&, const glm::quat&, const glm::vec3&>(),
+             "position"_a = glm::vec3(0.0f), "orientation"_a = glm::quat(1.0f, 0.0f, 0.0f, 0.0f), "scale"_a = glm::vec3(1.0f))
+        .def_prop_rw("position",
+            [](engine::Transform& t) -> glm::vec3& { return t.position; },
+            [](engine::Transform& t, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    t.position = nb::cast<glm::vec3>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) t.position = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("rotation",
+            [](engine::Transform& t) -> glm::vec3& {
+                t.sync_euler_from_orientation();
+                return t.rotation_euler;
+            },
+            [](engine::Transform& t, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    t.set_rotation(nb::cast<glm::vec3>(val));
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) t.set_rotation(seq[0], seq[1], seq[2]);
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("orientation",
+            [](engine::Transform& t) -> glm::quat& { return t.orientation; },
+            [](engine::Transform& t, const nb::object& val) {
+                if (nb::isinstance<glm::quat>(val)) {
+                    t.set_orientation(nb::cast<glm::quat>(val));
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 4) t.set_orientation(glm::quat(seq[0], seq[1], seq[2], seq[3]));
+                }
+            }, nb::rv_policy::reference_internal)
+        .def_prop_rw("scale",
+            [](engine::Transform& t) -> glm::vec3& { return t.scale; },
+            [](engine::Transform& t, const nb::object& val) {
+                if (nb::isinstance<glm::vec3>(val)) {
+                    t.scale = nb::cast<glm::vec3>(val);
+                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
+                    auto seq = nb::cast<std::vector<float>>(val);
+                    if (seq.size() >= 3) t.scale = { seq[0], seq[1], seq[2] };
+                }
+            }, nb::rv_policy::reference_internal)
+        .def("set_position", nb::overload_cast<float, float, float>(&engine::Transform::set_position), "x"_a, "y"_a, "z"_a)
+        .def("set_rotation", nb::overload_cast<float, float, float>(&engine::Transform::set_rotation), "rx"_a, "ry"_a, "rz"_a)
+        .def("set_scale", nb::overload_cast<float, float, float>(&engine::Transform::set_scale), "sx"_a, "sy"_a, "sz"_a)
+        .def("translate", &engine::Transform::translate, "v"_a)
+        .def("rotate_x", &engine::Transform::rotate_x, "deg"_a)
+        .def("rotate_y", &engine::Transform::rotate_y, "deg"_a)
+        .def("rotate_z", &engine::Transform::rotate_z, "deg"_a)
+        .def("rotate_on_axis", &engine::Transform::rotate_on_axis, "axis"_a, "deg"_a)
+        .def("look_at", &engine::Transform::look_at, "target"_a, "up"_a = glm::vec3(0.0f, 1.0f, 0.0f))
+        .def("set_orientation", &engine::Transform::set_orientation, "q"_a)
+        .def("get_orientation", &engine::Transform::get_orientation)
+        .def("model_matrix", &engine::Transform::model_matrix)
+        .def("normal_matrix", &engine::Transform::normal_matrix);
+
+    // -----------------------------------------------------------------------
+    // Node3D & Group
+    // -----------------------------------------------------------------------
+    nb::class_<engine::Node3D>(m, "Node3D")
+        .def(nb::init<const std::string&>(), "name"_a = "Node3D")
+        .def_rw("id", &engine::Node3D::id)
+        .def_rw("uuid", &engine::Node3D::uuid)
+        .def_rw("name", &engine::Node3D::name)
+        .def_rw("tag", &engine::Node3D::tag)
+        .def_rw("visible", &engine::Node3D::visible)
+        .def_rw("cast_shadows", &engine::Node3D::cast_shadows)
+        .def_rw("receive_shadows", &engine::Node3D::receive_shadows)
+        .def_rw("layers", &engine::Node3D::layers)
+        .def_rw("transform", &engine::Node3D::transform)
+        .def_prop_ro("parent", &engine::Node3D::parent, nb::rv_policy::reference)
+        .def_prop_ro("children", &engine::Node3D::children)
+        .def("add", &engine::Node3D::add, "child"_a)
+        .def("remove", &engine::Node3D::remove, "child"_a)
+        .def("remove_from_parent", &engine::Node3D::remove_from_parent)
+        .def("clear", &engine::Node3D::clear)
+        .def("get_by_name", &engine::Node3D::get_by_name, "name"_a)
+        .def("find_all_by_tag", &engine::Node3D::find_all_by_tag, "tag"_a)
+        .def("world_matrix", &engine::Node3D::world_matrix)
+        .def("world_position", &engine::Node3D::world_position)
+        .def("world_orientation", &engine::Node3D::world_orientation)
+        .def("world_direction", &engine::Node3D::world_direction)
+        .def("world_to_local", &engine::Node3D::world_to_local, "point"_a)
+        .def("local_to_world", &engine::Node3D::local_to_world, "point"_a)
+        .def("world_aabb", &engine::Node3D::world_aabb);
+
+    nb::class_<engine::Group, engine::Node3D>(m, "Group")
+        .def(nb::init<const std::string&>(), "name"_a = "Group");
+
+    // -----------------------------------------------------------------------
     // InstancedMesh
     // -----------------------------------------------------------------------
     nb::class_<engine::InstanceData>(m, "InstanceData")
         .def(nb::init<>())
         .def_rw("color", &engine::InstanceData::color);
 
-    nb::class_<engine::InstancedMesh>(m, "InstancedMesh")
+    nb::class_<engine::InstancedMesh, engine::Node3D>(m, "InstancedMesh")
         .def(nb::init<std::shared_ptr<engine::Mesh>, size_t>(),
              "mesh"_a = nullptr, "count"_a = 0)
         .def_rw("mesh", &engine::InstancedMesh::mesh)
@@ -502,48 +708,9 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("set_uv_offset", &engine::Material::set_uv_offset, "u"_a, "v"_a);
 
     // -----------------------------------------------------------------------
-    // Transform
-    // -----------------------------------------------------------------------
-    nb::class_<engine::Transform>(m, "Transform")
-        .def(nb::init<>())
-        .def_prop_rw("position",
-            [](engine::Transform& t) -> glm::vec3& { return t.position; },
-            [](engine::Transform& t, const nb::object& val) {
-                if (nb::isinstance<glm::vec3>(val)) {
-                    t.position = nb::cast<glm::vec3>(val);
-                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
-                    auto seq = nb::cast<std::vector<float>>(val);
-                    if (seq.size() >= 3) t.position = { seq[0], seq[1], seq[2] };
-                }
-            }, nb::rv_policy::reference_internal)
-        .def_prop_rw("rotation",
-            [](engine::Transform& t) -> glm::vec3& { return t.rotation; },
-            [](engine::Transform& t, const nb::object& val) {
-                if (nb::isinstance<glm::vec3>(val)) {
-                    t.rotation = nb::cast<glm::vec3>(val);
-                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
-                    auto seq = nb::cast<std::vector<float>>(val);
-                    if (seq.size() >= 3) t.rotation = { seq[0], seq[1], seq[2] };
-                }
-            }, nb::rv_policy::reference_internal)
-        .def_prop_rw("scale",
-            [](engine::Transform& t) -> glm::vec3& { return t.scale; },
-            [](engine::Transform& t, const nb::object& val) {
-                if (nb::isinstance<glm::vec3>(val)) {
-                    t.scale = nb::cast<glm::vec3>(val);
-                } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
-                    auto seq = nb::cast<std::vector<float>>(val);
-                    if (seq.size() >= 3) t.scale = { seq[0], seq[1], seq[2] };
-                }
-            }, nb::rv_policy::reference_internal)
-        .def("set_position", &engine::Transform::set_position, "x"_a, "y"_a, "z"_a)
-        .def("set_rotation", &engine::Transform::set_rotation, "rx"_a, "ry"_a, "rz"_a)
-        .def("set_scale", &engine::Transform::set_scale, "sx"_a, "sy"_a, "sz"_a);
-
-    // -----------------------------------------------------------------------
     // Camera
     // -----------------------------------------------------------------------
-    nb::class_<engine::Camera>(m, "Camera")
+    nb::class_<engine::Camera, engine::Node3D>(m, "Camera")
         .def(nb::init<>())
         .def_prop_rw("position",
             [](engine::Camera& c) -> glm::vec3& { return c.position; },
@@ -580,6 +747,7 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_rw("far_plane", &engine::Camera::far_plane)
         .def_rw("yaw", &engine::Camera::yaw)
         .def_rw("pitch", &engine::Camera::pitch)
+        .def("set_perspective", &engine::Camera::set_perspective, "fov"_a, "aspect"_a, "near_z"_a, "far_z"_a)
         .def("set_position", &engine::Camera::set_position, "x"_a, "y"_a, "z"_a)
         .def("set_target", &engine::Camera::set_target, "x"_a, "y"_a, "z"_a)
         .def("rotate", &engine::Camera::rotate, "delta_yaw"_a, "delta_pitch"_a)
@@ -589,27 +757,38 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def("move_up", &engine::Camera::move_up, "distance"_a)
         .def("forward", &engine::Camera::forward)
         .def("right", &engine::Camera::right)
+        .def("view_matrix", &engine::Camera::view_matrix)
+        .def("projection_matrix", &engine::Camera::projection_matrix)
+        .def("view_projection_matrix", &engine::Camera::view_projection_matrix)
         .def("screen_to_ray", &engine::Camera::screen_to_ray,
              "mouse_x"_a, "mouse_y"_a, "screen_w"_a, "screen_h"_a);
 
     // -----------------------------------------------------------------------
-    // DirectionalLight
+    // Light & DirectionalLight
     // -----------------------------------------------------------------------
-    nb::class_<engine::DirectionalLight>(m, "DirectionalLight")
-        .def(nb::init<>())
+    nb::enum_<engine::LightType>(m, "LightType")
+        .value("Directional", engine::LightType::Directional)
+        .value("Point", engine::LightType::Point)
+        .value("Spot", engine::LightType::Spot)
+        .export_values();
+
+    nb::class_<engine::Light, engine::Node3D>(m, "Light")
+        .def(nb::init<const std::string&, engine::LightType>(), "name"_a = "Light", "type"_a = engine::LightType::Directional)
+        .def_rw("type", &engine::Light::type)
         .def_prop_rw("direction",
-            [](engine::DirectionalLight& l) -> glm::vec3& { return l.direction; },
-            [](engine::DirectionalLight& l, const nb::object& val) {
+            [](engine::Light& l) -> glm::vec3& { return l.direction; },
+            [](engine::Light& l, const nb::object& val) {
                 if (nb::isinstance<glm::vec3>(val)) {
-                    l.direction = glm::normalize(nb::cast<glm::vec3>(val));
+                    auto v = nb::cast<glm::vec3>(val);
+                    l.set_direction(v.x, v.y, v.z);
                 } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
                     auto seq = nb::cast<std::vector<float>>(val);
-                    if (seq.size() >= 3) l.direction = glm::normalize(glm::vec3(seq[0], seq[1], seq[2]));
+                    if (seq.size() >= 3) l.set_direction(seq[0], seq[1], seq[2]);
                 }
             }, nb::rv_policy::reference_internal)
         .def_prop_rw("color",
-            [](engine::DirectionalLight& l) -> glm::vec3& { return l.color; },
-            [](engine::DirectionalLight& l, const nb::object& val) {
+            [](engine::Light& l) -> glm::vec3& { return l.color; },
+            [](engine::Light& l, const nb::object& val) {
                 if (nb::isinstance<glm::vec3>(val)) {
                     l.color = nb::cast<glm::vec3>(val);
                 } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
@@ -618,8 +797,8 @@ NB_MODULE(_VelocityEngine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_prop_rw("ambient",
-            [](engine::DirectionalLight& l) -> glm::vec3& { return l.ambient; },
-            [](engine::DirectionalLight& l, const nb::object& val) {
+            [](engine::Light& l) -> glm::vec3& { return l.ambient; },
+            [](engine::Light& l, const nb::object& val) {
                 if (nb::isinstance<glm::vec3>(val)) {
                     l.ambient = nb::cast<glm::vec3>(val);
                 } else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
@@ -628,8 +807,8 @@ NB_MODULE(_VelocityEngine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_prop_rw("ambient_sky",
-            [](engine::DirectionalLight& l) -> glm::vec3& { return l.ambient_sky; },
-            [](engine::DirectionalLight& l, const nb::object& val) {
+            [](engine::Light& l) -> glm::vec3& { return l.ambient_sky; },
+            [](engine::Light& l, const nb::object& val) {
                 if (nb::isinstance<glm::vec3>(val)) l.ambient_sky = nb::cast<glm::vec3>(val);
                 else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
                     auto seq = nb::cast<std::vector<float>>(val);
@@ -637,30 +816,35 @@ NB_MODULE(_VelocityEngine_core, m) {
                 }
             }, nb::rv_policy::reference_internal)
         .def_prop_rw("ambient_ground",
-            [](engine::DirectionalLight& l) -> glm::vec3& { return l.ambient_ground; },
-            [](engine::DirectionalLight& l, const nb::object& val) {
+            [](engine::Light& l) -> glm::vec3& { return l.ambient_ground; },
+            [](engine::Light& l, const nb::object& val) {
                 if (nb::isinstance<glm::vec3>(val)) l.ambient_ground = nb::cast<glm::vec3>(val);
                 else if (nb::isinstance<nb::tuple>(val) || nb::isinstance<nb::list>(val)) {
                     auto seq = nb::cast<std::vector<float>>(val);
                     if (seq.size() >= 3) l.ambient_ground = { seq[0], seq[1], seq[2] };
                 }
             }, nb::rv_policy::reference_internal)
-        .def_rw("intensity", &engine::DirectionalLight::intensity)
-        .def_rw("shininess", &engine::DirectionalLight::shininess)
-        .def("set_direction", &engine::DirectionalLight::set_direction, "x"_a, "y"_a, "z"_a)
-        .def("set_color", &engine::DirectionalLight::set_color, "r"_a, "g"_a, "b"_a)
-        .def("set_ambient", &engine::DirectionalLight::set_ambient, "r"_a, "g"_a, "b"_a)
-        .def("set_hemispheric_ambient", &engine::DirectionalLight::set_hemispheric_ambient,
-             "sr"_a, "sg"_a, "sb"_a, "gr"_a, "gg"_a, "gb"_a);
+        .def_rw("intensity", &engine::Light::intensity)
+        .def_rw("shininess", &engine::Light::shininess)
+        .def_rw("range", &engine::Light::range)
+        .def("set_direction", &engine::Light::set_direction, "x"_a, "y"_a, "z"_a)
+        .def("set_color", &engine::Light::set_color, "r"_a, "g"_a, "b"_a)
+        .def("set_ambient", &engine::Light::set_ambient, "r"_a, "g"_a, "b"_a)
+        .def("set_hemispheric_ambient", &engine::Light::set_hemispheric_ambient,
+             "sr"_a, "sg"_a, "sb"_a, "gr"_a, "gg"_a, "gb"_a)
+        .def("get_world_direction", &engine::Light::get_world_direction)
+        .def("get_world_position", &engine::Light::get_world_position);
+
+    nb::class_<engine::DirectionalLight, engine::Light>(m, "DirectionalLight")
+        .def(nb::init<>())
+        .def(nb::init<const std::string&>(), "name"_a = "DirectionalLight");
 
     // -----------------------------------------------------------------------
     // Entity
     // -----------------------------------------------------------------------
-    nb::class_<engine::Entity>(m, "Entity")
-        .def_ro("id", &engine::Entity::id)
-        .def_rw("name", &engine::Entity::name)
-        .def_rw("visible", &engine::Entity::visible)
-        .def_rw("transform", &engine::Entity::transform)
+    nb::class_<engine::Entity, engine::Node3D>(m, "Entity")
+        .def(nb::init<>())
+        .def(nb::init<uint32_t, const std::string&>(), "id"_a = 0, "name"_a = "Entity")
         .def_rw("mesh", &engine::Entity::mesh)
         .def_rw("material", &engine::Entity::material)
         .def_prop_rw("color",
@@ -676,7 +860,6 @@ NB_MODULE(_VelocityEngine_core, m) {
             }, nb::rv_policy::reference_internal)
         .def_rw("has_collision", &engine::Entity::has_collision)
         .def_rw("collision_scale", &engine::Entity::collision_scale)
-        .def_rw("cast_shadows", &engine::Entity::cast_shadows)
         .def_rw("script_path", &engine::Entity::script_path)
         .def_prop_rw("collision_padding",
             [](engine::Entity& e) -> glm::vec3& { return e.collision_padding; },
@@ -771,11 +954,27 @@ NB_MODULE(_VelocityEngine_core, m) {
         .def_prop_ro("instanced_meshes", [](engine::Scene& s) -> const std::vector<std::shared_ptr<engine::InstancedMesh>>& {
             return s.instanced_meshes();
         })
+        .def_prop_ro("root_node", &engine::Scene::root_node)
         .def("add", [](engine::Scene& s, const nb::object& obj) {
-            if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
+            if (nb::isinstance<std::shared_ptr<engine::Node3D>>(obj)) {
+                s.add(nb::cast<std::shared_ptr<engine::Node3D>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
                 s.add_entity(nb::cast<std::shared_ptr<engine::Entity>>(obj));
             } else if (nb::isinstance<std::shared_ptr<engine::InstancedMesh>>(obj)) {
                 s.add_instanced_mesh(nb::cast<std::shared_ptr<engine::InstancedMesh>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::Light>>(obj)) {
+                s.add_light(nb::cast<std::shared_ptr<engine::Light>>(obj));
+            }
+        }, "obj"_a)
+        .def("remove", [](engine::Scene& s, const nb::object& obj) {
+            if (nb::isinstance<std::shared_ptr<engine::Node3D>>(obj)) {
+                s.remove(nb::cast<std::shared_ptr<engine::Node3D>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::Entity>>(obj)) {
+                s.remove_entity(nb::cast<std::shared_ptr<engine::Entity>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::InstancedMesh>>(obj)) {
+                s.remove_instanced_mesh(nb::cast<std::shared_ptr<engine::InstancedMesh>>(obj));
+            } else if (nb::isinstance<std::shared_ptr<engine::Light>>(obj)) {
+                s.remove_light(nb::cast<std::shared_ptr<engine::Light>>(obj));
             }
         }, "obj"_a);
 
@@ -967,6 +1166,10 @@ NB_MODULE(_VelocityEngine_core, m) {
             app.submit_ui_commands(cmds);
         }, "cmds"_a)
         .def("clear_ui_commands", &engine::EngineApp::clear_ui_commands)
-        .def_prop_ro("custom_ui_commands", &engine::EngineApp::custom_ui_commands);
+        .def_prop_ro("custom_ui_commands", &engine::EngineApp::custom_ui_commands)
+        .def("evaluate_frustum_culling", &engine::EngineApp::evaluate_frustum_culling)
+        .def_prop_ro("stats", [](engine::EngineApp& app) -> const engine::RenderStats& {
+            return app.stats();
+        }, nb::rv_policy::reference_internal);
 }
 

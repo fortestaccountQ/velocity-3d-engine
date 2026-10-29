@@ -273,9 +273,9 @@ void EditorManager::render_inspector_panel() {
                 t.position = pos;
             }
 
-            glm::vec3 rot = t.rotation;
+            glm::vec3 rot = t.rotation();
             if (ImGui::DragFloat3("Rotation (deg)", &rot.x, 0.5f)) {
-                t.rotation = rot;
+                t.set_rotation(rot);
             }
 
             glm::vec3 scale = t.scale;
@@ -349,7 +349,7 @@ void EditorManager::render_perf_overlay(float dt) {
     if (ImGui::Begin("PerfOverlay", nullptr, flags)) {
         float fps = (dt > 0.0f) ? (1.0f / dt) : 60.0f;
         ImGui::Text("FPS: %.1f (%.2f ms)", fps, dt * 1000.0f);
-        ImGui::Text("Entities: %zu | Samples: %d MSAA", app_.scene().entities().size(), sapp_sample_count());
+        ImGui::Text("Entities: %zu | Draws: %u | Culled: %u", app_.scene().entities().size(), app_.stats().draw_calls, app_.stats().culled_objects);
     }
     ImGui::End();
 }

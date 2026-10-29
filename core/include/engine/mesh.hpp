@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "engine/physics.hpp"
+#include "engine/node3d.hpp"
 
 namespace engine {
 
@@ -86,9 +87,9 @@ public:
     static std::shared_ptr<Mesh> create_cube();
 };
 
-class InstancedMesh : public IInstancedMesh {
+class InstancedMesh : public Node3D, public IInstancedMesh {
 public:
-    InstancedMesh() = default;
+    InstancedMesh() : Node3D("InstancedMesh") {}
     explicit InstancedMesh(std::shared_ptr<Mesh> base_mesh, size_t initial_count = 0);
     ~InstancedMesh() override;
 

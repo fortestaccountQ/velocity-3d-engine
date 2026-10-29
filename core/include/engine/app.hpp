@@ -7,6 +7,7 @@
 #include <memory>
 
 #include <glm/glm.hpp>
+#include "engine/math_types.hpp"
 #include "engine/transform.hpp"
 #include "engine/camera.hpp"
 #include "engine/scene.hpp"
@@ -107,6 +108,11 @@ public:
     void set_debug_hitboxes(bool enable) { show_debug_hitboxes_ = enable; }
     void toggle_debug_hitboxes() { show_debug_hitboxes_ = !show_debug_hitboxes_; }
     bool is_debug_hitboxes() const { return show_debug_hitboxes_; }
+
+    // Render statistics
+    const RenderStats& stats() const { return stats_; }
+    RenderStats& stats() { return stats_; }
+    void evaluate_frustum_culling();
 
     // Fog and Tone Mapping
     void set_linear_fog(const glm::vec3& color, float near_dist, float far_dist) {
@@ -231,6 +237,9 @@ private:
     float fog_far_{100.0f};
     float fog_density_{0.01f};
     bool tone_mapping_enabled_{true};
+
+    // Render statistics
+    RenderStats stats_{};
 };
 
 } // namespace engine

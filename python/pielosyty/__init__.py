@@ -43,6 +43,21 @@ RaycastHit = _core.RaycastHit
 InstancedMesh = getattr(_core, "InstancedMesh", None)
 InstanceData = getattr(_core, "InstanceData", None)
 
+# Phase 1: Math & Scene Graph types
+Node3D = getattr(_core, "Node3D", None)
+Mat4 = getattr(_core, "Mat4", None)
+Quat = getattr(_core, "Quat", None)
+Plane = getattr(_core, "Plane", None)
+Frustum = getattr(_core, "Frustum", None)
+RenderStats = getattr(_core, "RenderStats", None)
+Light = getattr(_core, "Light", None)
+LightType = getattr(_core, "LightType", None)
+quat_from_euler = getattr(_core, "quat_from_euler", None)
+quat_to_euler = getattr(_core, "quat_to_euler", None)
+quat_from_axis_angle = getattr(_core, "quat_from_axis_angle", None)
+quat_look_rotation = getattr(_core, "quat_look_rotation", None)
+quat_slerp = getattr(_core, "quat_slerp", None)
+
 # UI Commands contract (Phase 0.1)
 UICommandType = getattr(_core, "UICommandType", None)
 UICommand = getattr(_core, "UICommand", None)
@@ -101,7 +116,11 @@ if UICommand is None:
     from .ui import UICommand  # type: ignore
 
 from .fog import Fog, FogExp2
-from .group import Group
+NativeGroup = getattr(_core, "Group", None)
+if NativeGroup is not None:
+    Group = NativeGroup
+else:
+    from .group import Group
 from .scene_factory import (
     SceneFactory,
     create_box,
@@ -261,4 +280,18 @@ __all__ = [
     "metal",
     "plastic",
     "rubber",
+    # Phase 1: Math & Scene Graph
+    "Node3D",
+    "Mat4",
+    "Quat",
+    "Plane",
+    "Frustum",
+    "RenderStats",
+    "Light",
+    "LightType",
+    "quat_from_euler",
+    "quat_to_euler",
+    "quat_from_axis_angle",
+    "quat_look_rotation",
+    "quat_slerp",
 ]

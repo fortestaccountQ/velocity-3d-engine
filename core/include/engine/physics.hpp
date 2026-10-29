@@ -17,6 +17,16 @@ struct AABB {
     AABB() = default;
     AABB(const glm::vec3& min_p, const glm::vec3& max_p)
         : min_point(min_p), max_point(max_p) {}
+    AABB(const std::pair<glm::vec3, glm::vec3>& p)
+        : min_point(p.first), max_point(p.second) {}
+
+    operator std::pair<glm::vec3, glm::vec3>() const {
+        return { min_point, max_point };
+    }
+
+    std::pair<glm::vec3, glm::vec3> to_pair() const {
+        return { min_point, max_point };
+    }
 
     bool is_valid() const {
         return min_point.x <= max_point.x &&

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/node3d.hpp"
 #include "engine/transform.hpp"
 #include "engine/mesh.hpp"
 #include "engine/material.hpp"
@@ -9,27 +10,34 @@
 
 namespace engine {
 
-class Entity {
+class Entity : public Node3D {
 public:
-    uint32_t id{0};
-    std::string name{"Entity"};
-    Transform transform;
     glm::mat4 local_matrix{1.0f};
     std::shared_ptr<Entity> parent{nullptr};
 
     std::shared_ptr<Mesh> mesh{nullptr};
     std::shared_ptr<Material> material{nullptr};
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
-    bool visible{true};
     std::string script_path{""};
 
-    Entity(uint32_t id, const std::string& name = "Entity")
-        : id(id), name(name) {}
+    bool has_collision{true};
+    float collision_scale{1.0f};
+    glm::vec3 collision_padding{0.0f};
+
+    Entity(uint32_t ent_id = 0, const std::string& ent_name = "Entity")
+        : Node3D(ent_name) {
+        if (ent_id != 0) {
+            id = ent_id;
+        }
+    }
 
     glm::mat4 world_model_matrix() const {
         glm::mat4 self_m = transform.model_matrix() * local_matrix;
         if (parent) {
             return parent->world_model_matrix() * self_m;
+        }
+        if (parent_) {
+            return parent_->world_model_matrix() * self_m;
         }
         return self_m;
     }
@@ -38,11 +46,6 @@ public:
         glm::mat3 m3 = glm::mat3(world_model_matrix());
         return glm::mat4(glm::transpose(glm::inverse(m3)));
     }
-
-    bool has_collision{true};
-    float collision_scale{1.0f};
-    glm::vec3 collision_padding{0.0f};
-    bool cast_shadows{true};
 
     AABB local_collision_box() const {
         if (!mesh || !mesh->local_aabb.is_valid()) {
@@ -64,14 +67,14 @@ public:
         std::array<glm::vec3, 8> corners{};
         if (!lbox.is_valid()) return corners;
 
-        glm::vec3 min = lbox.min_point;
-        glm::vec3 max = lbox.max_point;
+        glm::vec3 min_p = lbox.min_point;
+        glm::vec3 max_p = lbox.max_point;
 
         glm::vec3 lc[8] = {
-            { min.x, min.y, min.z }, { max.x, min.y, min.z },
-            { max.x, max.y, min.z }, { min.x, max.y, min.z },
-            { min.x, min.y, max.z }, { max.x, min.y, max.z },
-            { max.x, max.y, max.z }, { min.x, max.y, max.z }
+            { min_p.x, min_p.y, min_p.z }, { max_p.x, min_p.y, min_p.z },
+            { max_p.x, max_p.y, min_p.z }, { min_p.x, max_p.y, min_p.z },
+            { min_p.x, min_p.y, max_p.z }, { max_p.x, min_p.y, max_p.z },
+            { max_p.x, max_p.y, max_p.z }, { min_p.x, max_p.y, max_p.z }
         };
 
         glm::mat4 model = world_model_matrix();
@@ -81,10 +84,10 @@ public:
         return corners;
     }
 
-    AABB world_aabb() const {
+    AABB world_aabb() const override {
         AABB lbox = local_collision_box();
         if (!lbox.is_valid()) {
-            return AABB{};
+            return AABB{ world_position(), world_position() };
         }
         return lbox.transformed(world_model_matrix());
     }

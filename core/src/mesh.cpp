@@ -375,7 +375,7 @@ std::shared_ptr<Mesh> Mesh::create_custom(
 // InstancedMesh Implementation
 // ---------------------------------------------------------------------------
 InstancedMesh::InstancedMesh(std::shared_ptr<Mesh> base_mesh, size_t initial_count)
-    : mesh(std::move(base_mesh)) {
+    : Node3D("InstancedMesh"), mesh(std::move(base_mesh)) {
     if (initial_count > 0) {
         instances.resize(initial_count);
     }
