@@ -180,8 +180,8 @@ MATERIAL_PRESETS: Dict[str, MaterialConfig] = {
     ),
     "vehicle": MaterialConfig(
         name="vehicle",
-        roughness=0.25,
-        metallic=0.15,
+        roughness=0.22,
+        metallic=0.20,
         base_color=(1.0, 1.0, 1.0, 1.0),
         uv_scale=(1.0, 1.0),
         is_pixel_art=True,
@@ -1555,7 +1555,7 @@ class CrossyTextureGenerator(TextureGeneratorContract):
         elif clean in ("car_grille", "grille"):
             return create_car_grille_image(size=size)
         elif clean in ("vehicle", "car", "truck"):
-            return create_car_grille_image(size=size)
+            return create_car_paint_image(size=size)
         elif clean in ("duck", "feathers", "player"):
             return create_duck_image(size=size)
         elif clean in ("tree_leaves", "leaves", "foliage"):
@@ -1642,9 +1642,12 @@ def ensure_textures_generated(assets_dir: Optional[Union[str, Path]] = None) -> 
     filepaths["gravel"] = filepaths["rail_gravel"]
     filepaths["gravel_64"] = filepaths["rail_gravel_64"]
     filepaths["gravel_128"] = filepaths["rail_gravel_128"]
-    filepaths["vehicle"] = filepaths["car_grille"]
-    filepaths["vehicle_64"] = filepaths["car_grille_64"]
-    filepaths["vehicle_128"] = filepaths["car_grille_128"]
+    filepaths["vehicle"] = filepaths["car_paint"]
+    filepaths["vehicle_64"] = filepaths["car_paint_64"]
+    filepaths["vehicle_128"] = filepaths["car_paint_128"]
+    filepaths["car"] = filepaths["car_paint"]
+    filepaths["car_64"] = filepaths["car_paint_64"]
+    filepaths["car_128"] = filepaths["car_paint_128"]
     filepaths["paint"] = filepaths["car_paint"]
     filepaths["paint_64"] = filepaths["car_paint_64"]
     filepaths["paint_128"] = filepaths["car_paint_128"]
@@ -1816,9 +1819,9 @@ class TextureRegistry(MaterialPaletteContract):
         clean = name.lower().strip()
         alias_map = {
             "gravel": "rail_gravel",
-            "vehicle": "car_grille",
-            "car": "car_grille",
-            "truck": "car_grille",
+            "vehicle": "vehicle",
+            "car": "vehicle",
+            "truck": "vehicle",
             "lawn": "grass",
             "meadow": "grass",
             "road": "asphalt",

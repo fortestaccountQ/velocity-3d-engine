@@ -386,11 +386,11 @@ def main() -> None:
     # Infinite World Atmospheric Depth Fog (seamless horizon blending)
     try:
         from VelocityEngine.fog import Fog
-        app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=54.0)
+        app.fog = Fog(color=Color.from_hex("#70b0e0"), near=34.0, far=60.0)
     except Exception:
         try:
             from VelocityEngine import Fog
-            app.fog = Fog(color=Color.from_hex("#70b0e0"), near=32.0, far=54.0)
+            app.fog = Fog(color=Color.from_hex("#70b0e0"), near=34.0, far=60.0)
         except Exception:
             pass
 

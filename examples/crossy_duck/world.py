@@ -140,18 +140,22 @@ COLOR_BEACON_POST = Color.from_hex("#212121")
 
 COLOR_TREE_TRUNK = Color.from_hex("#5d4037")
 COLOR_TREE_FOLIAGE = [
-    Color.from_hex("#2e7d32"),
-    Color.from_hex("#388e3c"),
-    Color.from_hex("#1b5e20"),
+    Color.from_hex("#2e7d32"),  # Rich Emerald
+    Color.from_hex("#388e3c"),  # Vibrant Forest
+    Color.from_hex("#1b5e20"),  # Deep Evergreen
+    Color.from_hex("#43a047"),  # Fresh Clover
+    Color.from_hex("#558b2f"),  # Olive Moss
+    Color.from_hex("#66bb6a"),  # Bright Mint
 ]
 
 COLOR_CAR_PALETTE = [
-    Color.from_hex("#e53935"),  # Cherry Red
-    Color.from_hex("#1e88e5"),  # Sporty Blue
-    Color.from_hex("#fbc02d"),  # Taxi Yellow
-    Color.from_hex("#fb8c00"),  # Vibrant Orange
-    Color.from_hex("#8e24aa"),  # Electric Purple
-    Color.from_hex("#00897b"),  # Mint Teal
+    Color.from_hex("#dc2626"),  # Classic Crimson Red
+    Color.from_hex("#2563eb"),  # Royal Blue
+    Color.from_hex("#eab308"),  # Taxi Yellow
+    Color.from_hex("#ea580c"),  # Tangerine Orange
+    Color.from_hex("#16a34a"),  # Emerald Green
+    Color.from_hex("#0284c7"),  # Sky Blue
+    Color.from_hex("#f8fafc"),  # Arctic White
 ]
 COLOR_HEADLIGHT = Color.from_hex("#fff59d")
 COLOR_CABIN_WINDOW = Color.from_hex("#37474f")
@@ -323,6 +327,17 @@ class CarObstacle(BaseObstacle):
             )
             self.sub_entities.append((cabin, (cabin_ox, 0.36, 0.0)))
 
+            # 2b. Painted Roof Cap (Crossy Road voxel roof)
+            roof = scene.create_box(
+                size=(width * 0.50, 0.06, depth * 0.80),
+                position=(self.x + cabin_ox, self.y + 0.36 + 0.175 + 0.03, self.z),
+                color=car_col,
+                material=veh_mat,
+                cast_shadows=False,
+                name="CarRoof",
+            )
+            self.sub_entities.append((roof, (cabin_ox, 0.36 + 0.175 + 0.03, 0.0)))
+
             # 3. Dedicated Front Grille Decal Plate (facing direction of travel)
             grille_ox = facing_dir * (width * 0.50 + 0.01)
             grille = scene.create_box(
@@ -388,6 +403,26 @@ class CarObstacle(BaseObstacle):
                         name="CarWheel",
                     )
                     self.sub_entities.append((wheel, (wx_dir * width, -0.14, wz_dir * depth)))
+
+            # 7. Front & Rear Chrome Bumpers
+            f_bumper_x = facing_dir * (width * 0.50 + 0.03)
+            f_bumper = scene.create_box(
+                size=(0.06, 0.14, depth * 0.90),
+                position=(self.x + f_bumper_x, self.y - 0.12, self.z),
+                color=Color.from_hex("#cbd5e1"),
+                cast_shadows=False,
+                name="CarFrontBumper",
+            )
+            r_bumper_x = -facing_dir * (width * 0.50 + 0.03)
+            r_bumper = scene.create_box(
+                size=(0.06, 0.14, depth * 0.90),
+                position=(self.x + r_bumper_x, self.y - 0.12, self.z),
+                color=Color.from_hex("#cbd5e1"),
+                cast_shadows=False,
+                name="CarRearBumper",
+            )
+            self.sub_entities.append((f_bumper, (f_bumper_x, -0.12, 0.0)))
+            self.sub_entities.append((r_bumper, (r_bumper_x, -0.12, 0.0)))
 
 
 class TruckObstacle(BaseObstacle):
@@ -538,6 +573,17 @@ class TruckObstacle(BaseObstacle):
                         name="TruckWheel",
                     )
                     self.sub_entities.append((wheel, (wx, -0.42, wz_dir * depth)))
+
+            # 7. Heavy Front Bumper
+            f_bumper_x = cab_ox + facing_dir * (cab_w * 0.50 + 0.03)
+            f_bumper = scene.create_box(
+                size=(0.06, 0.18, depth * 0.92),
+                position=(self.x + f_bumper_x, self.y - 0.32, self.z),
+                color=Color.from_hex("#94a3b8"),
+                cast_shadows=False,
+                name="TruckFrontBumper",
+            )
+            self.sub_entities.append((f_bumper, (f_bumper_x, -0.32, 0.0)))
 
 
 class LogObstacle(BaseObstacle):
@@ -738,7 +784,7 @@ class TrainObstacle(BaseObstacle):
 # Procedural Voxel Tree
 # =============================================================================
 class VoxelTree:
-    """Procedural 2-tier voxel tree (brown trunk + vibrant foliage box)."""
+    """Procedural voxel tree with organic shape variety, layered tiers, and authentic Crossy Road styling."""
 
     def __init__(
         self,
@@ -748,6 +794,8 @@ class VoxelTree:
         scene: Optional[Any] = None,
         material_registry: Optional[Any] = None,
         cast_shadows: bool = True,
+        tree_type: str = "standard",
+        scale: float = 1.0,
     ) -> None:
         self.x: float = float(x)
         self.z: float = float(z)
@@ -760,27 +808,126 @@ class VoxelTree:
         if scene is not None:
             trunk_mat = _get_mat(self.material_registry, "wood_bark")
             foliage_mat = _get_mat(self.material_registry, "tree_leaves")
-
-            trunk = scene.create_box(
-                size=(0.4, 0.7, 0.4),
-                position=(self.x, 0.35, self.z),
-                color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
-                material=trunk_mat,
-                cast_shadows=cast_shadows,
-                has_collision=True,
-                name="TreeTrunk",
-            )
             fol_col = foliage_color if foliage_color is not None else random.choice(COLOR_TREE_FOLIAGE)
-            foliage = scene.create_box(
-                size=(0.92, 1.15, 0.92),
-                position=(self.x, 1.25, self.z),
-                color=fol_col if foliage_mat is None else WHITE,
-                material=foliage_mat,
-                cast_shadows=cast_shadows,
-                has_collision=True,
-                name="TreeFoliage",
-            )
-            self.entities.extend([trunk, foliage])
+
+            if tree_type == "shrub":
+                # Low ground bush / shrub
+                trunk = scene.create_box(
+                    size=(0.30 * scale, 0.30 * scale, 0.30 * scale),
+                    position=(self.x, 0.15 * scale, self.z),
+                    color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                    material=trunk_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeTrunk",
+                )
+                foliage = scene.create_box(
+                    size=(0.95 * scale, 0.65 * scale, 0.95 * scale),
+                    position=(self.x, 0.50 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeFoliage",
+                )
+                self.entities.extend([trunk, foliage])
+
+            elif tree_type == "pine":
+                # 2-tier conical alpine pine tree
+                trunk = scene.create_box(
+                    size=(0.35 * scale, 0.85 * scale, 0.35 * scale),
+                    position=(self.x, 0.425 * scale, self.z),
+                    color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                    material=trunk_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeTrunk",
+                )
+                fol_tier1 = scene.create_box(
+                    size=(1.25 * scale, 0.70 * scale, 1.25 * scale),
+                    position=(self.x, 1.10 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeFoliage",
+                )
+                fol_tier2 = scene.create_box(
+                    size=(0.80 * scale, 0.80 * scale, 0.80 * scale),
+                    position=(self.x, 1.75 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeFoliageTop",
+                )
+                self.entities.extend([trunk, fol_tier1, fol_tier2])
+
+            elif tree_type == "tall":
+                # Tall canopy tree
+                trunk = scene.create_box(
+                    size=(0.40 * scale, 1.40 * scale, 0.40 * scale),
+                    position=(self.x, 0.70 * scale, self.z),
+                    color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                    material=trunk_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeTrunk",
+                )
+                foliage = scene.create_box(
+                    size=(1.15 * scale, 1.25 * scale, 1.15 * scale),
+                    position=(self.x, 1.90 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeFoliage",
+                )
+                self.entities.extend([trunk, foliage])
+
+            elif tree_type == "arch":
+                # Flanking highway/river arch tree (tall clearance so vehicles/logs pass underneath)
+                trunk = scene.create_box(
+                    size=(0.38 * scale, 2.40 * scale, 0.38 * scale),
+                    position=(self.x, 1.20 * scale, self.z),
+                    color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                    material=trunk_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=False,
+                    name="TreeTrunk",
+                )
+                foliage = scene.create_box(
+                    size=(1.50 * scale, 1.20 * scale, 1.50 * scale),
+                    position=(self.x, 2.80 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=False,
+                    name="TreeFoliage",
+                )
+                self.entities.extend([trunk, foliage])
+
+            else:
+                # Default "standard" Crossy Road voxel tree (EXACTLY 2 entities: trunk, foliage)
+                trunk = scene.create_box(
+                    size=(0.4 * scale, 0.7 * scale, 0.4 * scale),
+                    position=(self.x, 0.35 * scale, self.z),
+                    color=COLOR_TREE_TRUNK if trunk_mat is None else WHITE,
+                    material=trunk_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeTrunk",
+                )
+                foliage = scene.create_box(
+                    size=(0.92 * scale, 1.15 * scale, 0.92 * scale),
+                    position=(self.x, 1.25 * scale, self.z),
+                    color=fol_col if foliage_mat is None else WHITE,
+                    material=foliage_mat,
+                    cast_shadows=cast_shadows,
+                    has_collision=True,
+                    name="TreeFoliage",
+                )
+                self.entities.extend([trunk, foliage])
 
     def cleanup(self, scene: Any) -> None:
         if scene is not None:
@@ -850,8 +997,89 @@ BOUNDARY_FOREST_LANES: List[int] = [
 ]
 
 
+def _forest_hash(z: int, lane: int, salt: int = 0) -> int:
+    """Deterministic 32-bit integer hash for procedural forest jitter and tree attributes."""
+    h = ((int(z) * 374761393) ^ (int(lane) * 668265263) ^ (int(salt) * 1442695040888963407 & 0xFFFFFFFF)) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return (h ^ (h >> 16)) & 0x7FFFFFFF
+
+
+def populate_boundary_forest(
+    row: BaseRow,
+    z_index: int,
+    scene: Optional[Any],
+    material_registry: Optional[Any],
+    is_road_or_river: bool = False,
+) -> None:
+    """Generate organic, varied, and layered voxel forest framing the playable corridor."""
+    # Ensure boundary lanes are marked as blocked in row
+    for bx in BOUNDARY_FOREST_LANES:
+        if hasattr(row, "blocked_lanes"):
+            row.blocked_lanes.add(bx)
+    if hasattr(row, "blocked_lanes"):
+        for bx in range(-25, -10):
+            row.blocked_lanes.add(bx)
+        for bx in range(11, 26):
+            row.blocked_lanes.add(bx)
+
+    if scene is None:
+        return
+
+    # Deterministic generation per lane
+    for lane in BOUNDARY_FOREST_LANES:
+        h = _forest_hash(z_index, lane)
+
+        # For road/river rows, flank naturally with arch trees set back
+        if is_road_or_river:
+            if abs(lane) < 14:
+                continue  # Keep road/river shoulder clear of low trunks
+            tree_type = "arch"
+            jitter_x = (((h % 1000) / 1000.0) - 0.5) * 0.40
+            side_sign = 1.0 if (h % 2 == 0) else -1.0
+            tz = float(z_index) + side_sign * 0.24 + ((((h >> 8) % 100) / 100.0) - 0.5) * 0.08
+            tx = float(lane) + jitter_x
+            col_idx = (h >> 16) % len(COLOR_TREE_FOLIAGE)
+            fol_col = COLOR_TREE_FOLIAGE[col_idx]
+            scale = 0.95 + (((h >> 12) % 25) / 100.0)
+            tree = VoxelTree(tx, tz, foliage_color=fol_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type=tree_type, scale=scale)
+            row.entities.extend(tree.entities)
+            continue
+
+        # For grass & start rows: full rich organic forest
+        jitter_x = (((h % 1000) / 1000.0) - 0.5) * 0.44  # +/- 0.22 X jitter
+        jitter_z = ((((h >> 8) % 1000) / 1000.0) - 0.5) * 0.30  # +/- 0.15 Z jitter
+        tx = float(lane) + jitter_x
+        tz = float(z_index) + jitter_z
+
+        type_code = (h >> 16) % 6
+        if type_code == 0:
+            tree_type = "shrub"
+        elif type_code in (1, 2):
+            tree_type = "pine"
+        elif type_code == 3:
+            tree_type = "tall"
+        else:
+            tree_type = "standard"
+
+        col_idx = (h >> 20) % len(COLOR_TREE_FOLIAGE)
+        fol_col = COLOR_TREE_FOLIAGE[col_idx]
+        scale = 0.85 + (((h >> 12) % 35) / 100.0)
+
+        tree = VoxelTree(tx, tz, foliage_color=fol_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type=tree_type, scale=scale)
+        row.entities.extend(tree.entities)
+
+        # Deep forest layering: for lanes far out (abs >= 14), add secondary staggered shrub/tree
+        if abs(lane) >= 14 and ((h >> 24) % 3 == 0):
+            h2 = _forest_hash(z_index, lane, salt=77)
+            stagger_z = tz + (0.32 if (h2 % 2 == 0) else -0.32)
+            stagger_x = tx + (0.30 if (h2 % 3 == 0) else -0.30)
+            sub_col = COLOR_TREE_FOLIAGE[(h2 >> 4) % len(COLOR_TREE_FOLIAGE)]
+            sub_tree = VoxelTree(stagger_x, stagger_z, foliage_color=sub_col, scene=scene, material_registry=material_registry, cast_shadows=False, tree_type="shrub", scale=0.75)
+            row.entities.extend(sub_tree.entities)
+
+
 class StartRow(BaseRow):
-    """Safe starting zone row with wide green ground and authentic voxel boundary trees."""
+    """Safe starting zone row with wide green ground and authentic organic voxel boundary trees."""
 
     def __init__(
         self,
@@ -875,11 +1103,8 @@ class StartRow(BaseRow):
             )
             self.entities.append(ground)
 
-        # Place authentic voxel boundary trees outside playable corridor [-10, 10]
-        for bx in BOUNDARY_FOREST_LANES:
-            self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
-            self.entities.extend(tree.entities)
+        # Populate organic boundary forest outside playable corridor [-10, 10]
+        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=False)
 
     def is_blocked(self, px: float, pz: float) -> bool:
         if abs(pz - self.z_index) <= 0.6:
@@ -917,11 +1142,8 @@ class GrassRow(BaseRow):
             )
             self.entities.append(ground)
 
-        # Dense authentic voxel boundary trees outside playable grid
-        for bx in BOUNDARY_FOREST_LANES:
-            self.blocked_lanes.add(bx)
-            tree = VoxelTree(bx, float(self.z_index), scene=scene, material_registry=self.material_registry, cast_shadows=False)
-            self.entities.extend(tree.entities)
+        # Dense organic voxel boundary trees outside playable grid
+        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=False)
 
         # In-bounds trees: pick 2 to 4 lanes to block, ensuring at least 3 contiguous paths exist
         candidates = list(range(CELL_MIN_X, CELL_MAX_X + 1))
@@ -970,6 +1192,7 @@ class RoadRow(BaseRow):
         place_prev_divider: bool = False,
     ) -> None:
         super().__init__(z_index, RowType.ROAD, scene, material_registry)
+        self.blocked_lanes: Set[int] = set()
         r = rng if rng is not None else random.Random()
 
         # Direction and speed
@@ -1153,6 +1376,14 @@ class RoadRow(BaseRow):
                 )
                 self.obstacles.append(car)
 
+        # 3. Naturally flank road edges with boundary trees
+        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+
+    def is_blocked(self, px: float, pz: float) -> bool:
+        if abs(pz - self.z_index) <= 0.6:
+            return int(round(px)) in self.blocked_lanes
+        return False
+
     def check_player_hazard(self, px: float, pz: float) -> Tuple[bool, Optional[str], Optional[float]]:
         if abs(pz - self.z_index) <= 0.6:
             for obs in self.obstacles:
@@ -1174,6 +1405,7 @@ class RiverRow(BaseRow):
         material_registry: Optional[Any] = None,
     ) -> None:
         super().__init__(z_index, RowType.RIVER, scene, material_registry)
+        self.blocked_lanes: Set[int] = set()
         r = rng if rng is not None else random.Random()
 
         # Water speed direction alternates per river row
@@ -1195,12 +1427,12 @@ class RiverRow(BaseRow):
             )
             self.entities.append(water)
 
-            # Riverbank stone boulders flanking the water channel
-            for rx in [-16.0, 16.0]:
+            # Riverbank stone boulders set back along the shoreline
+            for rx in [-17.0, 17.0]:
                 boulder = scene.create_box(
-                    size=(1.6, 0.55, 0.9),
-                    position=(rx, -0.05, float(self.z_index)),
-                    color=Color.from_hex("#64748b"),
+                    size=(1.5, 0.45, 0.40),
+                    position=(rx, 0.08, float(self.z_index) - 0.38),
+                    color=Color.from_hex("#57756f"),
                     cast_shadows=False,
                     has_collision=False,
                     name=f"RiverBoulder_{z_index}_{int(rx)}",
@@ -1233,6 +1465,14 @@ class RiverRow(BaseRow):
             )
             self.obstacles.append(log)
 
+        # 3. Flank river banks naturally with forest trees
+        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+
+    def is_blocked(self, px: float, pz: float) -> bool:
+        if abs(pz - self.z_index) <= 0.6:
+            return int(round(px)) in self.blocked_lanes
+        return False
+
     def check_player_hazard(self, px: float, pz: float) -> Tuple[bool, Optional[str], Optional[float]]:
         if abs(pz - self.z_index) <= 0.6:
             # Check if player is safely riding any log
@@ -1257,6 +1497,7 @@ class RailRow(BaseRow):
         material_registry: Optional[Any] = None,
     ) -> None:
         super().__init__(z_index, RowType.RAIL, scene, material_registry)
+        self.blocked_lanes: Set[int] = set()
         r = rng if rng is not None else random.Random()
 
         self.cycle_interval: float = float(cycle_interval)
@@ -1388,6 +1629,14 @@ class RailRow(BaseRow):
         )
         self.obstacles.append(self.train)
 
+        # 6. Flank railroad line with boundary trees
+        populate_boundary_forest(self, self.z_index, scene, self.material_registry, is_road_or_river=True)
+
+    def is_blocked(self, px: float, pz: float) -> bool:
+        if abs(pz - self.z_index) <= 0.6:
+            return int(round(px)) in self.blocked_lanes
+        return False
+
     def trigger_train(self, immediate: bool = False) -> None:
         """Trigger warning or instant bullet train pass."""
         if immediate:
@@ -1487,49 +1736,49 @@ class HorizonBackdrop:
             self._build_mountain_range()
 
     def _build_mountain_range(self) -> None:
-        """Construct tiered voxel alpine mountain peaks across the panoramic horizon."""
+        """Construct soft pastel low-poly rolling foothill ridges across the panoramic horizon."""
         if self.scene is None:
             return
 
-        mat_grass = _get_mat(self.material_registry, "grass")
-        mat_rock = _get_mat(self.material_registry, "rail_gravel")
-
-        # 15 Majestic mountain peaks spanning X from -68 to +68
+        # 15 gentle rolling foothill peaks spanning X from -68 to +68 (width >= 132)
         peak_x_positions = [
             -66.0, -56.0, -46.0, -36.0, -26.0, -18.0, -10.0,
             0.0, 10.0, 18.0, 26.0, 36.0, 46.0, 56.0, 66.0,
         ]
 
-        col_base = Color.from_hex("#1b3b24")    # Deep alpine evergreen forest
-        col_crag = Color.from_hex("#475569")    # Slate granite rock
-        col_snow = Color.from_hex("#f8fafc")    # Crisp alpine snow peak
+        # Soft pastel atmospheric palette harmonious with sky fog #70b0e0
+        col_foothill = Color.from_hex("#8ecae6")   # Soft pastel sky azure
+        col_ridge = Color.from_hex("#90e0ef")      # Misty morning cyan
+        col_crest = Color.from_hex("#bde0fe")      # Powder blue summit haze
+        col_snow = Color.from_hex("#f1f5f9")       # Soft alpine snow crest
+        col_soft_pine = Color.from_hex("#88ab98")  # Misty pastel sage pine
+        col_soft_trunk = Color.from_hex("#7c9a92") # Soft slate sage trunk
 
         for i, px in enumerate(peak_x_positions):
-            # Vary dimensions per peak for organic skyline
-            w1 = 14.0 + float((i * 7) % 8)
-            h1 = 6.0 + float((i * 3) % 4)
-            d1 = 8.0 + float((i * 5) % 3)
+            # Gentle, low rolling foothill dimensions
+            w1 = 16.0 + float((i * 7) % 6)
+            h1 = 2.8 + float((i * 3) % 3) * 0.4
+            d1 = 7.0 + float((i * 5) % 3)
 
-            w2 = w1 * 0.65
-            h2 = 7.0 + float((i * 5) % 4)
-            d2 = d1 * 0.70
+            w2 = w1 * 0.70
+            h2 = 2.4 + float((i * 5) % 3) * 0.3
+            d2 = d1 * 0.65
 
             w3 = w2 * 0.55
-            h3 = 5.5 + float((i * 2) % 3)
-            d3 = d2 * 0.65
+            h3 = 1.8 + float((i * 2) % 2) * 0.3
+            d3 = d2 * 0.60
 
-            rel_z = float(((i * 11) % 5) * 1.6)
+            rel_z = float(((i * 11) % 5) * 1.8)
 
             y_base = -0.5 + (h1 * 0.5)
             y_crag = -0.5 + h1 + (h2 * 0.5)
             y_snow = -0.5 + h1 + h2 + (h3 * 0.5)
 
-            # Tier 1: Foothill Forest Base
+            # Tier 1: Soft Rolling Foothill Base
             base_box = self.scene.create_box(
                 size=(w1, h1, d1),
                 position=(px, y_base, self.current_forward_z + rel_z),
-                color=col_base if mat_grass is None else WHITE,
-                material=mat_grass,
+                color=col_foothill,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"HorizonMountainBase_{i}",
@@ -1537,12 +1786,11 @@ class HorizonBackdrop:
             self.entities.append(base_box)
             self.peak_data.append((base_box, px, y_base, rel_z))
 
-            # Tier 2: Granite Crag Body
+            # Tier 2: Misty Pastel Ridge
             crag_box = self.scene.create_box(
                 size=(w2, h2, d2),
                 position=(px, y_crag, self.current_forward_z + rel_z),
-                color=col_crag if mat_rock is None else WHITE,
-                material=mat_rock,
+                color=col_ridge,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"HorizonMountainCrag_{i}",
@@ -1550,11 +1798,11 @@ class HorizonBackdrop:
             self.entities.append(crag_box)
             self.peak_data.append((crag_box, px, y_crag, rel_z))
 
-            # Tier 3: Snow-capped Summit
+            # Tier 3: Soft Blue-White Crest
             snow_box = self.scene.create_box(
                 size=(w3, h3, d3),
                 position=(px, y_snow, self.current_forward_z + rel_z),
-                color=col_snow,
+                color=col_snow if (i % 2 == 0) else col_crest,
                 cast_shadows=False,
                 has_collision=False,
                 name=f"HorizonMountainSnow_{i}",
@@ -1562,29 +1810,29 @@ class HorizonBackdrop:
             self.entities.append(snow_box)
             self.peak_data.append((snow_box, px, y_snow, rel_z))
 
-            # Mountain Shoulder Pine Trees
+            # Soft Misty Pine Silhouettes along shoulder
             for sign in (-1.0, 1.0):
                 tree_x = px + (sign * w1 * 0.35)
-                tree_y = -0.5 + h1 + 0.6
+                tree_y = -0.5 + h1 + 0.5
                 pine_trunk = self.scene.create_box(
-                    size=(0.5, 1.4, 0.5),
+                    size=(0.4, 1.0, 0.4),
                     position=(tree_x, tree_y, self.current_forward_z + rel_z + (sign * 1.5)),
-                    color=Color.from_hex("#3b2413"),
+                    color=col_soft_trunk,
                     cast_shadows=False,
                     has_collision=False,
                     name=f"MountainPineTrunk_{i}_{int(sign)}",
                 )
                 pine_foliage = self.scene.create_box(
-                    size=(1.8, 2.6, 1.8),
-                    position=(tree_x, tree_y + 1.6, self.current_forward_z + rel_z + (sign * 1.5)),
-                    color=Color.from_hex("#14321d"),
+                    size=(1.5, 1.8, 1.5),
+                    position=(tree_x, tree_y + 1.2, self.current_forward_z + rel_z + (sign * 1.5)),
+                    color=col_soft_pine,
                     cast_shadows=False,
                     has_collision=False,
                     name=f"MountainPineFoliage_{i}_{int(sign)}",
                 )
                 self.entities.extend([pine_trunk, pine_foliage])
                 self.peak_data.append((pine_trunk, tree_x, tree_y, rel_z + (sign * 1.5)))
-                self.peak_data.append((pine_foliage, tree_x, tree_y + 1.6, rel_z + (sign * 1.5)))
+                self.peak_data.append((pine_foliage, tree_x, tree_y + 1.2, rel_z + (sign * 1.5)))
 
 
 
@@ -1774,7 +2022,7 @@ class WorldGenerator:
             self._clump_remaining -= 1
 
         if getattr(self, "backdrop", None) is not None:
-            self.backdrop.update(float(target_z + 4.0))
+            self.backdrop.update(float(target_z + 28.0))
 
     def prune_behind(self, player_z: int, keep_behind: int = 8) -> None:
         """Remove and cleanup rows behind player_z - keep_behind to maintain 500+ FPS."""
