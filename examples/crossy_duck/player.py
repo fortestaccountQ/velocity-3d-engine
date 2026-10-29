@@ -21,6 +21,7 @@ from contracts.crossy_contracts import (
     GRID_STEP,
     CELL_MIN_X,
     CELL_MAX_X,
+    RowType,
     PlayerStatus,
     PlayerControllerContract,
     WorldRowContract,
