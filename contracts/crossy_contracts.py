@@ -1,4 +1,4 @@
-"""Crossy Duck: Data Contracts and Protocol Specifications for GOF Mode 3 Swarm.
+"""Crossy Duck: Data Contracts and Protocol Specifications.
 
 Defines the rigid interface boundaries between:
   1. World Generation System (world.py)

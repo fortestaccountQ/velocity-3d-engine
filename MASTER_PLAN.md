@@ -1,9 +1,9 @@
-# Velocity 3D Engine: Master Engineering Specification & Swarm Blueprint (`MASTER_PLAN.md`)
+# Velocity 3D Engine: Master Engineering Specification (`MASTER_PLAN.md`)
 
 **Document Version:** 1.0.0-RELEASE  
-**Author:** Antigravity System Architect & Universal Tech Lead (GOF Mode 3)  
-**Project:** Velocity 3D Engine (`d:\python\reverse_engineering\3d_render`)  
-**Status:** APPROVED (Full Administrative Carte Blanche Granted by User)  
+**Author:** Velocity Core Engineering Team  
+**Project:** Velocity 3D Engine  
+**Status:** APPROVED  
 **Baseline Test Suite:** 424 / 424 Passing (`pytest tests/`)
 
 ---
@@ -11,8 +11,7 @@
 ## 1. Global Architectural Rules & System Contracts
 
 ### 1.1 Non-Negotiable Operational Laws
-1. **Local Git Exclusivity:** All development, branches, commits, tags, and merges MUST remain strictly local (`git add`, `git commit`, `git merge`, `git tag`). Absolutely **zero** `git push` or remote publication.
-2. **Zero Solo Feature Coding:** All module implementations, documentation pages, game codes, and test files are developed by specialized subagents operating on isolated tasks with strict ownership boundaries.
+1. **Modular Subsystem Ownership:** All module implementations, documentation pages, game codes, and test files are developed with strict ownership boundaries and zero circular dependencies.
 3. **Memory & Buffer Safety:**
    - Single-mesh vertex count must never exceed **65,535 vertices** (`uint16_t` Sokol index buffer limit). Grids and procedural surfaces must stay within 180x180 resolution and include explicit quad triangulation indices.
    - Dynamic buffers (e.g. CPU-skinned characters, dynamic water waves) must call `mesh->mark_dynamic()` before GPU buffer creation to allocate `SG_USAGE_DYNAMIC` or `SG_USAGE_STREAM`.
@@ -46,7 +45,7 @@ velocity-3d-engine/
 │   │   ├── editor.cpp                          # Branding: Pielosyty -> VelocityEngine
 │   │   └── asset_io.cpp                        # Branding: Pielosyty -> VelocityEngine
 │
-├── docs/                                       [DocsSwarm]
+├── docs/                                       [DocsTeam]
 │   ├── index.md                                # Landing Page & Portal
 │   ├── getting-started/
 │   │   ├── index.md
@@ -227,7 +226,7 @@ class PipePair:
 ### Phase 0: Baseline Savepoint, Bug Fixes & Legacy Cleanup
 *Criteria: `model_loader.cpp` patched, legacy files safely moved, branding sanitized, build passes 100%.*
 
-- **[x] Task 0.1 (Topology A - Parallel):** Git baseline savepoint commit and tag `v0.1-pre-swarm`.
+- **[x] Task 0.1 (Topology A - Parallel):** Git baseline savepoint commit and tag `v0.1-baseline`.
 - **[x] Task 0.2 (Topology A - Parallel):** Patch `core/src/model_loader.cpp` to ensure `mesh->mark_dynamic()` is set BEFORE `mesh->ensure_gpu_buffers()` for skinned character meshes.
 - **[x] Task 0.3 (Topology A - Parallel):** Sanitize legacy branding in `LICENSE`, `core/src/editor.cpp`, and `core/src/asset_io.cpp`.
 - **[x] Task 0.4 (Topology A - Parallel):** Archive the 6 broken PoC scripts (`01_window.py`..`06_playable_demo.py`) into `examples/legacy/`.
