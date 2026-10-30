@@ -1,0 +1,137 @@
+site_name: Velocity 3D Engine
+site_description: High-performance C++20 3D Game & Rendering Engine with Sokol GFX, PBR Shading, and Python Bindings
+site_author: Velocity Engine Contributors
+site_url: https://fortestaccountq.github.io/velocity-3d-engine/
+
+repo_name: fortestaccountQ/velocity-3d-engine
+repo_url: https://github.com/fortestaccountQ/velocity-3d-engine
+edit_uri: edit/main/docs/
+
+copyright: "Copyright &copy; 2026 Velocity 3D Engine Contributors. Licensed under MIT."
+
+theme:
+  name: material
+  language: en
+  palette:
+    # Slate dark mode by default
+    - scheme: slate
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    # Light mode
+    - scheme: default
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.tracking
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Overview: getting-started/index.md
+      - Installation: getting-started/installation.md
+      - 5-Minute Quickstart: getting-started/quickstart.md
+      - Troubleshooting: getting-started/troubleshooting.md
+  - Architecture:
+      - System Overview: architecture/overview.md
+      - Render Pipeline: architecture/render-pipeline.md
+      - Scene Graph & Transforms: architecture/scene-graph.md
+  - Guides:
+      - Materials & Shaders: guides/materials-and-shaders.md
+      - Skeletal Animation: guides/skeletal-animation.md
+      - Post-Processing: guides/post-processing.md
+      - Lighting & Shadows: guides/lighting-and-shadows.md
+      - Cameras & Input: guides/cameras-and-input.md
+      - Spatial 3D Audio: guides/audio.md
+      - Instancing & LOD: guides/instancing-and-lod.md
+      - 2D UI & HUD: guides/ui-and-hud.md
+      - Asset Pipeline: guides/asset-pipeline.md
+      - Editor & Tooling: guides/editor-and-tooling.md
+  - API Reference:
+      - Python API:
+          - App & Lifecycle: api-reference/python/app.md
+          - Scene & Graph: api-reference/python/scene.md
+          - Geometry & Meshes: api-reference/python/geometry.md
+          - Materials & Textures: api-reference/python/materials.md
+          - Lighting: api-reference/python/lights.md
+          - Skeletal Animation: api-reference/python/animation.md
+          - Post-Processing: api-reference/python/postprocess.md
+          - Controllers: api-reference/python/controllers.md
+          - Mathematics: api-reference/python/math.md
+          - Spatial Audio: api-reference/python/audio.md
+      - C++ Core:
+          - Core Engine: api-reference/cpp/core-engine.md
+          - C++ Headers Index: api-reference/cpp/headers.md
+  - Examples & Games:
+      - Curriculum & Demos: examples/index.md
+  - Contributing:
+      - Contributor Overview: contributing/overview.md
+      - Code Style: contributing/code-style.md
+      - Testing Guide: contributing/testing-guide.md
+  - Translations:
+      - English (Original): translations/README_en.md
+      - العربية: translations/README_ar.md
+      - Deutsch: translations/README_de.md
+      - Español: translations/README_es.md
+      - Français: translations/README_fr.md
+      - 日本語: translations/README_ja.md
+      - Português: translations/README_pt.md
+      - Русский: translations/README_ru.md
+      - 简体中文: translations/README_zh.md

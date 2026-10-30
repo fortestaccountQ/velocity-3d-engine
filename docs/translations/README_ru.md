@@ -1,15 +1,30 @@
 # Velocity 3D Engine
 
-[ [English](../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
+[ [English](../../README.md) | **Русский** | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)](#project-status)
 
+<a id="project-status"></a>
 > [!WARNING]
 > ### ⚠️ Статус проекта: Ранняя альфа / В разработке (WIP)
 > В настоящее время движок находится на стадии **ранней экспериментальной альфы**. Он представляет собой активный архитектурный proof-of-concept и технический фундамент. Многие подсистемы активно дорабатываются, API может претерпевать обратно несовместимые изменения, а также запланированы масштабная модернизация, рефакторинг и оптимизации. **Движок пока не готов к использованию в продакшене.** Тем не менее, надежная основа ядра (C++20, Sokol GFX, nanobind, PBR, скелетная анимация и полный набор тестов) уже заложена и функционирует.
+
+---
+
+## 🌐 Документация и переводы
+
+Документация Velocity 3D Engine доступна на официальных языках ООН и основных мировых языках:
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](../../README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](README_es.md) | 🇧🇷 **Português** | [README_pt.md](README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](README_fr.md) | | |
 
 ---
 
@@ -31,7 +46,7 @@
 
 ## 🎮 Включенные игровые демо
 
-В директории [`games/`](../games/) репозитория представлены две полноценные автономные демо-игры, демонстрирующие возможности движка:
+В директории [`games/`](../../games/) репозитория представлены две полноценные автономные демо-игры, демонстрирующие возможности движка:
 
 ### 1. Dungeon Crawler (`games/dungeon_crawler.py`)
 Action-RPG от третьего лица в темном подземном склепе:
@@ -199,5 +214,5 @@ app.run()
 
 ## 📄 Лицензия
 
-Этот проект распространяется под лицензией [MIT](../LICENSE).
-Сторонние библиотеки в директории [`third_party/`](../third_party/) распространяются под соответствующими открытыми лицензиями (Sokol: zlib/libpng, GLM: Happy Bunny / MIT, ImGui: MIT, miniaudio: Public Domain / MIT-0).
+Этот проект распространяется под лицензией [MIT](../../LICENSE).
+Сторонние библиотеки в директории [`third_party/`](../../third_party/) распространяются под соответствующими открытыми лицензиями (Sokol: zlib/libpng, GLM: Happy Bunny / MIT, ImGui: MIT, miniaudio: Public Domain / MIT-0).

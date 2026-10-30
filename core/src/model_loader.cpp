@@ -406,6 +406,9 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 }
 
                 mesh->calculate_aabb();
+                if ((joints_acc || node->skin) && skeleton) {
+                    mesh->mark_dynamic();
+                }
                 mesh->ensure_gpu_buffers();
 
                 std::shared_ptr<Entity> prim_entity = node_entity;

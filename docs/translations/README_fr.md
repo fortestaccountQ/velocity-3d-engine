@@ -1,15 +1,30 @@
 # Velocity 3D Engine
 
-[ [English](../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
+[ [English](../../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | **Français** | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)](#project-status)
 
+<a id="project-status"></a>
 > [!WARNING]
 > ### ⚠️ Statut du projet : Alpha précoce / En cours de développement (WIP)
 > Ce moteur est actuellement à un stade **alpha expérimental précoce**. Il constitue une preuve de concept architecturale active et un socle technique. De nombreux sous-systèmes font l'objet d'itérations intensives, les API sont susceptibles de subir des modifications majeures (breaking changes), et d'importants travaux de modernisation, de refactorisation et d'optimisation sont prévus. **Il n'est pas encore prêt pour la production.** Cependant, un cœur solide (C++20, Sokol GFX, nanobind, PBR, animation squelettique et suite complète de tests) est d'ores et déjà établi et fonctionnel.
+
+---
+
+## 🌐 Documentation et traductions
+
+La documentation de Velocity 3D Engine est disponible dans les langues officielles de l'ONU et les principales langues mondiales :
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](../../README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](README_es.md) | 🇧🇷 **Português** | [README_pt.md](README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](README_fr.md) | | |
 
 ---
 
@@ -31,7 +46,7 @@
 
 ## 🎮 Démos jouables incluses
 
-Le dépôt comprend deux jeux de démonstration complets et autonomes dans le répertoire [`games/`](../games/), démontrant les capacités du moteur :
+Le dépôt comprend deux jeux de démonstration complets et autonomes dans le répertoire [`games/`](../../games/), démontrant les capacités du moteur :
 
 ### 1. Dungeon Crawler (`games/dungeon_crawler.py`)
 Un action-RPG à la troisième personne se déroulant dans une crypte souterraine sombre :
@@ -199,5 +214,5 @@ En tant qu'alpha précoce, plusieurs améliorations architecturales clés sont p
 
 ## 📄 Licence
 
-Ce projet est sous licence [MIT](../LICENSE).
-Les bibliothèques tierces dans [`third_party/`](../third_party/) sont soumises à leurs licences open source respectives (Sokol : zlib/libpng, GLM : Happy Bunny / MIT, ImGui : MIT, miniaudio : Domaine Public / MIT-0).
+Ce projet est sous licence [MIT](../../LICENSE).
+Les bibliothèques tierces dans [`third_party/`](../../third_party/) sont soumises à leurs licences open source respectives (Sokol : zlib/libpng, GLM : Happy Bunny / MIT, ImGui : MIT, miniaudio : Domaine Public / MIT-0).

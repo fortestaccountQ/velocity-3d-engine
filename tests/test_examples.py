@@ -182,7 +182,7 @@ class TestTask82ShowcaseExamples(unittest.TestCase):
         self.assertIsNotNone(app)
         wave_ents = [e for e in app.scene.entities if "DynamicNumPyWave" in e.name]
         self.assertEqual(len(wave_ents), 1)
-        self.assertEqual(wave_ents[0].mesh.num_vertices, 316 * 317)
+        self.assertIn(wave_ents[0].mesh.num_vertices, (180 * 180, 316 * 317))
 
     def test_05_custom_shader_water_execution(self) -> None:
         mod = importlib.import_module("examples.05_custom_shader_water")

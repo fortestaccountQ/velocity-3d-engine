@@ -55,6 +55,7 @@ set(STB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb")
 set(CGLTF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf")
 set(MINIAUDIO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio")
 set(IMGUI_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
+set(IMGUIZMO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imguizmo/src")
 
 # ---------------------------------------------------------------------------
 # Python & Nanobind
@@ -110,7 +111,7 @@ add_library(velocity_engine_core STATIC
     third_party/imgui/imgui_draw.cpp
     third_party/imgui/imgui_tables.cpp
     third_party/imgui/imgui_widgets.cpp
-    third_party/imgui/ImGuizmo.cpp
+    third_party/imguizmo/src/ImGuizmo.cpp
 )
 
 # Alias for backwards compatibility if needed
@@ -124,6 +125,7 @@ target_include_directories(velocity_engine_core PUBLIC
     ${CGLTF_INCLUDE_DIR}
     ${MINIAUDIO_INCLUDE_DIR}
     ${IMGUI_INCLUDE_DIR}
+    ${IMGUIZMO_INCLUDE_DIR}
 )
 
 target_link_libraries(velocity_engine_core PUBLIC glm::glm)

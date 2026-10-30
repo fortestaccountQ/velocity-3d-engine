@@ -1,15 +1,30 @@
 # Velocity 3D Engine
 
-[ [English](../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
+[ [English](../../README.md) | [Русский](README_ru.md) | **中文** | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)](#project-status)
 
+<a id="project-status"></a>
 > [!WARNING]
 > ### ⚠️ 项目状态：早期 Alpha / 进行中 (Work-in-Progress)
 > 本引擎目前处于**早期实验性 Alpha** 阶段。它是活跃的架构概念验证和技术基石。许多子系统正在经历密集迭代，API 可能会发生破坏性变更，并且计划进行重大现代化、重构与性能优化。**目前尚不适用于生产环境。** 然而，坚实的核心基础（C++20、Sokol GFX、nanobind、PBR、骨骼动画以及完整的测试套件）已建立并具备完整功能。
+
+---
+
+## 🌐 文档与多语言支持
+
+Velocity 3D Engine 文档支持联合国官方语言及全球主要语言：
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](../../README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](README_es.md) | 🇧🇷 **Português** | [README_pt.md](README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](README_fr.md) | | |
 
 ---
 
@@ -31,7 +46,7 @@
 
 ## 🎮 内置可玩演示
 
-本仓库在 [`games/`](../games/) 目录中包含了两个独立的完整演示游戏，用于展示本引擎的各项能力：
+本仓库在 [`games/`](../../games/) 目录中包含了两个独立的完整演示游戏，用于展示本引擎的各项能力：
 
 ### 1. 地牢探险 (`games/dungeon_crawler.py`)
 设定在黑暗地下墓穴中的第三人称动作 RPG：
@@ -199,5 +214,5 @@ app.run()
 
 ## 📄 许可证
 
-本项目基于 [MIT 许可证](../LICENSE) 开源。
-[`third_party/`](../third_party/) 中的第三方库遵循其各自的开源许可证（Sokol: zlib/libpng，GLM: Happy Bunny / MIT，ImGui: MIT，miniaudio: Public Domain / MIT-0）。
+本项目基于 [MIT 许可证](../../LICENSE) 开源。
+[`third_party/`](../../third_party/) 中的第三方库遵循其各自的开源许可证（Sokol: zlib/libpng，GLM: Happy Bunny / MIT，ImGui: MIT，miniaudio: Public Domain / MIT-0）。

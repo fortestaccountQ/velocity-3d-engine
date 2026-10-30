@@ -1,15 +1,30 @@
 # Velocity 3D Engine
 
-[ [English](../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
+[ [English](../../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | **日本語** | [Português](README_pt.md) ]
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)](#project-status)
 
+<a id="project-status"></a>
 > [!WARNING]
 > ### ⚠️ プロジェクトステータス：初期アルファ版 / 開発中 (Work-in-Progress)
 > 本エンジンは現在、**初期の実験的アルファ版**段階にあります。活発なアーキテクチャの概念実証および技術基盤として開発されています。多くのサブシステムが精力的なイテレーションの途上にあり、API には破壊的変更が生じる可能性があり、大幅な近代化、リファクタリング、および最適化が計画されています。**現時点ではプロダクション対応（実運用向け）ではありません。** ただし、堅牢なコア基盤（C++20、Sokol GFX、nanobind、PBR、スキニングアニメーション、および完全なテストスイート）はすでに確立され、正常に機能しています。
+
+---
+
+## 🌐 ドキュメントと翻訳
+
+Velocity 3D Engine のドキュメントは、国連公用語および主要な世界言語で利用可能です：
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](../../README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](README_es.md) | 🇧🇷 **Português** | [README_pt.md](README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](README_fr.md) | | |
 
 ---
 
@@ -31,7 +46,7 @@
 
 ## 🎮 収録プレイアブルデモ
 
-本リポジトリの [`games/`](../games/) ディレクトリには、エンジンの機能を実証する 2 つの完全なスタンドアロンデモゲームが含まれています：
+本リポジトリの [`games/`](../../games/) ディレクトリには、エンジンの機能を実証する 2 つの完全なスタンドアロンデモゲームが含まれています：
 
 ### 1. ダンジョンクローラー (`games/dungeon_crawler.py`)
 薄暗い地下墓地を舞台にした三人称アクション RPG：
@@ -199,5 +214,5 @@ app.run()
 
 ## 📄 ライセンス
 
-本プロジェクトは [MIT ライセンス](../LICENSE) の下で公開されています。
-[`third_party/`](../third_party/) 内のサードパーティ製ライブラリは、それぞれのオープンソースライセンスに準拠します (Sokol: zlib/libpng、GLM: Happy Bunny / MIT、ImGui: MIT、miniaudio: Public Domain / MIT-0)。
+本プロジェクトは [MIT ライセンス](../../LICENSE) の下で公開されています。
+[`third_party/`](../../third_party/) 内のサードパーティ製ライブラリは、それぞれのオープンソースライセンスに準拠します (Sokol: zlib/libpng、GLM: Happy Bunny / MIT、ImGui: MIT、miniaudio: Public Domain / MIT-0)。

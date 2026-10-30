@@ -1,66 +1,115 @@
-"""Milestone 2 Test: 3D Rotating Cube with Depth Test and Python Frame Callbacks."""
+"""Example 02: Textured PBR Rotating Cube.
 
+Showcase:
+- Physically Based Rendering (PBR) metallic-roughness material model.
+- Dynamic key PointLight + Directional Sunlight.
+- Continuous multi-axis rotation modulated smoothly by delta time (dt).
+- Ground reference plane with `scene.create_grid()`.
+- 2D `UIOverlay` educational HUD with live statistics.
+- Standalone execution and headless/test suite support (--test).
+"""
+
+from __future__ import annotations
 import sys
+import math
 from pathlib import Path
+from typing import Optional
 
-# Ensure 'python' package dir is available if running directly from repo root
+# Ensure package import
 repo_root = Path(__file__).resolve().parent.parent
-python_pkg_dir = repo_root / "python"
-if str(python_pkg_dir) not in sys.path:
-    sys.path.insert(0, str(python_pkg_dir))
+python_dir = repo_root / "python"
+if str(python_dir) not in sys.path:
+    sys.path.insert(0, str(python_dir))
 
-import engine
+import VelocityEngine as ve
+from VelocityEngine import (
+    App,
+    OrbitController,
+    StandardMaterial,
+    PointLight,
+    CubeTexture,
+    Vec3,
+    Color,
+    WARM_WHITE,
+    CYAN,
+    WHITE,
+)
 
 
-def main():
-    print("=" * 65)
-    print(" Engine 3D: Milestone 2 - Rotating Cube with Z-Buffer & Callbacks")
-    print("=" * 65)
-    print("Rendering: Sokol GFX 3D Pipeline (D3D11 / GL / Metal / WebGL2)")
-    print("Depth Test: SG_COMPAREFUNC_LESS_EQUAL (Z-Buffer Enabled)")
-    print("Controls: Rotating continuously via Python @app.on_update(dt)")
-    print("Press ESC or close the window to exit.")
-    print("=" * 65)
+def run_example(headless: bool = False, frames: int = 60) -> App:
+    """Run Example 02 in interactive or headless mode."""
+    app = App("VelocityEngine - 02 Rotating Cube", width=1280, height=720, clear_color="#0e131f")
 
-    # 1. Initialize window with dark-blue clear color (#1a1a24)
-    app = engine.App(
-        title="Engine 3D: Rotating Cube (Milestone 2)",
-        width=800,
-        height=600,
-        clear_color=[0.102, 0.102, 0.141, 1.0],
+    # Camera looking at cube
+    orb = OrbitController(target=(0.0, 1.2, 0.0), distance=4.8, min_distance=1.5, max_distance=20.0)
+    app.camera = orb
+
+    # Directional sun and subtle environment
+    app.scene.set_sun(direction=(-1.0, -2.5, -1.2), color=WARM_WHITE, intensity=1.6)
+
+    sky = CubeTexture.create_gradient(
+        top_color=Vec3(0.10, 0.22, 0.45),
+        horizon_color=Vec3(0.45, 0.55, 0.70),
+        bottom_color=Vec3(0.06, 0.08, 0.12),
+        size=64,
     )
+    app.scene.set_environment(sky, 1.0)
+    app.scene.set_background_cube(sky)
 
-    # Initial rotation
-    app.rotation_x = 20.0
-    app.rotation_y = 30.0
+    # Dynamic orbiting key point light
+    key_light = PointLight("KeyLight", Vec3(0.2, 0.7, 1.0), 3.5, 9.0, 2.0)
+    key_light.transform.position = (2.5, 3.0, 2.5)
+    app.scene.add_light(key_light)
 
-    frame_count = 0
-    total_time = 0.0
+    # Ground reference grid
+    app.scene.create_grid(size=24.0, step=1.0, color=Color.from_hex("#1b2230"))
 
-    # 2. Register Python per-frame update callback with dt
-    @app.on_update
-    def update(dt: float):
-        nonlocal frame_count, total_time
-        frame_count += 1
-        total_time += dt
+    # Central spinning PBR cube
+    cube = app.scene.create_box(size=(1.6, 1.6, 1.6), position=(0.0, 1.2, 0.0))
+    mat = StandardMaterial()
+    mat.base_color = (0.95, 0.45, 0.15, 1.0)  # Vibrant orange
+    mat.metallic = 0.75
+    mat.roughness = 0.22
+    cube.material = mat
 
-        # Continuous rotation based on elapsed delta time (in degrees/sec)
-        app.rotation_x += 45.0 * dt
-        app.rotation_y += 60.0 * dt
+    # 2D UI Overlay
+    app.ui.clear()
+    app.ui.draw_text("VelocityEngine | 02: Textured PBR Rotating Cube", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("PBR Metallic 0.75, Roughness 0.22, Dual-axis dt-independent rotation", (24, 52), size=14, color=CYAN)
+    app.ui.draw_text("Controls: [Mouse Drag] Orbit | [Scroll] Zoom | [ESC] Exit", (24, 76), size=13, color=WHITE)
+    app.ui.show_stats(True)
 
-        # Periodic log output to demonstrate live Python frame execution
-        if frame_count % 120 == 0:
-            fps = 1.0 / dt if dt > 0 else 0.0
-            print(
-                f"[Frame {frame_count:04d}] dt={dt*1000.0:5.2f}ms (~{fps:4.1f} FPS) | "
-                f"rot_x={app.rotation_x % 360.0:5.1f}°, rot_y={app.rotation_y % 360.0:5.1f}°"
-            )
+    frame_counter = 0
+    time_accum = 0.0
 
-    # 3. Launch native event and rendering loop
-    app.run()
+    def update(dt: float) -> None:
+        nonlocal frame_counter, time_accum
+        frame_counter += 1
+        time_accum += dt
 
-    print("Rotating cube demo exited cleanly.")
+        # Smooth dual-axis rotation
+        cube.transform.rotate_y(45.0 * dt)
+        cube.transform.rotate_x(30.0 * dt)
+
+        # Orbit the key light around the cube
+        lx = math.cos(time_accum * 1.5) * 3.0
+        lz = math.sin(time_accum * 1.5) * 3.0
+        key_light.transform.position = (lx, 2.5 + math.sin(time_accum * 2.0) * 0.8, lz)
+
+        if (headless or "--test" in sys.argv or "--headless" in sys.argv) and frame_counter >= frames:
+            app.close()
+
+    app.on_update(update)
+
+    if not headless and "--headless" not in sys.argv and "--test" not in sys.argv:
+        app.run()
+    else:
+        for _ in range(frames):
+            update(1.0 / 60.0)
+
+    return app
 
 
 if __name__ == "__main__":
-    main()
+    is_headless = "--headless" in sys.argv or "--test" in sys.argv
+    run_example(headless=is_headless, frames=60)

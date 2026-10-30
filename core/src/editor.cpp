@@ -162,7 +162,7 @@ void EditorManager::render(float dt, float screen_w, float screen_h) {
 
 void EditorManager::render_top_menubar() {
     if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("Pielosyty")) {
+        if (ImGui::BeginMenu("VelocityEngine")) {
             if (ImGui::MenuItem("Game Mode [F2]")) {
                 app_.set_mode(EngineMode::GAME);
             }

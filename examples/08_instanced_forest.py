@@ -72,14 +72,25 @@ def create_forest_scene(app: App) -> tuple[InstancedMesh, InstancedMesh, LOD]:
     tree_mesh = Mesh.create_cylinder(radius=0.7, height=4.5, segments=8)
     tree_inst = InstancedMesh(tree_mesh, 35000)
 
-    # Deterministic pseudo-random generation for fast reproducible distribution
+    # Deterministic pseudo-random generation for fast reproducible distribution across 300m terrain
     rng = random.Random(42)
     for i in range(35000):
+        px = rng.uniform(-145.0, 145.0)
+        pz = rng.uniform(-145.0, 145.0)
+        # Avoid spawning directly inside hero ancient tree zone (radius 6m)
+        while px * px + pz * pz < 36.0:
+            px = rng.uniform(-145.0, 145.0)
+            pz = rng.uniform(-145.0, 145.0)
+        py = 2.25
+        ry = rng.uniform(0.0, 360.0)
+        scale_val = rng.uniform(0.75, 1.35)
         # Forest foliage color variation: Deep pine green to vibrant emerald
         g = rng.uniform(0.35, 0.75)
         r = rng.uniform(0.04, 0.15)
         b = rng.uniform(0.08, 0.22)
-        tree_inst.set_instance(i, (r, g, b, 1.0))
+        tree_inst.set_instance_transform(
+            i, px, py, pz, 0.0, ry, 0.0, scale_val, scale_val, scale_val, (r, g, b, 1.0)
+        )
 
     scene.add_instanced_mesh(tree_inst)
 
@@ -88,10 +99,21 @@ def create_forest_scene(app: App) -> tuple[InstancedMesh, InstancedMesh, LOD]:
     rock_inst = InstancedMesh(rock_mesh, 15000)
 
     for i in range(15000):
+        px = rng.uniform(-148.0, 148.0)
+        pz = rng.uniform(-148.0, 148.0)
+        while px * px + pz * pz < 25.0:
+            px = rng.uniform(-148.0, 148.0)
+            pz = rng.uniform(-148.0, 148.0)
+        py = 0.45
+        ry = rng.uniform(0.0, 360.0)
+        rx = rng.uniform(-10.0, 10.0)
+        scale_val = rng.uniform(0.6, 1.7)
         # Rock tint: Granite slate grey to sandstone brown
         grey = rng.uniform(0.25, 0.55)
         warmth = rng.uniform(0.9, 1.1)
-        rock_inst.set_instance(i, (grey * warmth, grey, grey * 0.9, 1.0))
+        rock_inst.set_instance_transform(
+            i, px, py, pz, rx, ry, 0.0, scale_val, scale_val * rng.uniform(0.7, 1.2), scale_val, (grey * warmth, grey, grey * 0.9, 1.0)
+        )
 
     scene.add_instanced_mesh(rock_inst)
 

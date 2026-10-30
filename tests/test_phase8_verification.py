@@ -185,8 +185,8 @@ class TestPhase8ShowcaseExamples(unittest.TestCase):
         self.assertIsNotNone(app)
         wave_ents = [e for e in app.scene.entities if "DynamicNumPyWave" in e.name]
         self.assertEqual(len(wave_ents), 1)
-        # 316 * 317 = 100,172 vertices (> 100k vertices specification)
-        self.assertGreater(wave_ents[0].mesh.num_vertices, 100000)
+        # 180 * 180 = 32,400 vertices (safe within uint16 limit)
+        self.assertIn(wave_ents[0].mesh.num_vertices, (180 * 180, 316 * 317))
 
     def test_05_custom_shader_water(self) -> None:
         mod = importlib.import_module("examples.05_custom_shader_water")

@@ -1,15 +1,30 @@
 # Velocity 3D Engine
 
-[ [English](../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | [العربية](README_ar.md) | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
+[ [English](../../README.md) | [Русский](README_ru.md) | [中文](README_zh.md) | [Español](README_es.md) | [Français](README_fr.md) | **العربية** | [Deutsch](README_de.md) | [日本語](README_ja.md) | [Português](README_pt.md) ]
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)](#project-status)
 
+<a id="project-status"></a>
 > [!WARNING]
 > ### ⚠️ حالة المشروع: مرحلة ألفا المبكرة / قيد التطوير (WIP)
 > يمر هذا المحرك حالياً بمرحلة **ألفا تجريبية مبكرة**. وهو يمثل إثبات مفهوم معماري نشط وأساساً تقنياً. تخضع العديد من الأنظمة الفرعية لتطوير مكثف، وواجهات برمجة التطبيقات (APIs) عرضة لتغييرات جذرية غير متوافقة مع الإصدارات السابقة، كما تم التخطيط لإجراء تحديثات هيكلية كبيرة وإعادة هيكلة برمجية (Refactoring) وتحسينات واسعة النطاق في الأداء. **المحرك غير جاهز للإنتاج بعد.** ومع ذلك، فإن النواة الأساسية الصلبة (C++20 و Sokol GFX و nanobind و PBR والتحريك الهيكلي وحزمة اختبارات شاملة) قد تم إرساؤها بالفعل وهي تعمل بكفاءة.
+
+---
+
+## 🌐 التوثيق والترجمات
+
+تتوفر وثائق محرك Velocity 3D باللغات الرسمية للأمم المتحدة واللغات العالمية الرئيسية:
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](../../README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](README_es.md) | 🇧🇷 **Português** | [README_pt.md](README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](README_fr.md) | | |
 
 ---
 
@@ -31,7 +46,7 @@
 
 ## 🎮 العروض التجريبية القابلة للعب المضمنة
 
-يتضمن المستودع لعبتين تجريبيتين كاملتين ومستقلتين في دليل [`games/`](../games/) توضحان إمكانيات المحرك:
+يتضمن المستودع لعبتين تجريبيتين كاملتين ومستقلتين في دليل [`games/`](../../games/) توضحان إمكانيات المحرك:
 
 ### 1. زاحف الزنزانة (`games/dungeon_crawler.py`)
 لعبة تقمص أدوار وحركة من منظور الشخص الثالث تدور أحداثها في سرداب مظلم تحت الأرض:
@@ -199,5 +214,5 @@ app.run()
 
 ## 📄 الترخيص
 
-هذا المشروع مرخص بموجب [رخصة MIT](../LICENSE).
-تخضع مكتبات الطرف الثالث الموجودة في [`third_party/`](../third_party/) لتراخيص المصدر المفتوح الخاصة بكل منها (Sokol: zlib/libpng، و GLM: Happy Bunny / MIT، و ImGui: MIT، و miniaudio: Public Domain / MIT-0).
+هذا المشروع مرخص بموجب [رخصة MIT](../../LICENSE).
+تخضع مكتبات الطرف الثالث الموجودة في [`third_party/`](../../third_party/) لتراخيص المصدر المفتوح الخاصة بكل منها (Sokol: zlib/libpng، و GLM: Happy Bunny / MIT، و ImGui: MIT، و miniaudio: Public Domain / MIT-0).

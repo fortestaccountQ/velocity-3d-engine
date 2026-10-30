@@ -1,0 +1,63 @@
+/* Velocity 3D Engine - Documentation Custom Styling */
+
+:root {
+    --ve-accent-purple: #7c4dff;
+    --ve-accent-cyan: #00e5ff;
+    --ve-bg-dark: #0f111a;
+    --ve-card-bg: rgba(26, 28, 44, 0.7);
+    --ve-border-color: rgba(124, 77, 255, 0.2);
+}
+
+/* Polished Card Grid */
+.grid.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+}
+
+.grid.cards > ul {
+    display: contents;
+}
+
+.grid.cards > ul > li,
+.grid.cards > div {
+    border: 1px solid var(--ve-border-color);
+    border-radius: 0.6rem;
+    padding: 1.25rem;
+    background: var(--ve-card-bg);
+    backdrop-filter: blur(8px);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.grid.cards > ul > li:hover,
+.grid.cards > div:hover {
+    transform: translateY(-3px);
+    border-color: var(--ve-accent-cyan);
+    box-shadow: 0 8px 24px rgba(0, 229, 255, 0.12);
+}
+
+/* Badge Enhancements */
+.badge-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Code block title accents */
+.highlight span.filename {
+    font-weight: 600;
+    color: var(--ve-accent-cyan);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+/* Mermaid diagram container */
+.mermaid {
+    text-align: center;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: rgba(15, 17, 26, 0.5);
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}

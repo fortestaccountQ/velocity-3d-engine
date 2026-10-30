@@ -17,9 +17,11 @@ import math
 import sys
 from pathlib import Path
 
+import VelocityEngine as ve
 from VelocityEngine import (
     App,
     OrbitController,
+    CubeTexture,
     Color,
     WARM_WHITE,
     CYAN,
@@ -54,12 +56,27 @@ app = App("VelocityEngine - Phase 2 PBR DamagedHelmet Showcase", width=1280, hei
 orb = OrbitController(target=(0.0, 1.0, 0.0), distance=4.5, min_distance=1.0, max_distance=15.0)
 app.camera = orb
 
-# Soft hemispheric ambient
-hemi = HemisphereLight("SkyGround", Vec3(0.2, 0.25, 0.35), Vec3(0.08, 0.06, 0.05), 0.6)
+# Environment & Reflections
+env = CubeTexture.create_gradient(
+    top_color=Vec3(0.18, 0.35, 0.65),
+    horizon_color=Vec3(0.60, 0.70, 0.85),
+    bottom_color=Vec3(0.12, 0.14, 0.18),
+    size=64,
+)
+app.scene.set_environment(env, 1.4)
+app.scene.set_background_cube(env)
+
+# Generous hemispheric ambient fill
+hemi = HemisphereLight("SkyGround", Vec3(0.45, 0.50, 0.65), Vec3(0.25, 0.22, 0.20), 1.2)
 app.scene.add_light(hemi)
 
-# Subtle directional sun
-app.scene.set_sun(direction=(-1.0, -2.5, -1.0), color=WARM_WHITE, intensity=0.5)
+# Directional sun
+app.scene.set_sun(direction=(-1.0, -2.0, -1.0), color=WARM_WHITE, intensity=1.8)
+
+# Dedicated key spotlight/pointlight for frontal brilliance
+key_light = PointLight("KeyFrontLight", Vec3(1.0, 0.95, 0.85), 3.5, 10.0, 2.0)
+key_light.transform.position = (1.5, 2.5, 2.5)
+app.scene.add_light(key_light)
 
 # Ground grid
 app.scene.create_grid(size=30.0, step=1.0, color=Color.from_hex("#21262d"))

@@ -1,11 +1,12 @@
-"""Example 04: High-Performance NumPy Wave Surface (100,000 Vertices).
+"""Example 04: High-Performance NumPy Wave Surface (180x180 Grid, 32,400 Vertices).
 
 Showcase:
-- Massive dynamic grid mesh (316 x 317 = 100,172 vertices).
-- Real-time height field synthesis in pure NumPy: `y = np.sin(x*f + t) * np.cos(z*f + t)`.
-- Zero-copy / low-overhead GPU vertex buffer streaming via `mesh.update_vertices_from_numpy()` at 60+ FPS.
+- Dynamic grid mesh (180 x 180 = 32,400 vertices <= 65,535 uint16 limit).
+- Robust quad triangulation indices: (i, i+1, i+nx, i+nx, i+1, i+nx+1).
+- Real-time height field synthesis in pure NumPy: y = sin(x*f + t) * cos(z*f + t).
+- Zero-copy / low-overhead GPU vertex buffer streaming via mesh.update_vertices_from_numpy() at 60+ FPS.
 - Dynamic vertex coloring based on wave amplitude.
-- Standalone execution and headless/test suite support.
+- Standalone execution and headless/test suite support (--test).
 """
 
 from __future__ import annotations
@@ -39,8 +40,10 @@ from VelocityEngine import (
 )
 
 
-def create_wave_grid(nx: int = 316, nz: int = 317, size_x: float = 60.0, size_z: float = 60.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Preallocate 100,000 vertex buffer and grid coordinates."""
+def create_wave_grid(
+    nx: int = 180, nz: int = 180, size_x: float = 60.0, size_z: float = 60.0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Preallocate 32,400 vertex buffer (180x180) and proper quad triangulation indices."""
     n = nx * nz
     x = np.linspace(-size_x * 0.5, size_x * 0.5, nx, dtype=np.float32)
     z = np.linspace(-size_z * 0.5, size_z * 0.5, nz, dtype=np.float32)
@@ -72,11 +75,25 @@ def create_wave_grid(nx: int = 316, nz: int = 317, size_x: float = 60.0, size_z:
     buffer[:, 12] = 1.0
     buffer[:, 15] = 1.0
 
-    return buffer, xx_flat, zz_flat
+    # Quad triangulation indices: (i, i+1, i+nx, i+nx, i+1, i+nx+1)
+    gx = np.arange(nx - 1, dtype=np.uint32)
+    gz = np.arange(nz - 1, dtype=np.uint32)
+    gxx, gzz = np.meshgrid(gx, gz)
+    i = (gzz * nx + gxx).ravel()
+
+    i_plus_1 = i + 1
+    i_plus_nx = i + nx
+    i_plus_nx_plus_1 = i + nx + 1
+
+    tri1 = np.stack([i, i_plus_1, i_plus_nx], axis=1)
+    tri2 = np.stack([i_plus_nx, i_plus_1, i_plus_nx_plus_1], axis=1)
+    indices = np.hstack([tri1, tri2]).reshape(-1).astype(np.uint16)
+
+    return buffer, xx_flat, zz_flat, indices
 
 
-def run_example(headless: bool = False, frames: int = 60) -> App:
-    """Run the 100,000 vertex wave example in interactive or headless mode."""
+def run_example(headless: bool = False, frames: int = 60, nx: int = 180, nz: int = 180) -> App:
+    """Run the 180x180 vertex wave example in interactive or headless mode."""
     app = App("Velocity - 04 NumPy Wave Surface", width=1280, height=720, clear_color="#090d14")
 
     # Camera looking at center of the wave
@@ -93,13 +110,11 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
     )
     app.scene.set_environment(env, 1.2)
 
-    # 1. Allocate 100,172 Vertex Wave Mesh
-    nx = 316
-    nz = 317
+    # 1. Allocate 180x180 (32,400 Vertices) Wave Mesh with Proper Quad Indices
     total_vertices = nx * nz
-    buffer, xx_flat, zz_flat = create_wave_grid(nx, nz, 60.0, 60.0)
+    buffer, xx_flat, zz_flat, indices = create_wave_grid(nx, nz, 60.0, 60.0)
 
-    wave_mesh = Mesh.from_numpy(buffer[:, :3])
+    wave_mesh = Mesh.from_numpy(buffer, indices=indices)
     wave_mesh.update_vertices_from_numpy(buffer, recalculate_bounds=False)
 
     wave_entity = app.scene.create_entity("DynamicNumPyWave")
@@ -117,7 +132,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
     # UI Overlay setup
     app.ui.clear()
     app.ui.draw_text("Velocity 3D Engine | 04: NumPy Wave Surface", (24, 24), size=20, color=WARM_WHITE)
-    app.ui.draw_text(f"Dynamic Surface: {total_vertices:,} Vertices (316 x 317 Grid)", (24, 52), size=14, color=CYAN)
+    app.ui.draw_text(f"Dynamic Surface: {total_vertices:,} Vertices (180 x 180 Quad Grid)", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("GPU Buffer Streaming: mesh.update_vertices_from_numpy() @ 60+ FPS", (24, 76), size=13, color=GREEN)
     app.ui.show_stats(True)
 
@@ -151,14 +166,19 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
         upload_ms = (time.perf_counter() - t_upload_start) * 1000.0
 
         if frame_counter % 30 == 0:
-            app.ui.draw_text(f"Upload Latency: {upload_ms:.2f} ms | 100k Vertices Dynamic Stream", (24, 100), size=12, color=YELLOW)
+            app.ui.draw_text(
+                f"Upload Latency: {upload_ms:.2f} ms | {total_vertices:,} Vertices Dynamic Stream",
+                (24, 100),
+                size=12,
+                color=YELLOW,
+            )
 
         if (headless or "--test" in sys.argv or "--headless" in sys.argv) and frame_counter >= frames:
             app.close()
 
     app.on_update(update)
 
-    if not headless and "--headless" not in sys.argv:
+    if not headless and "--headless" not in sys.argv and "--test" not in sys.argv:
         app.run()
     else:
         for _ in range(frames):
@@ -172,7 +192,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
 
 if __name__ == "__main__":
-    is_headless = "--headless" in sys.argv
+    is_headless = "--headless" in sys.argv or "--test" in sys.argv
     frame_limit = 60
     for idx, arg in enumerate(sys.argv):
         if arg == "--frames" and idx + 1 < len(sys.argv):
