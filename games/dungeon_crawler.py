@@ -40,6 +40,7 @@ from pielosyty import (
     App,
     Mesh,
     StandardMaterial,
+    Texture,
     AnimationMixer,
     AnimationClip,
     FollowCamera,
@@ -172,14 +173,22 @@ class InteractiveChest:
 
         # Materials
         wood_mat = StandardMaterial()
-        wood_mat.base_color = (0.32, 0.18, 0.10, 1.0) # Dark Oak
-        wood_mat.roughness = 0.75
-        wood_mat.metallic = 0.1
+        wood_mat.base_color = (0.55, 0.45, 0.38, 1.0) # Aged Antique Oak
+        wood_mat.roughness = 0.65
+        wood_mat.metallic = 0.25
+
+        chest_tex_path = repo_root / "assets" / "textures" / "dungeon_chest.png"
+        chest_norm_path = repo_root / "assets" / "textures" / "dungeon_chest_normal.png"
+        if chest_tex_path.exists():
+            wood_mat.albedo_map = Texture.load_from_file(str(chest_tex_path))
+        if chest_norm_path.exists():
+            wood_mat.normal_map = Texture.load_from_file(str(chest_norm_path))
+            wood_mat.normal_scale = 1.4
 
         iron_mat = StandardMaterial()
-        iron_mat.base_color = (0.75, 0.65, 0.25, 1.0) # Gilded Brass Fittings
-        iron_mat.roughness = 0.35
-        iron_mat.metallic = 0.85
+        iron_mat.base_color = (0.85, 0.72, 0.28, 1.0) # Gilded Brass Lock
+        iron_mat.roughness = 0.25
+        iron_mat.metallic = 0.92
 
         glow_mat = StandardMaterial()
         glow_mat.base_color = (1.0, 0.85, 0.2, 1.0)
@@ -343,39 +352,63 @@ def build_modular_dungeon(
     Returns:
         Tuple of (obstacle_boxes, chest, lever, portcullis)
     """
-    # Sunlight (Soft ambient moonlight down the well)
-    scene.set_sun(direction=(-0.5, -1.8, -0.6), color=Color.from_hex("#3a4b68"), intensity=0.45)
+    # Sunlight (Moody cool crypt moonlight)
+    scene.set_sun(direction=(-0.5, -1.8, -0.6), color=Color.from_hex("#1c2838"), intensity=0.35)
 
-    # Dark atmospheric background sky
+    # Subterranean crypt atmosphere
     sky = CubeTexture.create_gradient(
-        top_color=Vec3(0.02, 0.03, 0.05),
-        horizon_color=Vec3(0.04, 0.05, 0.08),
-        bottom_color=Vec3(0.01, 0.01, 0.02),
+        top_color=Vec3(0.01, 0.012, 0.02),
+        horizon_color=Vec3(0.018, 0.022, 0.035),
+        bottom_color=Vec3(0.005, 0.005, 0.01),
         size=64,
     )
-    scene.set_environment(sky, 0.8)
+    scene.set_environment(sky, 0.35)
     scene.set_background_cube(sky)
+
+    # Texture Filepaths
+    floor_tex_p = repo_root / "assets" / "textures" / "dungeon_stone_floor.png"
+    floor_norm_p = repo_root / "assets" / "textures" / "dungeon_stone_floor_normal.png"
+    wall_tex_p = repo_root / "assets" / "textures" / "dungeon_stone_wall.png"
+    wall_norm_p = repo_root / "assets" / "textures" / "dungeon_stone_wall_normal.png"
 
     # PBR Materials
     floor_mat = StandardMaterial()
-    floor_mat.base_color = (0.22, 0.23, 0.25, 1.0) # Flagstone Slate
-    floor_mat.roughness = 0.72
-    floor_mat.metallic = 0.12
+    floor_mat.base_color = (0.75, 0.78, 0.82, 1.0) # Stone Flagstone Base
+    floor_mat.roughness = 0.68
+    floor_mat.metallic = 0.15
+    floor_mat.uv_scale = (10.0, 14.0)
+    if floor_tex_p.exists():
+        floor_mat.albedo_map = Texture.load_from_file(str(floor_tex_p))
+    if floor_norm_p.exists():
+        floor_mat.normal_map = Texture.load_from_file(str(floor_norm_p))
+        floor_mat.normal_scale = 1.6
 
     wall_mat = StandardMaterial()
-    wall_mat.base_color = (0.28, 0.27, 0.29, 1.0) # Carved Ashlar Masonry
-    wall_mat.roughness = 0.65
-    wall_mat.metallic = 0.15
+    wall_mat.base_color = (0.78, 0.76, 0.80, 1.0) # Gothic Ashlar Bricks
+    wall_mat.roughness = 0.62
+    wall_mat.metallic = 0.18
+    wall_mat.uv_scale = (6.0, 2.0)
+    if wall_tex_p.exists():
+        wall_mat.albedo_map = Texture.load_from_file(str(wall_tex_p))
+    if wall_norm_p.exists():
+        wall_mat.normal_map = Texture.load_from_file(str(wall_norm_p))
+        wall_mat.normal_scale = 1.5
 
     pillar_mat = StandardMaterial()
-    pillar_mat.base_color = (0.33, 0.32, 0.35, 1.0)
-    pillar_mat.roughness = 0.55
-    pillar_mat.metallic = 0.18
+    pillar_mat.base_color = (0.70, 0.70, 0.75, 1.0)
+    pillar_mat.roughness = 0.50
+    pillar_mat.metallic = 0.22
+    pillar_mat.uv_scale = (1.5, 3.0)
+    if wall_tex_p.exists():
+        pillar_mat.albedo_map = Texture.load_from_file(str(wall_tex_p))
+    if wall_norm_p.exists():
+        pillar_mat.normal_map = Texture.load_from_file(str(wall_norm_p))
+        pillar_mat.normal_scale = 1.3
 
     brazier_mat = StandardMaterial()
-    brazier_mat.base_color = (0.25, 0.22, 0.20, 1.0)
-    brazier_mat.roughness = 0.8
-    brazier_mat.metallic = 0.25
+    brazier_mat.base_color = (0.28, 0.25, 0.22, 1.0)
+    brazier_mat.roughness = 0.75
+    brazier_mat.metallic = 0.35
 
     # 1. Modular Stone Floor Tiles (32m x 44m total area)
     floor = scene.create_entity("DungeonFloor")
@@ -573,6 +606,8 @@ class DungeonCrawler:
             clear_color="#06070a",
             vsync=True,
         )
+        self.app.show_hud = False
+        self.app.show_crosshair = False
         self.scene = self.app.scene
 
         # 1. Setup Post-Processing Stack (Bloom + SSAO + ACES Tonemapping)
@@ -636,17 +671,49 @@ class DungeonCrawler:
             if idle_act:
                 idle_act.play()
 
-        # 6. Hero Broadsword Weapon
-        sword_blade = self.scene.create_entity("HeroSwordBlade")
-        sword_blade.mesh = Mesh.create_box(0.08, 0.85, 0.16)
-        blade_mat = StandardMaterial()
-        blade_mat.base_color = (0.85, 0.9, 0.95, 1.0)
-        blade_mat.metallic = 0.95
-        blade_mat.roughness = 0.2
-        sword_blade.material = blade_mat
-        sword_blade.transform.position = (0.5, 0.9, -0.3)
-        sword_blade.transform.rotation = (35.0, 0.0, 0.0)
-        self.hero_node.add(sword_blade)
+        # 6. Hero Broadsword Weapon & Sheath on Left Hip
+        sword_root = self.scene.create_entity("HeroSword")
+        sword_root.transform.position = (-0.28, 0.95, -0.05)
+        sword_root.transform.rotation = (22.0, 10.0, -12.0)
+        self.hero_node.add(sword_root)
+
+        # Scabbard (Dark Leather)
+        scabbard = self.scene.create_entity("SwordScabbard")
+        scabbard.mesh = Mesh.create_box(0.045, 0.95, 0.09)
+        scabbard_mat = StandardMaterial()
+        scabbard_mat.base_color = (0.16, 0.12, 0.10, 1.0)
+        scabbard_mat.roughness = 0.8
+        scabbard_mat.metallic = 0.1
+        scabbard.material = scabbard_mat
+        scabbard.transform.position = (0.0, -0.35, 0.0)
+        sword_root.add(scabbard)
+
+        # Crossguard (Gilded Brass)
+        guard = self.scene.create_entity("SwordCrossguard")
+        guard.mesh = Mesh.create_box(0.065, 0.04, 0.24)
+        guard_mat = StandardMaterial()
+        guard_mat.base_color = (0.85, 0.72, 0.25, 1.0)
+        guard_mat.metallic = 0.92
+        guard_mat.roughness = 0.25
+        guard.material = guard_mat
+        guard.transform.position = (0.0, 0.14, 0.0)
+        sword_root.add(guard)
+
+        # Hilt Grip (Wrapped Leather)
+        hilt = self.scene.create_entity("SwordHilt")
+        hilt.mesh = Mesh.create_cylinder(radius=0.025, height=0.18, segments=8)
+        hilt_mat = StandardMaterial()
+        hilt_mat.base_color = (0.12, 0.10, 0.08, 1.0)
+        hilt.material = hilt_mat
+        hilt.transform.position = (0.0, 0.24, 0.0)
+        sword_root.add(hilt)
+
+        # Pommel (Golden Sphere)
+        pommel = self.scene.create_entity("SwordPommel")
+        pommel.mesh = Mesh.create_sphere(radius=0.038, rings=8, sectors=8)
+        pommel.material = guard_mat
+        pommel.transform.position = (0.0, 0.35, 0.0)
+        sword_root.add(pommel)
 
         # 7. Third-Person Spring-Arm FollowCamera
         self.follow_cam = FollowCamera(
@@ -950,11 +1017,14 @@ class DungeonCrawler:
         ui.draw_rect(29.0, 97.0, cur_stam_w, bar_h - 4.0, color=Color(0.2, 0.85, 0.45, 0.95), thickness=1.0)
 
         # 2. Inventory Counter Badges (Top Right)
-        rx = sw - 280.0
-        ui.draw_rect(rx - 12.0, 20.0, 268.0, 48.0, color=Color(0.08, 0.10, 0.14, 0.85), thickness=1.5)
-        ui.draw_text(f"[GOLD: {self.gold:04d}]", (int(rx), 34), size=14, color=YELLOW)
-        ui.draw_text(f"[KEYS: {self.keys}]", (int(rx + 115.0), 34), size=14, color=CYAN)
-        ui.draw_text(f"[RELICS: {self.relics}]", (int(rx + 195.0), 34), size=14, color=MAGENTA)
+        badge_w = 460.0
+        rx = sw - badge_w - 28.0
+        ui.draw_rect(rx, 20.0, badge_w, 48.0, color=Color(0.06, 0.08, 0.12, 0.92), thickness=1.5)
+        # Gold accent top line
+        ui.draw_rect(rx, 20.0, badge_w, 2.5, color=Color(0.85, 0.70, 0.25, 0.95), thickness=1.0)
+        ui.draw_text(f"GOLD: {self.gold:04d}", (int(rx + 20.0), 34), size=13, color=YELLOW)
+        ui.draw_text(f"KEYS: {self.keys}", (int(rx + 180.0), 34), size=13, color=CYAN)
+        ui.draw_text(f"RELICS: {self.relics}", (int(rx + 315.0), 34), size=13, color=MAGENTA)
 
         # 3. Contextual Interaction Prompt (Floating Center Screen)
         if self.interaction_hint:
@@ -970,9 +1040,9 @@ class DungeonCrawler:
 
         # 5. Bottom Controls Bar & Mode Indicator
         if self.self_play:
-            ui.draw_text(f"[AUTONOMOUS SELF-PLAY] FRAME: {self.frame_count}/{self.max_frames} | STATE: {self.current_state}", (28, int(sh - 38)), size=13, color=YELLOW)
+            ui.draw_text(f"[AUTONOMOUS SELF-PLAY] FRAME: {self.frame_count}/{self.max_frames} | STATE: {self.current_state}", (28, int(sh - 34)), size=12, color=YELLOW)
         else:
-            ui.draw_text("WASD: Move | Shift: Sprint | Space/LMB: Attack | E/RMB: Interact", (28, int(sh - 38)), size=12, color=Color(0.7, 0.75, 0.85, 0.8))
+            ui.draw_text("WASD: Move | Shift: Sprint | LMB: Attack | E: Interact", (28, int(sh - 34)), size=11, color=Color(0.75, 0.80, 0.90, 0.85))
 
         # Center Aim Reticle
         ui.draw_crosshair(size=6.0, color=WHITE, pos=(cx, cy), thickness=1.0)

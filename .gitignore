@@ -6,6 +6,7 @@ build_installer/
 *.spec
 *.egg-info/
 temp/
+.pytest_cache/
 
 # Compiled binary extensions
 *.pyd
@@ -22,7 +23,6 @@ temp/
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
 
 # IDE files
 .vscode/
@@ -30,3 +30,14 @@ __pycache__/
 *.sln
 *.vcxproj*
 *.user
+
+# Environment & local scripts
+.venv/
+venv/
+venv.bat
+*.env
+
+# Logs and scratch files
+*.log
+space_log.txt
+*.tmp

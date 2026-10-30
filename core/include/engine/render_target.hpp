@@ -65,6 +65,7 @@ private:
     uint32_t depth_image_id_{0};
     uint32_t depth_view_id_{0};
     uint32_t depth_tex_view_id_{0};
+    mutable bool is_destroyed_{false};
 
     std::shared_ptr<Texture> texture_{nullptr};
 };

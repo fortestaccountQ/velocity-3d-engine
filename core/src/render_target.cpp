@@ -86,6 +86,7 @@ RenderTarget& RenderTarget::operator=(RenderTarget&& other) noexcept {
 }
 
 void RenderTarget::ensure_lazy_resources() const {
+    if (is_destroyed_) return;
     if (color_image_id_ == 0 && width_ > 0 && height_ > 0) {
         if (!sg_isvalid()) {
             EngineApp::ensure_headless_device();
@@ -97,6 +98,7 @@ void RenderTarget::ensure_lazy_resources() const {
 }
 
 void RenderTarget::create_resources() {
+    is_destroyed_ = false;
     if (!texture_) {
         texture_ = std::make_shared<Texture>();
     }
@@ -188,6 +190,7 @@ void RenderTarget::create_resources() {
 }
 
 void RenderTarget::destroy() {
+    is_destroyed_ = true;
     if (texture_) {
         // Clear IDs so Texture destructor doesn't attempt to double-destroy
         texture_->image_id = 0;

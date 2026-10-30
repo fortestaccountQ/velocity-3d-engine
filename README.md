@@ -1,174 +1,200 @@
-# Modular 3D Engine (C++20 + Sokol + GLM + Nanobind + Python)
+# Pielosyty 3D Engine
 
-Модульный гибридный 3D-движок с высокопроизводительным ядром на C++20 и удобным Python-фасадом, спроектированный с учетом будущей компиляции под WebAssembly (Emscripten / Pyodide).
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Status](https://img.shields.io/badge/status-Early%20Alpha%20%2F%20WIP-orange.svg)]()
+
+> [!WARNING]
+> ### ⚠️ Project Status: Early Alpha / Work-in-Progress
+> This engine is currently in an **early experimental alpha** stage. It is an active architectural proof-of-concept and technical foundation. Many subsystems are undergoing heavy iteration, APIs are subject to breaking changes, and significant modernization, refactoring, and optimizations are planned. **It is not yet production-ready.** However, a solid core foundation (C++20, Sokol GFX, nanobind, PBR, skeletal animation, and full test suite) is established and functional.
 
 ---
 
-## Архитектура проекта
+## 🌟 Highlights
 
+**Pielosyty 3D Engine** combines the raw rendering performance of modern C++20 and [Sokol GFX](https://github.com/floooh/sokol) with the ergonomic expressiveness of Python via [nanobind](https://github.com/wjakob/nanobind).
+
+- **High-Performance Core**: Written in modern C++20 with lightweight zero-overhead abstractions, GLM mathematics, and Sokol GFX (Direct3D 11, Metal, OpenGL).
+- **Pythonic Ergonomics**: Complete Python bindings with PEP-484 / PEP-561 `.pyi` type stubs for IDE auto-completion. Supports operator overloading, context managers, and vector unpackings.
+- **Physically Based Rendering (PBR)**: Metallic-roughness workflow (Cook-Torrance GGX microfacet specular, Lambertian diffuse, Sobel normal mapping, ambient occlusion, and emissive maps).
+- **Skeletal Animation System**: glTF 2.0 skeletal loader with joint hierarchy propagation, inverse bind matrices, CPU linear blend skinning, and multi-clip animation blending.
+- **Post-Processing Pipeline**: Modular `EffectComposer` supporting multi-pass post-processing: HDR Gaussian Bloom, ACES/Reinhard tonemapping, vignette, and custom GLSL/HLSL fullscreen shader passes.
+- **Instanced Rendering**: High-throughput `InstancedMesh` pipeline capable of rendering tens of thousands of dynamic instances (e.g. asteroid fields, forests) with individual 4x4 transform matrices and instance tint colors.
+- **2D HUD & Overlay Queue**: Integrated orthographic 2D rendering queue with built-in bitmap font atlas for on-screen debug stats, health gauges, and crosshairs.
+- **Spatial Audio**: Integrated audio engine powered by `miniaudio` for sound effects, spatial 3D attenuation, and background ambience.
+- **100% Automated Test Coverage**: Comprehensive suite of 420+ automated unit, integration, and stress tests verifying memory safety, handle lifecycles, and rendering math.
+
+---
+
+## 🎮 Included Playable Demos
+
+The repository includes two complete, standalone demo games in the [`games/`](games/) directory demonstrating the engine's capabilities:
+
+### 1. Dungeon Crawler (`games/dungeon_crawler.py`)
+A third-person action RPG set in a dark subterranean crypt:
+- **Animated Player Character**: Full glTF animated knight model with bone hierarchy and locomotion animations.
+- **Modular Weaponry**: Custom 3D modeled broadsword with gilded crossguard, pommel, and leather scabbard attached to the hip.
+- **Procedural PBR Materials**: High-resolution ashlar masonry walls, normal-mapped flagstone floors, and dark-oak iron-banded treasure chests.
+- **RPG HUD**: Real-time health and stamina bars, collected gold, keys, relics counters, and minimap card.
+- **Audio & Ambience**: Atmospheric dungeon soundtrack, footstep cues, chest interaction sounds, and torch flame lighting.
+
+```powershell
+python games/dungeon_crawler.py
 ```
-3d_render/
-├── CMakeLists.txt            # Конфигурация мультиплатформенной сборки (Windows/Linux/macOS/Wasm)
-├── pyproject.toml            # Метаданные пакета и интеграция scikit-build-core + nanobind
-├── README.md                 # Документация архитектуры и инструкция
-├── .gitignore                # Исключения временных и бинарных файлов
-├── core/                     # Исходный код C++20 ядра
-│   ├── include/engine/
-│   │   ├── transform.hpp     # Класс Transform (position, rotation, scale, model_matrix, normal_matrix)
-│   │   ├── camera.hpp        # Класс Camera (View, Projection, ViewProjection, управление положением)
-│   │   ├── light.hpp         # Структура DirectionalLight (direction, color, ambient, intensity, shininess)
-│   │   ├── texture.hpp       # Класс Texture (загрузка PNG/JPG/BMP через stb_image, GPU-текстуры, checkerboard)
-│   │   ├── material.hpp      # Класс Material (albedo map, base color, roughness, metallic, uv_scale)
-│   │   ├── mesh.hpp          # Класс Mesh и структура Vertex (position, normal, uv, color)
-│   │   ├── physics.hpp       # Физические структуры AABB, Ray, RaycastHit
-│   │   ├── model.hpp         # Класс Model (контейнер иерархии glTF с root_entity и дочерними мешами)
-│   │   ├── model_loader.hpp  # Класс ModelLoader (парсинг glTF/GLB через cgltf и текстур через stb_image)
-│   │   ├── entity.hpp        # Класс Entity / Node (Transform, Parent, local_matrix, world matrices, Mesh, Material)
-│   │   ├── scene.hpp         # Контейнер Scene для сущностей, текстур, загрузки моделей, освещения и raycast
-│   │   ├── input.hpp         # InputManager и перечисление клавиш Key
-│   │   └── app.hpp           # Класс EngineApp, окно и захват курсора мыши
-│   └── src/
-│       ├── texture.cpp       # Управление текстурами GPU (sg_image, sg_sampler, sg_view, stb_image)
-│       ├── mesh.cpp          # Создание буферов геометрии (куб с UV, плоскость/пол Plane)
-│       ├── model_loader.cpp  # Реализация загрузки glTF 2.0 / GLB (cgltf + stb_image memory buffer)
-│       ├── scene.cpp         # Управление сущностями, материалами, load_model и raycast
-│       ├── input.cpp         # Менеджер клавиатуры, мыши и блокировка курсора
-│       ├── app.cpp           # Шейдеры PBR-lite, конвейер sokol_gfx, цикл сцены и обработка ввода
-│       └── sokol_impl.cpp    # Трансляционный юнит реализаций Sokol
-├── bindings/                 # Связующий слой Nanobind
-│   └── bindings.cpp          # Экспорт C++ классов в Python-модуль _engine_core
-├── python/                   # Высокоуровневый пакет Python
-│   └── engine/
-│       ├── __init__.py       # Экспорт фасада App, Texture, Material, Camera, Scene, Entity, Model, Mesh, AABB, Ray, FirstPersonController
-│       ├── app.py            # Фасад App со свойствами scene, camera, input, load_texture, set_mouse_locked
-│       ├── controller.py     # Игровой контроллер от первого лица (FPS Controller, AABB коллизии, прыжок)
-│       └── py.typed          # Маркер типизации PEP 561
-├── third_party/              # Внешние зависимости
-│   ├── sokol/                # sokol_app.h, sokol_gfx.h, sokol_glue.h, sokol_log.h
-│   ├── glm/                  # Заголовочная библиотека OpenGL Mathematics
-│   ├── stb/                  # stb_image.h (загрузка растровых изображений из файлов и памяти)
-│   └── cgltf/                # cgltf.h (single-header C99 парсер glTF 2.0 / GLB)
-├── assets/                   # Тестовые 3D-модели
-│   ├── duck.glb              # Модель утки (12.6k индексов, встроенная текстура 512x512)
-│   ├── box_textured.glb      # Текстурированный куб с UV разверткой
-│   └── avocado.glb           # Детализированная модель авокадо с PBR-сканом
-├── examples/                 # Примеры и тесты
-│   ├── 01_window.py          # Milestone 1: Базовое окно с заливкой фона (#1a1a24)
-│   ├── 02_rotating_cube.py   # Milestone 2: 3D вращающийся куб с Z-буфером и on_update(dt)
-│   ├── 03_scene_lighting.py  # Milestone 3: Граф сцены, множественные сущности, Blinn-Phong и ввод
-│   ├── 04_textured_material.py # Milestone 4: Текстуры, материалы PBR Metallic-Roughness, пол и 3 куба
-│   ├── 05_load_model.py      # Milestone 5: Загрузка glTF 2.0 / GLB с иерархией, текстурами и анимацией
-│   └── 06_playable_demo.py   # Milestone 6: Интерактивная 3D-игра от первого лица с коллизиями и Raycast
-├── game_main.py              # Автономная точка входа для сборки в бинарный дистрибутив
-└── package_game.py           # Скрипт сборки автономного .exe дистрибутива через PyInstaller
+
+### 2. Space Combat Arena (`games/space_combat_arena.py`)
+A high-speed 6DOF space flight combat simulation:
+- **Starfighter Flight Model**: 6-degrees-of-freedom inertial physics with pitch, yaw, roll, and booster acceleration.
+- **Asteroid Belt**: Procedurally generated instanced asteroid field with diverse scales and rotations rendered via `InstancedMesh`.
+- **Cosmic Environment**: Deep space nebula skybox, volumetric particle thrusters, and laser projectile physics.
+- **Cockpit Avionics**: Sci-fi flight HUD with velocity meter, boost capacitor gauge, hull and shield monitors, and 2D radar tracking.
+
+```powershell
+python games/space_combat_arena.py
+```
 
 ---
 
-## Архитектура Milestone 5 (glTF 2.0 / GLB Model Loading)
+## 📂 Repository Structure
 
-1. **Интеграция C99-парсера `cgltf`:**
-   - Высокопроизводительный однозаголовочный парсер `cgltf.h` без сторонних зависимостей.
-   - Поддержка форматов `.gltf` (JSON + внешние бинарные буферы и текстуры) и `.glb` (монолитные бинарные контейнеры со встроенным чанком данных).
-
-2. **Загрузчик геометрии и материалов (`ModelLoader`):**
-   - **Атрибуты вершин:** Чтение позиций (`POSITION`), нормалей (`NORMAL`), текстурных координат (`TEXCOORD_0`) и цветов вершин (`COLOR_0`). При отсутствии нормалей генерируется дефолтный вектор $(0, 1, 0)$.
-   - **Индексы треугольников:** Поддержка 8-битных, 16-битных (`uint16_t`) и автоматическое преобразование безындексной геометрии.
-   - **Встроенные текстуры GLB:** Декодирование изображений напрямую из памяти (`bufferView`) через `stbi_load_from_memory` в 4-канальный RGBA8 без записи временных файлов на диск.
-   - **Факторы PBR Metallic-Roughness:** Извлечение параметров `baseColorFactor`, `roughnessFactor` и `metallicFactor` из встроенных определений материалов glTF.
-
-3. **Иерархия узлов и граф сцены (`Model` & `Entity`):**
-   - Узлы сцены glTF сохраняют взаимную иерархию через указатель `parent`.
-   - Поддержка локальных матриц узлов glTF (`local_matrix`) и локальных пользовательских трансформаций (`transform`).
-   - Расчет финальных мировых матриц: $M_{\text{world}} = M_{\text{parent}} \cdot (M_{\text{transform}} \cdot M_{\text{local}})$, а также матриц нормалей $\left(M_{\text{world}}^{-1}\right)^T$.
-   - Корректная обработка вспомогательных/трансформационных узлов без привязанных мешей (пропуск рендеринга без лишних полигонов).
-   - Класс `Model` предоставляет доступ к корневому `root_entity`, списку всех сгенерированных мешей `meshes`, и единому свойству `transform` для перемещения, масштабирования и вращения всей модели целиком.
-
-4. **Python API:**
-   ```python
-   # Загрузка модели из glTF / GLB:
-   model = app.scene.load_model("assets/duck.glb")
-   model.transform.position = (0.0, 0.0, 0.0)
-   model.transform.scale = (1.0, 1.0, 1.0)
-   model.transform.rotation.y += 25.0 * dt
-   ```
-
----
-
-## Архитектура Milestone 6 (First-Person Controller, AABB Physics & Standalone Packaging)
-
-1. **Захват мыши и свободный обзор (Mouse Capture & FPS Camera):**
-   - Управление указателем мыши на уровне Sokol: `sapp_lock_mouse(true)` и `sapp_show_mouse(false)`.
-   - Векторное вращение камеры Pitch (ограничение от -89° до +89°) и Yaw по смещениям мыши `mouse_dx` / `mouse_dy`.
-   - Экспорт в Python: `app.set_mouse_locked(True)`, переключение курсора по клавише `TAB`.
-
-2. **C++ Физический движок (AABB Collisions & Raycast):**
-   - Структура `AABB`: расчет локального объема меша по вершинам (`Mesh::calculate_aabb()`), трансформация в мировой объем с учетом масштаба и поворота (`Entity::world_aabb()`).
-   - Тестирование пересечений объемов методом разделяющих осей (`AABB::intersects()`).
-   - Математика луча `Ray`: быстрый тест пересечения луча с AABB (`Ray::intersect_aabb()`).
-   - Функция сцены `Scene::raycast(ray, max_distance)`: находит ближайший интерактивный объект и точную точку соударения `point`.
-
-3. **Игровой контроллер игрока (`FirstPersonController`):**
-   - Перемещение на `W/A/S/D` относительно горизонтальной проекции взгляда камеры.
-   - Вертикальная гравитация и прыжок по `Space`.
-   - Раздельное поосевое разрешение коллизий (позволяет скользить вдоль стен и стоять на препятствиях/полу).
-
-4. **Автономная сборка в исполняемый дистрибутив (.exe):**
-   - Скрипт `package_game.py` на базе PyInstaller упаковывает Python runtime, скомпилированный `.pyd` модуль движка, графические шейдеры и папку `assets/` в автономный каталог `dist/MyEngineGame/`.
-   - Готовый исполняемый файл `dist/MyEngineGame/MyEngineGame.exe` запускается в Windows без установленного Python и сторонних библиотек.
+```text
+pielosyty-3d-engine/
+├── assets/                     # 3D glTF/GLB models, textures, and normal maps
+│   ├── textures/               # PBR diffuse, normal, and RGBA texture maps
+│   ├── Soldier.glb             # Animated rigged character model
+│   └── DamagedHelmet.glb       # Reference glTF PBR test model
+├── bindings/                   # nanobind C++ -> Python bindings
+│   ├── bindings.cpp            # Primary module entrypoint
+│   ├── bind_app.cpp            # Application lifecycle and windowing
+│   ├── bind_geometry.cpp       # Meshes, curves, points, instanced geometry
+│   ├── bind_materials.cpp      # PBR, unlit, and custom shader materials
+│   ├── bind_math.cpp           # Vec2/3/4, Quat, Euler, Mat3/4, Ray, Frustum
+│   ├── bind_postprocess.cpp    # EffectComposer and post-processing passes
+│   └── bind_scene.cpp          # Scene, Entity, Node3D, lights, cameras
+├── core/                       # Core C++20 engine engine implementation
+│   ├── include/engine/         # Public header files
+│   └── src/                    # Engine source files
+├── examples/                   # 13 feature-focused educational examples
+│   ├── 01_hello_pbr.py         # Basic PBR sphere setup
+│   ├── 02_dynamic_lights_bloom.py # Dynamic point lights and bloom pass
+│   ├── 03_skeletal_character.py # glTF skeletal animation loading
+│   ├── 04_numpy_wave_surface.py # Procedural mesh deformation via NumPy
+│   ├── 05_custom_shader_water.py # Custom fullscreen shader pass
+│   ├── 06_render_to_texture_portal.py # Render targets and portal rendering
+│   ├── 07_particles_and_sprites.py # Particle systems and 3D billboard sprites
+│   ├── 08_instanced_forest.py  # High-density instanced rendering
+│   └── ...                     # Additional interactive showcases
+├── games/                      # Playable standalone games (Dungeon & Space)
+├── python/                     # Python package implementations & type stubs
+│   ├── pielosyty/              # Modern primary engine package
+│   └── VelocityEngine/         # Compatibility layer
+├── scripts/                    # Utility and procedural texture generation tools
+├── tests/                      # 420+ automated pytest test suites
+├── third_party/                # Vendored dependencies (Sokol, GLM, ImGui, miniaudio)
+├── CMakeLists.txt              # Primary CMake build system
+└── pyproject.toml              # Scikit-build-core Python packaging configuration
+```
 
 ---
 
-## Сборка и установка
+## 🛠️ Building & Installation
 
-```bash
-# Установка в текущее venv окружение в режиме редактирования:
+### Prerequisites
+
+- **CMake**: `>= 3.24`
+- **C++20 Compiler**:
+  - Windows: MSVC 2022 (v143) or Clang-CL
+  - Linux: GCC `>= 12` or Clang `>= 15`
+  - macOS: Apple Clang `>= 14`
+- **Python**: `>= 3.10`
+- **Build Tool**: Ninja (recommended) or MSBuild
+
+### 1. Build and Install via Python (Editable Mode)
+
+```powershell
+# Clone the repository
+git clone https://github.com/fortestaccountQ/pielosyty-3d-engine.git
+cd pielosyty-3d-engine
+
+# Install build dependencies
+pip install scikit-build-core nanobind ninja pytest numpy
+
+# Compile the C++ core and install Python bindings
 pip install -e . --no-build-isolation
+```
 
-# Сборка автономного исполняемого файла игры (.exe):
-python package_game.py
+### 2. Build via CMake Directly
+
+```powershell
+cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+### 3. Run Automated Tests
+
+```powershell
+pytest tests -q
 ```
 
 ---
 
-## Запуск примеров и игры
+## 💡 Quick Start Example
 
-### Интерактивная 3D-игра от первого лица (Milestone 6)
-```bash
-# Запуск через Python:
-python examples/06_playable_demo.py
+```python
+import pielosyty as engine
 
-# Или запуск собранного автономного бинарника:
-.\dist\MyEngineGame\MyEngineGame.exe
+# 1. Initialize application
+app = engine.App(
+    title="Pielosyty 3D Engine - Quickstart",
+    width=1280,
+    height=720,
+    clear_color=(0.08, 0.09, 0.12, 1.0)
+)
+
+# 2. Setup Camera
+camera = app.camera
+camera.set_position(0.0, 2.0, 5.0)
+camera.look_at(engine.Vec3(0.0, 0.5, 0.0))
+
+# 3. Add Directional & Ambient Lighting
+app.scene.set_ambient_light(engine.Vec3(0.05, 0.05, 0.07))
+sun = engine.DirectionalLight(
+    color=engine.Vec3(1.0, 0.95, 0.8),
+    intensity=2.5,
+    direction=engine.Vec3(-0.5, -1.0, -0.5)
+)
+app.scene.add_light(sun)
+
+# 4. Create PBR Material & Mesh
+mat = engine.StandardMaterial()
+mat.base_color = engine.Vec4(0.9, 0.2, 0.2, 1.0)
+mat.roughness = 0.25
+mat.metallic = 0.8
+
+mesh = engine.Mesh.create_sphere(radius=1.0, rings=32, sectors=32)
+entity = engine.Entity(mesh=mesh, material=mat)
+app.scene.add_entity(entity)
+
+# 5. Run Application Loop
+app.run()
 ```
-**Управление:**
-- **Мышь:** Свободный круговой обзор (курсор заблокирован).
-- **W / A / S / D:** Перемещение игрока с проверкой коллизий со стенами и объектами.
-- **Space:** Прыжок с физической гравитацией.
-- **Left Shift:** Спринт (ускорение бега).
-- **ЛКМ (Клик):** Raycast-взаимодействие с объектами сцены (подпрыгивание утки/коробки/авокадо и подсветка).
-- **TAB:** Переключение захвата мыши.
-- **ESC:** Выход из игры.
 
-### Загрузка 3D-моделей glTF 2.0 / GLB (Milestone 5)
-```bash
-python examples/05_load_model.py
-```
-**Сцена демонстрирует:**
-- **Центр:** Знаменитая утка `duck.glb` (12 636 индексов, встроенная текстура 512×512).
-- **Слева:** Текстурированный куб `box_textured.glb` с разверткой UV.
-- **Справа:** Высокополигональная фотограмметрическая модель авокадо `avocado.glb` с PBR-сканом.
-- Текстурированную плоскость пола с перспективной сеткой.
-- Вращающийся источник освещения и интерактивную камеру (W/S/A/D).
+---
 
-### Текстуры и материалы PBR-lite (Milestone 4)
-```bash
-python examples/04_textured_material.py
-```
-**Сцена демонстрирует:**
-- Текстурированную плоскость пола с процедурным тайлингом checkerboard.
-- 3 куба с контрастными физическими материалами:
-  - **Матовый красный** (`roughness=0.85, metallic=0.05`).
-  - **Зеркальное золото** (`roughness=0.18, metallic=0.92`).
-  - **Глянцевый изумруд** (`roughness=0.25, metallic=0.40`).
-- Динамически вращающийся направленный свет, демонстрирующий зеркальные блики.
-- Полный интерактивный полет камеры клавишами `W / S / A / D`.
+## 🗺️ Roadmap & Known Limitations
+
+As an early alpha, several key architectural improvements are planned:
+
+- [ ] **GPU Compute Skinning**: Migrate from the current CPU linear blend skinning to GPU vertex shader / compute shader evaluation for high skeletal mesh counts.
+- [ ] **Cascaded Shadow Maps (CSM)**: Support multi-frustum directional cascades for open-world outdoor scenes.
+- [ ] **Shader Cross-Compilation**: Formalize automated offline GLSL/HLSL/MSL translation via `sokol-shdc`.
+- [ ] **Physics Engine Integration**: Integrate Jolt Physics or PhysX for rigid-body simulation and collision response.
+- [ ] **Vulkan & WebGPU Backends**: Add Vulkan and WebAssembly/WebGPU targets using Sokol GFX.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+Third-party libraries in [`third_party/`](third_party/) are subject to their respective open-source licenses (Sokol: zlib/libpng, GLM: Happy Bunny / MIT, ImGui: MIT, miniaudio: Public Domain / MIT-0).

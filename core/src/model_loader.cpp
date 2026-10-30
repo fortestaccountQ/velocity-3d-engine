@@ -214,22 +214,30 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
         std::string node_name = node->name ? node->name : (model_name + "_Node");
         auto node_entity = scene.create_entity(node_name);
         node_entity->parent = parent;
-        node_entity->local_matrix = local_m;
+        if (parent) {
+            parent->add(node_entity);
+        }
+
+        if (node->has_matrix) {
+            node_entity->transform.set_matrix(local_m);
+        } else {
+            if (node->has_translation) {
+                node_entity->transform.position = glm::vec3(node->translation[0], node->translation[1], node->translation[2]);
+            }
+            if (node->has_rotation) {
+                node_entity->transform.set_orientation(glm::quat(node->rotation[3], node->rotation[0], node->rotation[1], node->rotation[2]));
+            }
+            if (node->has_scale) {
+                node_entity->transform.scale = glm::vec3(node->scale[0], node->scale[1], node->scale[2]);
+            }
+        }
+        node_entity->local_matrix = glm::mat4(1.0f);
 
         if (node_to_bone.count(node)) {
             auto bone = node_to_bone[node];
-            if (node->has_translation) {
-                bone->transform.position = glm::vec3(node->translation[0], node->translation[1], node->translation[2]);
-            }
-            if (node->has_rotation) {
-                bone->transform.set_orientation(glm::quat(node->rotation[3], node->rotation[0], node->rotation[1], node->rotation[2]));
-            }
-            if (node->has_scale) {
-                bone->transform.scale = glm::vec3(node->scale[0], node->scale[1], node->scale[2]);
-            }
-            if (node->has_matrix) {
-                bone->transform.set_matrix(local_m);
-            }
+            bone->transform.position = glm::vec3(0.0f);
+            bone->transform.set_orientation(glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+            bone->transform.scale = glm::vec3(1.0f);
             node_entity->add(bone);
         }
 
@@ -404,6 +412,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                 if (pi > 0) {
                     prim_entity = scene.create_entity(node_name + "_prim" + std::to_string(pi));
                     prim_entity->parent = node_entity;
+                    node_entity->add(prim_entity);
                 }
                 prim_entity->mesh = mesh;
                 prim_entity->material = get_or_load_material(prim.material);
@@ -415,6 +424,7 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                     node_entity->add(skinned_mesh);
                     scene.add_skinned_mesh(skinned_mesh);
                     model->skinned_meshes.push_back(skinned_mesh);
+                    prim_entity->visible = false;
                 }
             }
         }

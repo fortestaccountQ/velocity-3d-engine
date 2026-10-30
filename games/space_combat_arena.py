@@ -702,6 +702,8 @@ class SpaceCombatArena:
             clear_color="#040409",
             vsync=True,
         )
+        self.app.show_hud = False
+        self.app.show_crosshair = False
         self.scene = self.app.scene
 
         # Setup Atmospheric Deep Space Cubemap Sky
