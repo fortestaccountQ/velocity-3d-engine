@@ -42,3 +42,5 @@ venv.bat
 *.log
 space_log.txt
 *.tmp
+MASTER_PLAN.md
+*PLAN*.md
