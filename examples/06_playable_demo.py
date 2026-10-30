@@ -274,29 +274,9 @@ def main():
 
         if "--screenshot" in sys.argv:
             if frame_count == 40:
-                print("[Screenshot] Capturing game screen via direct computer-use...", flush=True)
-                sys.path.append("C:/Users/Admin/.gemini/config/skills/computer-use/scripts")
-                from computer import get_windows, capture_rect
-                if "--snap-box" in sys.argv:
-                    png_name = "milestone8_box_obb.png"
-                elif "--debug-hitboxes" in sys.argv:
-                    png_name = "milestone8_hitboxes_f1.png"
-                else:
-                    png_name = "milestone8_visual_polish.png"
-                out_png = f"C:/Users/Admin/.gemini/antigravity-cli/brain/652d8d55-b5ed-48f3-a093-40b0b4448338/{png_name}"
-                target = None
-                for w in get_windows():
-                    if "Engine 3D" in w["title"]:
-                        target = w
-                        break
-                if target:
-                    print(f"[Screenshot] Found window '{target['title']}' at ({target['x']}, {target['y']}, {target['width']}, {target['height']})", flush=True)
-                    img = capture_rect(target["x"], target["y"], target["width"], target["height"])
-                else:
-                    print("[Screenshot] Window not found in list, capturing primary monitor...", flush=True)
-                    img = capture_rect(0, 0, 1920, 1080)
-                img.save(out_png, "PNG")
-                print(f"[Screenshot] Screen capture saved successfully to: {out_png}", flush=True)
+                out_png = "screenshot_playable_demo.png"
+                ve.save_screenshot(app, out_png)
+                print(f"[Screenshot] Screen capture saved to: {out_png}", flush=True)
             elif frame_count >= 50:
                 app.close()
 

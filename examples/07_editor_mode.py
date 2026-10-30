@@ -209,24 +209,9 @@ def main():
         # Screenshot capture support for verification
         if "--screenshot" in sys.argv:
             if frame_count == 35:
-                print("[Screenshot] Capturing Editor window...", flush=True)
-                sys.path.append("C:/Users/Admin/.gemini/config/skills/computer-use/scripts")
-                from computer import get_windows, capture_rect
-                png_name = "milestone9_velocity_editor.png"
-                out_png = f"C:/Users/Admin/.gemini/antigravity-cli/brain/652d8d55-b5ed-48f3-a093-40b0b4448338/{png_name}"
-                target = None
-                for w in get_windows():
-                    if "VelocityEngine" in w["title"] or "Visual Scene Editor" in w["title"]:
-                        target = w
-                        break
-                if target:
-                    print(f"[Screenshot] Found window '{target['title']}' at ({target['x']}, {target['y']}, {target['width']}, {target['height']})", flush=True)
-                    img = capture_rect(target["x"], target["y"], target["width"], target["height"])
-                else:
-                    print("[Screenshot] Window not found, capturing primary display...", flush=True)
-                    img = capture_rect(0, 0, 1920, 1080)
-                img.save(out_png, "PNG")
-                print(f"[Screenshot] Editor screen capture saved successfully to: {out_png}", flush=True)
+                out_png = "screenshot_editor.png"
+                ve.save_screenshot(app, out_png)
+                print(f"[Screenshot] Editor screen capture saved to: {out_png}", flush=True)
             elif frame_count >= 45:
                 app.close()
 
