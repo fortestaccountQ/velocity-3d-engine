@@ -26,6 +26,7 @@ public:
     virtual ~PostProcessPass() = default;
     virtual const std::string& name() const = 0;
     virtual void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) = 0;
+    virtual void destroy() {}
 
     bool enabled{true};
 };
@@ -38,6 +39,7 @@ public:
 
     BloomPass(float threshold = 1.0f, float strength = 1.5f, float radius = 0.5f);
     ~BloomPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "BloomPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;
@@ -56,6 +58,7 @@ public:
 
     SSAOPass(float radius = 0.5f, float bias = 0.025f, float power = 1.0f);
     ~SSAOPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "SSAOPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;
@@ -70,6 +73,7 @@ class FXAAPass : public PostProcessPass {
 public:
     FXAAPass();
     ~FXAAPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "FXAAPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;
@@ -88,6 +92,7 @@ public:
 
     TonemappingPass(TonemappingMode mode = TonemappingMode::ACESFilmic, float exposure = 1.0f, float gamma = 2.2f);
     ~TonemappingPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "TonemappingPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;
@@ -107,6 +112,7 @@ public:
 
     VignetteChromaticPass(float vignette = 0.3f, float chromatic = 0.005f, float grain = 0.02f);
     ~VignetteChromaticPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "VignetteChromaticPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;
@@ -125,6 +131,7 @@ public:
 
     ColorGradingPass(float contrast = 1.0f, float saturation = 1.0f, float brightness = 1.0f);
     ~ColorGradingPass() override;
+    void destroy() override;
 
     const std::string& name() const override { static std::string n = "ColorGradingPass"; return n; }
     void render(RenderTarget& input, RenderTarget& depth_source, RenderTarget& output, uint32_t quad_vbuf, uint32_t quad_ibuf) override;

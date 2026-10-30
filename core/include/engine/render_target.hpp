@@ -31,13 +31,14 @@ public:
     bool has_depth() const { return has_depth_; }
     int samples() const { return samples_; }
 
-    uint32_t color_image_id() const { return color_image_id_; }
-    uint32_t color_view_id() const { return color_view_id_; }
-    uint32_t depth_image_id() const { return depth_image_id_; }
-    uint32_t depth_view_id() const { return depth_view_id_; }
-    uint32_t depth_tex_view_id() const { return depth_tex_view_id_; }
-    uint32_t tex_view_id() const { return tex_view_id_; }
-    uint32_t sampler_id() const { return sampler_id_; }
+    uint32_t color_image_id() const { ensure_lazy_resources(); return color_image_id_; }
+    uint32_t color_view_id() const { ensure_lazy_resources(); return color_view_id_; }
+    uint32_t depth_image_id() const { ensure_lazy_resources(); return depth_image_id_; }
+    uint32_t depth_view_id() const { ensure_lazy_resources(); return depth_view_id_; }
+    uint32_t depth_tex_view_id() const { ensure_lazy_resources(); return depth_tex_view_id_; }
+    uint32_t tex_view_id() const { ensure_lazy_resources(); return tex_view_id_; }
+    uint32_t sampler_id() const { ensure_lazy_resources(); return sampler_id_; }
+    bool is_valid() const { ensure_lazy_resources(); return color_view_id_ != 0; }
 
     std::shared_ptr<Texture> texture() const { return texture_; }
     std::vector<uint8_t> read_pixels();
@@ -48,6 +49,8 @@ public:
     void create_resources();
 
 private:
+    void ensure_lazy_resources() const;
+
     int width_{0};
     int height_{0};
     RenderTargetFormat format_{RenderTargetFormat::RGBA8};

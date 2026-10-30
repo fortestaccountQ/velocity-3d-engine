@@ -831,13 +831,13 @@ class SpaceCombatArena:
         else:
             # Interactive Keyboard & Mouse Controls
             # Pitch & Yaw
-            if inp.is_key_down(Key.Up) or inp.is_key_down(Key.I):
+            if inp.is_key_down(Key.UP) or inp.is_key_down(Key.I):
                 pitch_input += 1.0
-            if inp.is_key_down(Key.Down) or inp.is_key_down(Key.K):
+            if inp.is_key_down(Key.DOWN) or inp.is_key_down(Key.K):
                 pitch_input -= 1.0
-            if inp.is_key_down(Key.Left) or inp.is_key_down(Key.J):
+            if inp.is_key_down(Key.LEFT) or inp.is_key_down(Key.J):
                 yaw_input += 1.0
-            if inp.is_key_down(Key.Right) or inp.is_key_down(Key.L):
+            if inp.is_key_down(Key.RIGHT) or inp.is_key_down(Key.L):
                 yaw_input -= 1.0
 
             # Roll (Q / E)
@@ -865,11 +865,11 @@ class SpaceCombatArena:
                 vertical_input -= 1.0
 
             # Boost (Left Shift)
-            if inp.is_key_down(Key.LEFT_SHIFT) or inp.is_key_down(Key.RightShift):
+            if inp.is_key_down(Key.LEFT_SHIFT):
                 boosting = True
 
             # Fire Blasters (Space or LMB)
-            if inp.is_key_down(Key.SPACE) or inp.is_mouse_button_down(0):
+            if inp.is_key_down(Key.SPACE) or inp.is_mouse_down(0):
                 firing = True
 
         return pitch_input, yaw_input, roll_input, thrust_input, strafe_input, vertical_input, firing, boosting

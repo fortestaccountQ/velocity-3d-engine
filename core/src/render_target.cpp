@@ -85,6 +85,17 @@ RenderTarget& RenderTarget::operator=(RenderTarget&& other) noexcept {
     return *this;
 }
 
+void RenderTarget::ensure_lazy_resources() const {
+    if (color_image_id_ == 0 && width_ > 0 && height_ > 0) {
+        if (!sg_isvalid()) {
+            EngineApp::ensure_headless_device();
+        }
+        if (sg_isvalid()) {
+            const_cast<RenderTarget*>(this)->create_resources();
+        }
+    }
+}
+
 void RenderTarget::create_resources() {
     if (!texture_) {
         texture_ = std::make_shared<Texture>();
@@ -92,10 +103,6 @@ void RenderTarget::create_resources() {
     texture_->width = (width_ > 0) ? width_ : 0;
     texture_->height = (height_ > 0) ? height_ : 0;
     texture_->channels = (format_ == RenderTargetFormat::R32F) ? 1 : 4;
-
-    if (!sg_isvalid()) {
-        EngineApp::ensure_headless_device();
-    }
 
     if (!sg_isvalid() || width_ <= 0 || height_ <= 0 || color_image_id_ != 0) {
         return;

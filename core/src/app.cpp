@@ -1604,7 +1604,6 @@ void EngineApp::init(const std::string& title, int width, int height) {
     config_.title = title;
     config_.width = width;
     config_.height = height;
-    ensure_device();
     initialized_ = true;
 }
 
@@ -3349,6 +3348,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 }
 
 void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target) {
+    ensure_device();
     if (pip_id_ == 0 || target.color_view_id() == 0) return;
 
     render_shadow_pass(&scene, &camera);
@@ -3380,10 +3380,12 @@ void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target
 }
 
 std::vector<uint8_t> EngineApp::read_pixels(RenderTarget& target) {
+    ensure_device();
     return target.read_pixels();
 }
 
 std::vector<float> EngineApp::read_depth_pixels(RenderTarget& target) {
+    ensure_device();
     return target.read_depth_pixels();
 }
 
@@ -3837,7 +3839,74 @@ void EngineApp::dispatch_mouse_move(float mouse_x, float mouse_y) {
 
 void EngineApp::run() {
     if (is_headless_) {
-        on_cleanup();
+        // Gracefully shutdown headless Sokol context WITHOUT destroying scene entities or update callback!
+        PipelineManager::instance().release_all();
+
+        if (default_white_tex_) {
+            default_white_tex_->destroy();
+            default_white_tex_ = nullptr;
+        }
+        if (default_black_tex_) {
+            default_black_tex_->destroy();
+            default_black_tex_ = nullptr;
+        }
+        if (default_flat_normal_tex_) {
+            default_flat_normal_tex_->destroy();
+            default_flat_normal_tex_ = nullptr;
+        }
+
+        if (pip_id_ != 0) {
+            sg_destroy_pipeline(sg_pipeline{pip_id_});
+            pip_id_ = 0;
+        }
+        if (shd_id_ != 0) {
+            sg_destroy_shader(sg_shader{shd_id_});
+            shd_id_ = 0;
+        }
+
+        // Reset GPU handles for all scene meshes and textures so they cleanly re-upload on the window device
+        for (auto& entity : scene_.entities()) {
+            if (entity && entity->mesh) {
+                entity->mesh->destroy();
+            }
+        }
+        for (auto& inst : scene_.instanced_meshes()) {
+            if (inst) {
+                inst->destroy();
+                if (inst->mesh) inst->mesh->destroy();
+            }
+        }
+        for (auto& skinned : scene_.skinned_meshes()) {
+            if (skinned && skinned->mesh) {
+                skinned->mesh->destroy();
+            }
+        }
+        for (auto& emitter : scene_.particle_emitters()) {
+            if (emitter && emitter->get_particle_mesh()) {
+                emitter->get_particle_mesh()->destroy();
+            }
+        }
+        if (sky_cube_mesh_) {
+            sky_cube_mesh_->destroy();
+        }
+        if (composer_) {
+            composer_->destroy();
+        }
+
+        if (sg_isvalid()) {
+            sg_shutdown();
+        }
+
+#if defined(SOKOL_D3D11)
+        if (headless_ctx_) {
+            static_cast<ID3D11DeviceContext*>(headless_ctx_)->Release();
+            headless_ctx_ = nullptr;
+        }
+        if (headless_dev_) {
+            static_cast<ID3D11Device*>(headless_dev_)->Release();
+            headless_dev_ = nullptr;
+        }
+#endif
         is_headless_ = false;
     }
     sapp_desc desc{};

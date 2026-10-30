@@ -544,7 +544,7 @@ BloomPass::BloomPass(float thresh, float str, float rad)
     init_pipeline();
 }
 
-BloomPass::~BloomPass() {
+void BloomPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -553,6 +553,10 @@ BloomPass::~BloomPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+BloomPass::~BloomPass() {
+    destroy();
 }
 
 void BloomPass::init_pipeline() {
@@ -637,7 +641,7 @@ SSAOPass::SSAOPass(float rad, float bi, float pow)
     init_pipeline();
 }
 
-SSAOPass::~SSAOPass() {
+void SSAOPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -646,6 +650,10 @@ SSAOPass::~SSAOPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+SSAOPass::~SSAOPass() {
+    destroy();
 }
 
 void SSAOPass::init_pipeline() {
@@ -740,7 +748,7 @@ FXAAPass::FXAAPass() {
     init_pipeline();
 }
 
-FXAAPass::~FXAAPass() {
+void FXAAPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -749,6 +757,10 @@ FXAAPass::~FXAAPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+FXAAPass::~FXAAPass() {
+    destroy();
 }
 
 void FXAAPass::init_pipeline() {
@@ -835,7 +847,7 @@ TonemappingPass::TonemappingPass(TonemappingMode m, float exp, float gam)
     init_pipeline();
 }
 
-TonemappingPass::~TonemappingPass() {
+void TonemappingPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -844,6 +856,10 @@ TonemappingPass::~TonemappingPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+TonemappingPass::~TonemappingPass() {
+    destroy();
 }
 
 void TonemappingPass::init_pipeline() {
@@ -928,7 +944,7 @@ VignetteChromaticPass::VignetteChromaticPass(float vig, float chrom, float gr)
     init_pipeline();
 }
 
-VignetteChromaticPass::~VignetteChromaticPass() {
+void VignetteChromaticPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -937,6 +953,10 @@ VignetteChromaticPass::~VignetteChromaticPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+VignetteChromaticPass::~VignetteChromaticPass() {
+    destroy();
 }
 
 void VignetteChromaticPass::init_pipeline() {
@@ -1022,7 +1042,7 @@ ColorGradingPass::ColorGradingPass(float cont, float sat, float bright)
     init_pipeline();
 }
 
-ColorGradingPass::~ColorGradingPass() {
+void ColorGradingPass::destroy() {
     if (pip_id_ != 0) {
         if (sg_isvalid()) sg_destroy_pipeline(sg_pipeline{ pip_id_ });
         pip_id_ = 0;
@@ -1031,6 +1051,10 @@ ColorGradingPass::~ColorGradingPass() {
         if (sg_isvalid()) sg_destroy_shader(sg_shader{ shd_id_ });
         shd_id_ = 0;
     }
+}
+
+ColorGradingPass::~ColorGradingPass() {
+    destroy();
 }
 
 void ColorGradingPass::init_pipeline() {
@@ -1231,6 +1255,10 @@ void EffectComposer::destroy() {
     if (quad_ibuf_id_ != 0) {
         if (sg_isvalid()) sg_destroy_buffer(sg_buffer{ quad_ibuf_id_ });
         quad_ibuf_id_ = 0;
+    }
+
+    for (auto& pass : passes_) {
+        if (pass) pass->destroy();
     }
 
     hdr_target_.reset();

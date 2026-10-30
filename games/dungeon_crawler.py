@@ -806,13 +806,13 @@ class DungeonCrawler:
             if inp.is_key_down(Key.D):
                 move_x += 1.0
 
-            if inp.is_key_down(Key.LEFT_SHIFT) or inp.is_key_down(Key.RightShift):
+            if inp.is_key_down(Key.LEFT_SHIFT):
                 is_sprinting = True
 
-            if inp.is_key_down(Key.SPACE) or inp.is_key_down(Key.F) or inp.is_mouse_button_down(0):
+            if inp.is_key_down(Key.SPACE) or inp.is_key_down(Key.F) or inp.is_mouse_down(0):
                 wants_attack = True
 
-            if inp.is_key_down(Key.E) or inp.is_mouse_button_down(1):
+            if inp.is_key_down(Key.E) or inp.is_mouse_down(1):
                 wants_interact = True
 
         return move_x, move_z, is_sprinting, wants_attack, wants_interact
