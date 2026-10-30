@@ -377,7 +377,7 @@ def test_post_processing_pipeline(app):
     hdr_target = composer.hdr_target
     assert hdr_target.is_valid()
     hdr_pixels = app.read_pixels(hdr_target)
-    expected_bytes = w * h * (8 if hdr_target.format == p.RenderTargetFormat.RGBA16F else 4)
+    expected_bytes = hdr_target.width * hdr_target.height * (8 if hdr_target.format == p.RenderTargetFormat.RGBA16F else 4)
     assert len(hdr_pixels) == expected_bytes
 
     # Change Tonemapping modes dynamically

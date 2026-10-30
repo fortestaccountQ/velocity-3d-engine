@@ -157,6 +157,7 @@ public:
     // RenderTarget and Post-Processing (EffectComposer)
     void ensure_device();
     static void ensure_headless_device();
+    static EngineApp* active_instance();
     void render_target(Scene& scene, Camera& camera, RenderTarget& target);
     std::vector<uint8_t> read_pixels(RenderTarget& target);
     std::vector<float> read_depth_pixels(RenderTarget& target);

@@ -1530,6 +1530,10 @@ void EngineApp::ensure_device() {
 #endif
 }
 
+EngineApp* EngineApp::active_instance() {
+    return s_active_engine_app;
+}
+
 void EngineApp::ensure_headless_device() {
     if (sg_isvalid()) return;
     if (s_active_engine_app) {
@@ -3468,8 +3472,14 @@ void EngineApp::on_frame() {
 
         sg_begin_pass(&pass);
 
-        if (composer_->final_target()) {
+        if (composer_->final_target() && composer_->final_target()->tex_view_id() != 0) {
             composer_->blit_to_swapchain(*composer_->final_target());
+        } else {
+            static bool s_warned_composer = false;
+            if (!s_warned_composer) {
+                std::cerr << "[EngineApp] Warning: EffectComposer final_target is null or invalid, skipping swapchain blit.\n";
+                s_warned_composer = true;
+            }
         }
 
         // 7. Optional Debug Hitbox Rendering (F1 toggle or Editor Mode)

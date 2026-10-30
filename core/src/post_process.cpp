@@ -521,6 +521,7 @@ static sg_pipeline create_quad_pipeline(sg_shader shd, sg_pixel_format target_fm
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
     pip_desc.depth.write_enabled = false;
+    pip_desc.depth.pixel_format = SG_PIXELFORMAT_NONE;
     pip_desc.cull_mode = SG_CULLMODE_NONE;
     pip_desc.colors[0].pixel_format = target_fmt;
     pip_desc.sample_count = sample_count;
@@ -1192,6 +1193,20 @@ void EffectComposer::init_blit_pipeline() {
     pip_desc.index_type = SG_INDEXTYPE_UINT16;
     pip_desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
     pip_desc.depth.write_enabled = false;
+
+    sg_pixel_format depth_fmt = SG_PIXELFORMAT_DEPTH;
+    if (sapp_isvalid()) {
+        switch (sapp_depth_format()) {
+            case SAPP_PIXELFORMAT_DEPTH: depth_fmt = SG_PIXELFORMAT_DEPTH; break;
+            case SAPP_PIXELFORMAT_DEPTH_STENCIL: depth_fmt = SG_PIXELFORMAT_DEPTH_STENCIL; break;
+            case SAPP_PIXELFORMAT_NONE: depth_fmt = SG_PIXELFORMAT_NONE; break;
+            default: depth_fmt = SG_PIXELFORMAT_DEPTH; break;
+        }
+    } else if (sg_isvalid()) {
+        depth_fmt = sg_query_desc().environment.defaults.depth_format;
+    }
+    pip_desc.depth.pixel_format = depth_fmt;
+
     pip_desc.cull_mode = SG_CULLMODE_NONE;
     pip_desc.colors[0].pixel_format = _SG_PIXELFORMAT_DEFAULT;
     pip_desc.sample_count = sapp_sample_count();
@@ -1257,9 +1272,13 @@ void EffectComposer::render_passes(EngineApp& app, Scene& scene, Camera& camera)
     // 1. Ensure resources exist and match window size
     int w = app.width();
     int h = app.height();
-    if (!hdr_target_ || width_ != w || height_ != h) {
-        resize(w, h);
-        if (!hdr_target_) init_resources();
+    if (!hdr_target_ || width_ != w || height_ != h || quad_vbuf_id_ == 0) {
+        if (width_ != w || height_ != h) {
+            resize(w, h);
+        }
+        if (!hdr_target_ || quad_vbuf_id_ == 0) {
+            init_resources();
+        }
     }
     if (!hdr_target_) return;
 
@@ -1285,6 +1304,7 @@ void EffectComposer::render_passes(EngineApp& app, Scene& scene, Camera& camera)
 
     for (size_t i = 0; i < active_passes.size(); ++i) {
         RenderTarget* current_write = ping_pong_[write_idx].get();
+        if (!current_write || !current_read) break;
         active_passes[i]->render(*current_read, *hdr_target_, *current_write, quad_vbuf_id_, quad_ibuf_id_);
         current_read = current_write;
         write_idx = 1 - write_idx;
@@ -1294,6 +1314,9 @@ void EffectComposer::render_passes(EngineApp& app, Scene& scene, Camera& camera)
 }
 
 void EffectComposer::blit_to_swapchain(RenderTarget& source) {
+    if (quad_vbuf_id_ == 0 || quad_ibuf_id_ == 0) {
+        init_resources();
+    }
     if (blit_pip_id_ == 0 || blit_shd_id_ == 0) {
         init_blit_pipeline();
     }
@@ -1312,9 +1335,10 @@ void EffectComposer::blit_to_swapchain(RenderTarget& source) {
 }
 
 void EffectComposer::render(Scene& scene, Camera& camera) {
-    if (!app_) return;
+    EngineApp* app = app_ ? app_ : EngineApp::active_instance();
+    if (!app) return;
 
-    render_passes(*app_, scene, camera);
+    render_passes(*app, scene, camera);
 
     if (final_target_) {
         sg_pass pass{};

@@ -312,8 +312,16 @@ void bind_app(nb::module_& m) {
         .def("read_depth_pixels", [](engine::EngineApp& app, engine::RenderTarget& target) {
             return app.read_depth_pixels(target);
         }, "target"_a)
-        .def("set_composer", &engine::EngineApp::set_composer, "composer"_a)
-        .def_prop_rw("composer", &engine::EngineApp::composer, &engine::EngineApp::set_composer)
+        .def("set_composer", &engine::EngineApp::set_composer, "composer"_a.none() = nb::none())
+        .def_prop_rw("composer",
+            &engine::EngineApp::composer,
+            [](engine::EngineApp& app, nb::handle comp) {
+                if (comp.is_none()) {
+                    app.set_composer(nullptr);
+                } else {
+                    app.set_composer(nb::cast<std::shared_ptr<engine::EffectComposer>>(comp));
+                }
+            }, "comp"_a.none() = nb::none())
         .def_prop_ro("stats", [](engine::EngineApp& app) -> const engine::RenderStats& {
             return app.stats();
         }, nb::rv_policy::reference_internal)

@@ -108,5 +108,8 @@ void bind_postprocess(nb::module_& m) {
         .def_rw("enabled", &engine::EffectComposer::enabled)
         .def_prop_ro("passes", &engine::EffectComposer::passes)
         .def("render", &engine::EffectComposer::render, "scene"_a, "camera"_a)
-        .def_prop_ro("hdr_target", &engine::EffectComposer::hdr_target, nb::rv_policy::reference_internal);
+        .def("render_passes", &engine::EffectComposer::render_passes, "app"_a, "scene"_a, "camera"_a)
+        .def("blit_to_swapchain", &engine::EffectComposer::blit_to_swapchain, "source"_a)
+        .def_prop_ro("hdr_target", &engine::EffectComposer::hdr_target, nb::rv_policy::reference_internal)
+        .def_prop_ro("final_target", &engine::EffectComposer::final_target, nb::rv_policy::reference_internal);
 }
