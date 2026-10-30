@@ -118,9 +118,17 @@ class UIOverlay:
     """High-level 2D UI overlay facade for drawing text, shapes, crosshairs, and stats."""
 
     def __init__(self, app: Optional[Any] = None) -> None:
-        self._app = app
+        import weakref
+        self._app = weakref.ref(app) if app is not None else None
         self._commands: List[Union[UITextCommand, UIRectCommand, UICrosshairCommand, UILineCommand]] = []
         self._stats_visible: bool = True
+
+    @property
+    def app(self) -> Optional[Any]:
+        """Parent App reference, if still alive."""
+        if self._app is None:
+            return None
+        return self._app() if callable(self._app) else self._app
 
     @property
     def commands(self) -> List[Union[UITextCommand, UIRectCommand, UICrosshairCommand, UILineCommand]]:
@@ -325,8 +333,9 @@ class UIOverlay:
     def show_stats(self, show: bool = True) -> None:
         """Enable or disable performance statistics / HUD overlay."""
         self._stats_visible = bool(show)
-        if self._app is not None and hasattr(self._app, "show_hud"):
-            self._app.show_hud = bool(show)
+        target = self.app
+        if target is not None and hasattr(target, "show_hud"):
+            target.show_hud = bool(show)
 
     def clear(self) -> None:
         """Clear all buffered 2D UI commands."""
@@ -334,7 +343,7 @@ class UIOverlay:
 
     def flush(self, app: Optional[Any] = None) -> List[UICommand]:
         """Convert all buffered UI commands to native C++ UICommand objects and submit to app."""
-        target = app if app is not None else self._app
+        target = app if app is not None else self.app
         if not self._commands:
             return []
 

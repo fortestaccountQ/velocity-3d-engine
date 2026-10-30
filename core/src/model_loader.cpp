@@ -382,8 +382,10 @@ std::shared_ptr<Model> ModelLoader::load_model(Scene& scene, const std::string& 
                         const glm::vec3& n = mesh->cpu_vertices[a].normal;
                         const glm::vec3& t = tan1[a];
                         float len2 = glm::dot(t, t);
-                        if (len2 > 1e-8f) {
-                            glm::vec3 tangent_xyz = glm::normalize(t - n * glm::dot(n, t));
+                        glm::vec3 ortho_t = t - n * glm::dot(n, t);
+                        float ortho_len2 = glm::dot(ortho_t, ortho_t);
+                        if (len2 > 1e-8f && ortho_len2 > 1e-8f) {
+                            glm::vec3 tangent_xyz = glm::normalize(ortho_t);
                             float handedness = (glm::dot(glm::cross(n, t), tan2[a]) < 0.0f) ? -1.0f : 1.0f;
                             mesh->cpu_vertices[a].tangent = glm::vec4(tangent_xyz, handedness);
                         } else {

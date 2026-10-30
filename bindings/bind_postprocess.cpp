@@ -20,6 +20,7 @@ void bind_postprocess(nb::module_& m) {
              "width"_a, "height"_a, "format"_a = engine::RenderTargetFormat::RGBA8,
              "has_depth"_a = true, "samples"_a = 1)
         .def("resize", &engine::RenderTarget::resize, "width"_a, "height"_a)
+        .def("destroy", &engine::RenderTarget::destroy)
         .def_prop_ro("width", &engine::RenderTarget::width)
         .def_prop_ro("height", &engine::RenderTarget::height)
         .def_prop_ro("format", &engine::RenderTarget::format)
@@ -37,6 +38,9 @@ void bind_postprocess(nb::module_& m) {
         .def("read_pixels", [](engine::RenderTarget& rt) {
             auto pixels = rt.read_pixels();
             return nb::bytes(pixels.data(), pixels.size());
+        })
+        .def("read_depth_pixels", [](engine::RenderTarget& rt) {
+            return rt.read_depth_pixels();
         });
 
     // -----------------------------------------------------------------------

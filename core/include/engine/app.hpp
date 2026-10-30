@@ -155,8 +155,11 @@ public:
     bool tone_mapping_enabled() const { return tone_mapping_enabled_; }
 
     // RenderTarget and Post-Processing (EffectComposer)
+    void ensure_device();
+    static void ensure_headless_device();
     void render_target(Scene& scene, Camera& camera, RenderTarget& target);
     std::vector<uint8_t> read_pixels(RenderTarget& target);
+    std::vector<float> read_depth_pixels(RenderTarget& target);
     void set_composer(std::shared_ptr<EffectComposer> composer);
     std::shared_ptr<EffectComposer> composer() const { return composer_; }
 
@@ -209,7 +212,7 @@ private:
     void init_shadow_pipeline();
     void init_sky_pipelines();
     void init_hud_and_line_pipelines();
-    void render_shadow_pass();
+    void render_shadow_pass(Scene* scene = nullptr, Camera* camera = nullptr);
     void render_background_pass(Scene& scene, Camera& camera, bool is_offscreen = false, uint32_t color_format = 0);
     void render_scene_pass(Scene& scene, Camera& camera, int target_w, int target_h, bool is_offscreen, uint32_t color_format = 0);
     void render_debug_hitboxes(const glm::mat4& vp);
@@ -304,6 +307,11 @@ private:
 
     // EffectComposer post-processing
     std::shared_ptr<EffectComposer> composer_{nullptr};
+
+    // Headless device support
+    bool is_headless_{false};
+    void* headless_dev_{nullptr};
+    void* headless_ctx_{nullptr};
 
     // Event system & 3D picking
     std::unordered_map<std::string, std::vector<AppEventCallback>> app_event_listeners_{};

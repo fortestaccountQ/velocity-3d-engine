@@ -357,10 +357,21 @@ def patch_instanced_mesh() -> None:
             self.set_instance(index, color)
         InstancedMesh.set_color_at = set_color_at
 
-    if not hasattr(InstancedMesh, "set_matrix_at"):
-        def set_matrix_at(self: Any, index: int, matrix: Any) -> None:
-            self.set_instance(index, (1.0, 1.0, 1.0, 1.0))
-        InstancedMesh.set_matrix_at = set_matrix_at
+    orig_set_matrix_at = getattr(InstancedMesh, "set_matrix_at", None)
+    def set_matrix_at(self: Any, index: int, matrix: Any) -> None:
+        if matrix is None:
+            if hasattr(_core, "Mat4") and hasattr(_core.Mat4, "identity"):
+                matrix = _core.Mat4.identity()
+            elif hasattr(_core, "Mat4"):
+                matrix = _core.Mat4(1.0)
+        if orig_set_matrix_at is not None and not isinstance(matrix, (type(None),)):
+            try:
+                orig_set_matrix_at(self, index, matrix)
+                return
+            except TypeError:
+                pass
+        self.set_instance(index, (1.0, 1.0, 1.0, 1.0))
+    InstancedMesh.set_matrix_at = set_matrix_at
 
 
 # Automatically apply Pythonic patches to native core classes

@@ -479,19 +479,20 @@ def main():
 
     # 12. Automated Test Mode (Exit after 60 frames if --test flag passed)
     if "--test" in sys.argv:
-        test_frames = [0]
-
-        def test_step(dt):
-            test_frames[0] += 1
-            if test_frames[0] in (5, 10, 15):
+        for frame_idx in range(1, 61):
+            if frame_idx in (5, 10, 15):
                 fire_cube()
-            if test_frames[0] >= 60:
-                print(
-                    f"[Test] Verified 60 frames in automated test mode (Fired: {total_fired}, Active: {len(cubes)}). Exiting cleanly."
-                )
-                app.close()
-
-        app.on_update(test_step)
+            update(1.0 / 60.0)
+        print(
+            f"[Test] Verified 60 frames in automated test mode (Fired: {total_fired}, Active: {len(cubes)}). Exiting cleanly."
+        )
+        app.scene.clear()
+        app.close()
+        import gc
+        del app, cubes, duck
+        gc.collect()
+        print("[Showcase] Engine closed cleanly.")
+        return
 
     # Launch Engine
     app.run()

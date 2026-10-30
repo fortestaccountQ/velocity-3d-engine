@@ -309,6 +309,9 @@ void bind_app(nb::module_& m) {
             auto pixels = app.read_pixels(target);
             return nb::bytes(pixels.data(), pixels.size());
         }, "target"_a)
+        .def("read_depth_pixels", [](engine::EngineApp& app, engine::RenderTarget& target) {
+            return app.read_depth_pixels(target);
+        }, "target"_a)
         .def("set_composer", &engine::EngineApp::set_composer, "composer"_a)
         .def_prop_rw("composer", &engine::EngineApp::composer, &engine::EngineApp::set_composer)
         .def_prop_ro("stats", [](engine::EngineApp& app) -> const engine::RenderStats& {

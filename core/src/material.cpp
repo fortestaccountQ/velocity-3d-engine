@@ -50,7 +50,9 @@ sg_pipeline PipelineManager::get_or_create(uint64_t key, const sg_pipeline_desc&
         return it->second;
     }
     sg_pipeline pip = sg_make_pipeline(&desc_template);
-    cache_[key] = pip;
+    if (pip.id != 0) {
+        cache_[key] = pip;
+    }
     return pip;
 }
 

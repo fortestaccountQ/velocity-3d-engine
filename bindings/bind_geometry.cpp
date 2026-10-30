@@ -493,15 +493,37 @@ void bind_geometry(nb::module_& m) {
         .def("instance_count", &engine::InstancedMesh::instance_count)
         .def("set_instance", [](engine::InstancedMesh& im, size_t idx, const nb::object& col_obj) {
             glm::mat4 mat(1.0f);
-            glm::vec4 col(1.0f);
-            if (nb::isinstance<glm::vec4>(col_obj)) col = nb::cast<glm::vec4>(col_obj);
-            else if (nb::isinstance<nb::tuple>(col_obj) || nb::isinstance<nb::list>(col_obj)) {
-                auto seq = nb::cast<std::vector<float>>(col_obj);
-                if (seq.size() >= 4) col = { seq[0], seq[1], seq[2], seq[3] };
-                else if (seq.size() == 3) col = { seq[0], seq[1], seq[2], 1.0f };
-            }
+            if (idx < im.instances.size()) mat = im.instances[idx].model_matrix;
+            glm::vec4 col = parse_vec4(col_obj);
             im.set_instance(idx, mat, col);
         }, "index"_a, "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
+        .def("set_instance", [](engine::InstancedMesh& im, size_t idx, const glm::mat4& mat, const nb::object& col_obj) {
+            glm::vec4 col = parse_vec4(col_obj);
+            im.set_instance(idx, mat, col);
+        }, "index"_a, "matrix"_a, "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
+        .def("set_matrix_at", [](engine::InstancedMesh& im, size_t idx, const glm::mat4& mat) {
+            glm::vec4 col(1.0f);
+            if (idx < im.instances.size()) col = im.instances[idx].color;
+            im.set_instance(idx, mat, col);
+        }, "index"_a, "matrix"_a)
+        .def("set_color_at", [](engine::InstancedMesh& im, size_t idx, const nb::object& col_obj) {
+            glm::mat4 mat(1.0f);
+            if (idx < im.instances.size()) mat = im.instances[idx].model_matrix;
+            glm::vec4 col = parse_vec4(col_obj);
+            im.set_instance(idx, mat, col);
+        }, "index"_a, "color"_a)
+        .def("set_instance_transform", [](engine::InstancedMesh& im, size_t idx,
+                                          float px, float py, float pz,
+                                          float rx, float ry, float rz,
+                                          float sx, float sy, float sz,
+                                          const nb::object& col_obj) {
+            engine::Transform tr({px, py, pz}, {rx, ry, rz}, {sx, sy, sz});
+            glm::vec4 col = parse_vec4(col_obj);
+            im.set_instance(idx, tr.model_matrix(), col);
+        }, "index"_a, "px"_a, "py"_a, "pz"_a,
+           "rx"_a = 0.0f, "ry"_a = 0.0f, "rz"_a = 0.0f,
+           "sx"_a = 1.0f, "sy"_a = 1.0f, "sz"_a = 1.0f,
+           "color"_a = nb::make_tuple(1.0f, 1.0f, 1.0f, 1.0f))
         .def_ro("inst_vbuf_id", &engine::InstancedMesh::inst_vbuf_id)
         .def("ensure_gpu_buffers", &engine::InstancedMesh::ensure_gpu_buffers)
         .def("destroy", &engine::InstancedMesh::destroy);

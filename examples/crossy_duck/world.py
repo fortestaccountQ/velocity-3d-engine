@@ -90,6 +90,25 @@ def get_default_material_registry() -> Optional[Any]:
     return _DEFAULT_REGISTRY
 
 
+def clear_default_material_registry() -> None:
+    """Clear and release the fallback default material registry."""
+    global _DEFAULT_REGISTRY
+    reg = globals().get("_DEFAULT_REGISTRY")
+    if reg is not None:
+        try:
+            if hasattr(reg, "textures"):
+                reg.textures.clear()
+            if hasattr(reg, "materials"):
+                reg.materials.clear()
+        except Exception:
+            pass
+        _DEFAULT_REGISTRY = None
+
+
+import atexit
+atexit.register(clear_default_material_registry)
+
+
 def _get_mat(registry: Any, name: str, uv_scale: Optional[Tuple[float, float]] = None) -> Any:
     """Safely fetch material from registry with optional uv_scale override."""
     if registry is None:

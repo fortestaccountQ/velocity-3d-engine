@@ -32,6 +32,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#if defined(SOKOL_D3D11)
+#include <d3d11.h>
+#endif
 #endif
 
 namespace engine {
@@ -226,9 +229,13 @@ static const char* hlsl_vs =
     "    float4 wpos = mul(model, float4(inp.pos, 1.0));\n"
     "    outp.world_pos = wpos.xyz;\n"
     "    float3 N = normalize(mul((float3x3)normal_mat, inp.normal));\n"
-    "    float3 T = normalize(mul((float3x3)normal_mat, inp.tangent.xyz));\n"
-    "    T = normalize(T - dot(T, N) * N);\n"
-    "    float3 B = cross(N, T) * inp.tangent.w;\n"
+    "    float3 T = mul((float3x3)normal_mat, inp.tangent.xyz);\n"
+    "    float3 ortho_T = T - dot(T, N) * N;\n"
+    "    if (dot(ortho_T, ortho_T) < 0.0001) {\n"
+    "        ortho_T = abs(N.y) > 0.99 ? cross(N, float3(0.0, 0.0, 1.0)) : cross(N, float3(0.0, 1.0, 0.0));\n"
+    "    }\n"
+    "    T = normalize(ortho_T);\n"
+    "    float3 B = cross(N, T) * (inp.tangent.w < 0.0 ? -1.0 : 1.0);\n"
     "    outp.normal = N;\n"
     "    outp.tangent = T;\n"
     "    outp.bitangent = B;\n"
@@ -399,8 +406,19 @@ static const char* hlsl_fs =
     "        float3 norm_map = tex_normal.Sample(smp_normal, uv).rgb * 2.0 - 1.0;\n"
     "        norm_map.xy *= material_uv_offset.z;\n"
     "        norm_map = normalize(norm_map);\n"
-    "        float3 T = normalize(inp.tangent);\n"
-    "        float3 B = normalize(inp.bitangent);\n"
+    "        float3 T = inp.tangent;\n"
+    "        if (dot(T, T) > 0.0001) {\n"
+    "            T = normalize(T);\n"
+    "        } else {\n"
+    "            T = abs(N.y) > 0.99 ? cross(N, float3(0.0, 0.0, 1.0)) : cross(N, float3(0.0, 1.0, 0.0));\n"
+    "            T = normalize(T);\n"
+    "        }\n"
+    "        float3 B = inp.bitangent;\n"
+    "        if (dot(B, B) > 0.0001) {\n"
+    "            B = normalize(B);\n"
+    "        } else {\n"
+    "            B = cross(N, T);\n"
+    "        }\n"
     "        N = normalize(norm_map.x * T + norm_map.y * B + norm_map.z * N);\n"
     "    }\n"
     "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
@@ -707,9 +725,13 @@ static const char* hlsl_inst_vs =
     "    outp.world_pos = world_pos.xyz;\n"
     "    float3x3 nmat = (float3x3)model;\n"
     "    float3 N = normalize(mul(nmat, inp.normal));\n"
-    "    float3 T = normalize(mul(nmat, inp.tangent.xyz));\n"
-    "    T = normalize(T - dot(T, N) * N);\n"
-    "    float3 B = cross(N, T) * inp.tangent.w;\n"
+    "    float3 T = mul(nmat, inp.tangent.xyz);\n"
+    "    float3 ortho_T = T - dot(T, N) * N;\n"
+    "    if (dot(ortho_T, ortho_T) < 0.0001) {\n"
+    "        ortho_T = abs(N.y) > 0.99 ? cross(N, float3(0.0, 0.0, 1.0)) : cross(N, float3(0.0, 1.0, 0.0));\n"
+    "    }\n"
+    "    T = normalize(ortho_T);\n"
+    "    float3 B = cross(N, T) * (inp.tangent.w < 0.0 ? -1.0 : 1.0);\n"
     "    outp.normal = N;\n"
     "    outp.tangent = T;\n"
     "    outp.bitangent = B;\n"
@@ -859,9 +881,13 @@ static const char* glsl_vs =
     "    vec4 wpos = model * vec4(pos, 1.0);\n"
     "    v_world_pos = wpos.xyz;\n"
     "    vec3 N = normalize(mat3(normal_mat) * normal);\n"
-    "    vec3 T = normalize(mat3(normal_mat) * tangent.xyz);\n"
-    "    T = normalize(T - dot(T, N) * N);\n"
-    "    vec3 B = cross(N, T) * tangent.w;\n"
+    "    vec3 T = mat3(normal_mat) * tangent.xyz;\n"
+    "    vec3 ortho_T = T - dot(T, N) * N;\n"
+    "    if (dot(ortho_T, ortho_T) < 0.0001) {\n"
+    "        ortho_T = abs(N.y) > 0.99 ? cross(N, vec3(0.0, 0.0, 1.0)) : cross(N, vec3(0.0, 1.0, 0.0));\n"
+    "    }\n"
+    "    T = normalize(ortho_T);\n"
+    "    vec3 B = cross(N, T) * (tangent.w < 0.0 ? -1.0 : 1.0);\n"
     "    v_normal = N;\n"
     "    v_tangent = T;\n"
     "    v_bitangent = B;\n"
@@ -1024,8 +1050,19 @@ static const char* glsl_fs =
     "        vec3 norm_map = texture(tex_normal, uv).rgb * 2.0 - 1.0;\n"
     "        norm_map.xy *= material_uv_offset.z;\n"
     "        norm_map = normalize(norm_map);\n"
-    "        vec3 T = normalize(v_tangent);\n"
-    "        vec3 B = normalize(v_bitangent);\n"
+    "        vec3 T = v_tangent;\n"
+    "        if (dot(T, T) > 0.0001) {\n"
+    "            T = normalize(T);\n"
+    "        } else {\n"
+    "            T = abs(N.y) > 0.99 ? cross(N, vec3(0.0, 0.0, 1.0)) : cross(N, vec3(0.0, 1.0, 0.0));\n"
+    "            T = normalize(T);\n"
+    "        }\n"
+    "        vec3 B = v_bitangent;\n"
+    "        if (dot(B, B) > 0.0001) {\n"
+    "            B = normalize(B);\n"
+    "        } else {\n"
+    "            B = cross(N, T);\n"
+    "        }\n"
     "        N = normalize(norm_map.x * T + norm_map.y * B + norm_map.z * N);\n"
     "    }\n"
     "    float roughness = clamp(material_params.x, 0.04, 1.0);\n"
@@ -1288,9 +1325,13 @@ static const char* glsl_inst_vs =
     "    v_world_pos = world_pos.xyz;\n"
     "    mat3 nmat = mat3(model);\n"
     "    vec3 N = normalize(nmat * normal);\n"
-    "    vec3 T = normalize(nmat * tangent.xyz);\n"
-    "    T = normalize(T - dot(T, N) * N);\n"
-    "    vec3 B = cross(N, T) * tangent.w;\n"
+    "    vec3 T = nmat * tangent.xyz;\n"
+    "    vec3 ortho_T = T - dot(T, N) * N;\n"
+    "    if (dot(ortho_T, ortho_T) < 0.0001) {\n"
+    "        ortho_T = abs(N.y) > 0.99 ? cross(N, vec3(0.0, 0.0, 1.0)) : cross(N, vec3(0.0, 1.0, 0.0));\n"
+    "    }\n"
+    "    T = normalize(ortho_T);\n"
+    "    vec3 B = cross(N, T) * (tangent.w < 0.0 ? -1.0 : 1.0);\n"
     "    v_normal = N;\n"
     "    v_tangent = T;\n"
     "    v_bitangent = B;\n"
@@ -1399,20 +1440,167 @@ static const char* glsl_proc_sky_fs =
 // ---------------------------------------------------------------------------
 // EngineApp Implementation
 // ---------------------------------------------------------------------------
-EngineApp::EngineApp() = default;
+static EngineApp* s_active_engine_app = nullptr;
+
+EngineApp::EngineApp() {
+    s_active_engine_app = this;
+}
 
 EngineApp::EngineApp(const std::string& title, int width, int height) {
+    s_active_engine_app = this;
     init(title, width, height);
 }
 
 EngineApp::~EngineApp() {
+    if (s_active_engine_app == this) {
+        s_active_engine_app = nullptr;
+    }
     close();
 }
 
+void EngineApp::ensure_device() {
+    if (sg_isvalid()) {
+        if (pip_id_ == 0) {
+            init_pipeline_and_shaders();
+        }
+        return;
+    }
+#if defined(SOKOL_D3D11)
+    D3D_FEATURE_LEVEL feature_levels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0
+    };
+    D3D_FEATURE_LEVEL feature_level;
+    ID3D11Device* dev = nullptr;
+    ID3D11DeviceContext* ctx = nullptr;
+
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
+        nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        feature_levels,
+        sizeof(feature_levels) / sizeof(feature_levels[0]),
+        D3D11_SDK_VERSION,
+        &dev,
+        &feature_level,
+        &ctx
+    );
+
+    if (FAILED(hr)) {
+        hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_WARP,
+            nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            feature_levels,
+            sizeof(feature_levels) / sizeof(feature_levels[0]),
+            D3D11_SDK_VERSION,
+            &dev,
+            &feature_level,
+            &ctx
+        );
+    }
+
+    if (SUCCEEDED(hr) && dev && ctx) {
+        headless_dev_ = dev;
+        headless_ctx_ = ctx;
+
+        sg_desc desc{};
+        desc.environment.defaults.color_format = SG_PIXELFORMAT_RGBA8;
+        desc.environment.defaults.depth_format = SG_PIXELFORMAT_DEPTH;
+        desc.environment.defaults.sample_count = 1;
+        desc.environment.d3d11.device = dev;
+        desc.environment.d3d11.device_context = ctx;
+        desc.logger.func = slog_func;
+        desc.buffer_pool_size = 16384;
+        desc.image_pool_size = 4096;
+        desc.sampler_pool_size = 1024;
+        desc.shader_pool_size = 2048;
+        desc.pipeline_pool_size = 4096;
+        desc.view_pool_size = 8192;
+        desc.uniform_buffer_size = 8 * 1024 * 1024;
+        sg_setup(&desc);
+
+        init_pipeline_and_shaders();
+        is_headless_ = true;
+    }
+#endif
+}
+
+void EngineApp::ensure_headless_device() {
+    if (sg_isvalid()) return;
+    if (s_active_engine_app) {
+        s_active_engine_app->ensure_device();
+    } else {
+#if defined(SOKOL_D3D11)
+        D3D_FEATURE_LEVEL feature_levels[] = {
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1,
+            D3D_FEATURE_LEVEL_10_0
+        };
+        D3D_FEATURE_LEVEL feature_level;
+        ID3D11Device* dev = nullptr;
+        ID3D11DeviceContext* ctx = nullptr;
+
+        HRESULT hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            feature_levels,
+            sizeof(feature_levels) / sizeof(feature_levels[0]),
+            D3D11_SDK_VERSION,
+            &dev,
+            &feature_level,
+            &ctx
+        );
+
+        if (FAILED(hr)) {
+            hr = D3D11CreateDevice(
+                nullptr,
+                D3D_DRIVER_TYPE_WARP,
+                nullptr,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                feature_levels,
+                sizeof(feature_levels) / sizeof(feature_levels[0]),
+                D3D11_SDK_VERSION,
+                &dev,
+                &feature_level,
+                &ctx
+            );
+        }
+
+        if (SUCCEEDED(hr) && dev && ctx) {
+            sg_desc desc{};
+            desc.environment.defaults.color_format = SG_PIXELFORMAT_RGBA8;
+            desc.environment.defaults.depth_format = SG_PIXELFORMAT_DEPTH;
+            desc.environment.defaults.sample_count = 1;
+            desc.environment.d3d11.device = dev;
+            desc.environment.d3d11.device_context = ctx;
+            desc.logger.func = slog_func;
+            desc.buffer_pool_size = 16384;
+            desc.image_pool_size = 4096;
+            desc.sampler_pool_size = 1024;
+            desc.shader_pool_size = 2048;
+            desc.pipeline_pool_size = 4096;
+            desc.view_pool_size = 8192;
+            desc.uniform_buffer_size = 8 * 1024 * 1024;
+            sg_setup(&desc);
+        }
+#endif
+    }
+}
+
 void EngineApp::init(const std::string& title, int width, int height) {
+    s_active_engine_app = this;
     config_.title = title;
     config_.width = width;
     config_.height = height;
+    ensure_device();
     initialized_ = true;
 }
 
@@ -1993,9 +2181,13 @@ void EngineApp::on_init() {
     sg_desc desc{};
     desc.environment = sglue_environment();
     desc.logger.func = slog_func;
-    desc.buffer_pool_size = 8192;
-    desc.image_pool_size = 512;
-    desc.pipeline_pool_size = 256;
+    desc.buffer_pool_size = 16384;
+    desc.image_pool_size = 4096;
+    desc.sampler_pool_size = 1024;
+    desc.shader_pool_size = 2048;
+    desc.pipeline_pool_size = 4096;
+    desc.view_pool_size = 8192;
+    desc.uniform_buffer_size = 8 * 1024 * 1024;
     sg_setup(&desc);
 
     init_pipeline_and_shaders();
@@ -2262,14 +2454,17 @@ void EngineApp::render_cube_camera(Scene& scene, CubeCamera& cam) {
     }
 }
 
-void EngineApp::render_shadow_pass() {
+void EngineApp::render_shadow_pass(Scene* scene_override, Camera* camera_override) {
     if (shadow_pip_id_ == 0 || shadow_color_view_id_ == 0 || shadow_depth_view_id_ == 0) {
         return;
     }
 
+    Scene& sc = scene_override ? *scene_override : scene_;
+    Camera& cam = camera_override ? *camera_override : camera_;
+
     // 1. Check for SpotLight casting shadows
     std::shared_ptr<SpotLight> casting_spot = nullptr;
-    for (const auto& l : scene_.lights()) {
+    for (const auto& l : sc.lights()) {
         if (!l) continue;
         if (l->type == LightType::Spot) {
             auto sl = std::dynamic_pointer_cast<SpotLight>(l);
@@ -2293,7 +2488,7 @@ void EngineApp::render_shadow_pass() {
     } else {
         // Directional Light with camera-following shadow box and texel snapping
         std::shared_ptr<DirectionalLight> casting_dir = nullptr;
-        for (const auto& l : scene_.lights()) {
+        for (const auto& l : sc.lights()) {
             if (!l) continue;
             if (l->type == LightType::Directional) {
                 auto dl = std::dynamic_pointer_cast<DirectionalLight>(l);
@@ -2303,12 +2498,12 @@ void EngineApp::render_shadow_pass() {
                 }
             }
         }
-        glm::vec3 sun_dir = casting_dir ? glm::normalize(casting_dir->get_world_direction()) : glm::normalize(scene_.light.direction);
+        glm::vec3 sun_dir = casting_dir ? glm::normalize(casting_dir->get_world_direction()) : glm::normalize(sc.light.direction);
         if (glm::length(sun_dir) < 0.001f) {
             sun_dir = glm::vec3(0.4f, -0.8f, 0.4f);
         }
 
-        glm::vec3 center = camera_.position;
+        glm::vec3 center = cam.parent() ? cam.world_position() : cam.position;
         glm::vec3 light_up = std::abs(sun_dir.y) > 0.99f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
         float dist = shadow_settings_.far_z * 0.5f;
         glm::vec3 light_pos = center - sun_dir * dist;
@@ -2344,7 +2539,7 @@ void EngineApp::render_shadow_pass() {
     sg_pipeline pip{ shadow_pip_id_ };
     sg_apply_pipeline(pip);
 
-    for (const auto& entity : scene_.entities()) {
+    for (const auto& entity : sc.entities()) {
         if (!entity || !entity->visible || !entity->mesh || !entity->cast_shadows) continue;
         if (!entity->mesh->ensure_gpu_buffers()) continue;
 
@@ -2360,14 +2555,14 @@ void EngineApp::render_shadow_pass() {
         sg_draw(0, entity->mesh->num_indices, 1);
     }
 
-    if (instanced_shadow_pip_id_ != 0 && !scene_.instanced_meshes().empty()) {
+    if (instanced_shadow_pip_id_ != 0 && !sc.instanced_meshes().empty()) {
         sg_pipeline inst_pip{ instanced_shadow_pip_id_ };
         sg_apply_pipeline(inst_pip);
 
         ShadowVSParams vs_params{ light_vp_ };
         sg_apply_uniforms(0, SG_RANGE_REF(vs_params));
 
-        for (const auto& inst_mesh : scene_.instanced_meshes()) {
+        for (const auto& inst_mesh : sc.instanced_meshes()) {
             if (!inst_mesh || !inst_mesh->mesh || inst_mesh->instance_count() == 0) continue;
             if (!inst_mesh->ensure_gpu_buffers()) continue;
 
@@ -2702,7 +2897,9 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
     apply_camera_viewport_and_scissor(camera, target_w, target_h);
 
     if (target_h > 0 && camera.type == CameraType::Perspective) {
-        camera.aspect = static_cast<float>(target_w) / static_cast<float>(target_h);
+        float vp_w_f = (camera.viewport.z <= 1.0f && camera.viewport.z > 0.0f) ? (camera.viewport.z * static_cast<float>(target_w)) : camera.viewport.z;
+        float vp_h_f = (camera.viewport.w <= 1.0f && camera.viewport.w > 0.0f) ? (camera.viewport.w * static_cast<float>(target_h)) : camera.viewport.w;
+        camera.aspect = (vp_h_f > 0.0f) ? (vp_w_f / vp_h_f) : (static_cast<float>(target_w) / static_cast<float>(target_h));
     }
     glm::mat4 vp = camera.view_projection_matrix();
 
@@ -2784,8 +2981,9 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
     light_ubo.light_counts.w = shadow_settings_.pcf_16_tap ? 1.0f : 0.0f;
 
     // Prepare base lighting uniform
+    glm::vec3 cam_pos = camera.parent() ? camera.world_position() : camera.position;
     FSParams fs_params{};
-    fs_params.eye_pos = glm::vec4(camera.position, scene.environment_intensity());
+    fs_params.eye_pos = glm::vec4(cam_pos, scene.environment_intensity());
     fs_params.fog_color = glm::vec4(fog_color_, (tone_mapping_enabled_ && !composer_) ? 1.0f : 0.0f);
     fs_params.fog_params = glm::vec4(
         fog_enabled_ ? static_cast<float>(fog_type_) : 0.0f,
@@ -2823,7 +3021,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
         }
         if (!mesh->ensure_gpu_buffers()) return;
 
-        glm::vec3 diff = camera.position - wpos;
+        glm::vec3 diff = cam_pos - wpos;
         float d2 = glm::dot(diff, diff);
         auto m = mat ? mat : default_mat;
         bool is_trans = m && (m->transparent || m->opacity < 0.999f || m->blend_mode != BlendMode::Opaque);
@@ -2901,7 +3099,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
             SideMode side = mat ? mat->side : SideMode::Front;
             bool depth_write = is_transparent_pass ? false : (mat ? mat->depth_write : true);
             bool depth_test = mat ? mat->depth_test : true;
-            BlendMode blend = is_transparent_pass ? (mat ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
+            BlendMode blend = is_transparent_pass ? ((mat && mat->blend_mode != BlendMode::Opaque) ? mat->blend_mode : BlendMode::Alpha) : BlendMode::Opaque;
             bool wireframe = mat ? mat->wireframe : false;
             int samples = is_offscreen ? 1 : sapp_sample_count();
             uint32_t target_fmt = is_offscreen ? ((color_format != 0) ? color_format : static_cast<uint32_t>(SG_PIXELFORMAT_RGBA16F)) : 0;
@@ -2951,9 +3149,11 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
                 }
 
                 sg_pipeline pip = PipelineManager::instance().get_or_create(pip_key, pdesc);
-                sg_apply_pipeline(pip);
-                current_pip_key = pip_key;
-                sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
+                if (pip.id != 0) {
+                    sg_apply_pipeline(pip);
+                    current_pip_key = pip_key;
+                    sg_apply_uniforms(2, SG_RANGE_REF(light_ubo));
+                }
             }
 
             auto tex_alb = (mat && mat->albedo_map) ? mat->albedo_map : default_white_tex_;
@@ -3147,7 +3347,7 @@ void EngineApp::render_scene_pass(Scene& scene, Camera& camera, int target_w, in
 void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target) {
     if (pip_id_ == 0 || target.color_view_id() == 0) return;
 
-    render_shadow_pass();
+    render_shadow_pass(&scene, &camera);
 
     sg_pass pass{};
     pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
@@ -3177,6 +3377,10 @@ void EngineApp::render_target(Scene& scene, Camera& camera, RenderTarget& target
 
 std::vector<uint8_t> EngineApp::read_pixels(RenderTarget& target) {
     return target.read_pixels();
+}
+
+std::vector<float> EngineApp::read_depth_pixels(RenderTarget& target) {
+    return target.read_depth_pixels();
 }
 
 void EngineApp::set_composer(std::shared_ptr<EffectComposer> composer) {
@@ -3474,6 +3678,18 @@ void EngineApp::on_cleanup() {
 
     editor_.shutdown();
     sg_shutdown();
+
+#if defined(SOKOL_D3D11)
+    if (headless_ctx_) {
+        static_cast<ID3D11DeviceContext*>(headless_ctx_)->Release();
+        headless_ctx_ = nullptr;
+    }
+    if (headless_dev_) {
+        static_cast<ID3D11Device*>(headless_dev_)->Release();
+        headless_dev_ = nullptr;
+    }
+#endif
+    is_headless_ = false;
 }
 
 void EngineApp::set_mode(EngineMode mode) {
@@ -3610,6 +3826,10 @@ void EngineApp::dispatch_mouse_move(float mouse_x, float mouse_y) {
 }
 
 void EngineApp::run() {
+    if (is_headless_) {
+        on_cleanup();
+        is_headless_ = false;
+    }
     sapp_desc desc{};
     desc.user_data = this;
     desc.init_userdata_cb = [](void* ud) {

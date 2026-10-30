@@ -41,13 +41,13 @@ public:
 
     std::shared_ptr<Texture> texture() const { return texture_; }
     std::vector<uint8_t> read_pixels();
+    std::vector<float> read_depth_pixels();
 
     void resize(int new_width, int new_height);
     void destroy();
-
-private:
     void create_resources();
 
+private:
     int width_{0};
     int height_{0};
     RenderTargetFormat format_{RenderTargetFormat::RGBA8};

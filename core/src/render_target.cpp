@@ -1,4 +1,5 @@
 #include "engine/render_target.hpp"
+#include "engine/app.hpp"
 
 #include "sokol_gfx.h"
 
@@ -92,7 +93,11 @@ void RenderTarget::create_resources() {
     texture_->height = (height_ > 0) ? height_ : 0;
     texture_->channels = (format_ == RenderTargetFormat::R32F) ? 1 : 4;
 
-    if (!sg_isvalid() || width_ <= 0 || height_ <= 0) {
+    if (!sg_isvalid()) {
+        EngineApp::ensure_headless_device();
+    }
+
+    if (!sg_isvalid() || width_ <= 0 || height_ <= 0 || color_image_id_ != 0) {
         return;
     }
 
@@ -269,6 +274,52 @@ std::vector<uint8_t> RenderTarget::read_pixels() {
 #endif
 
     return pixels;
+}
+
+std::vector<float> RenderTarget::read_depth_pixels() {
+    std::vector<float> depths;
+    if (width_ <= 0 || height_ <= 0 || depth_image_id_ == 0) {
+        return depths;
+    }
+
+    depths.resize(static_cast<size_t>(width_ * height_), 1.0f);
+
+#if defined(SOKOL_D3D11)
+    ID3D11Device* dev = (ID3D11Device*)sg_d3d11_device();
+    ID3D11DeviceContext* ctx = (ID3D11DeviceContext*)sg_d3d11_device_context();
+    sg_d3d11_image_info info = sg_d3d11_query_image_info(sg_image{ depth_image_id_ });
+    ID3D11Texture2D* src_tex = (ID3D11Texture2D*)info.tex2d;
+
+    if (dev && ctx && src_tex) {
+        D3D11_TEXTURE2D_DESC desc;
+        src_tex->GetDesc(&desc);
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        desc.MiscFlags = 0;
+        desc.Format = DXGI_FORMAT_R32_TYPELESS;
+
+        ID3D11Texture2D* staging_tex = nullptr;
+        HRESULT hr = dev->CreateTexture2D(&desc, nullptr, &staging_tex);
+        if (SUCCEEDED(hr) && staging_tex) {
+            ctx->CopyResource(staging_tex, src_tex);
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            hr = ctx->Map(staging_tex, 0, D3D11_MAP_READ, 0, &mapped);
+            if (SUCCEEDED(hr)) {
+                const uint8_t* src_ptr = static_cast<const uint8_t*>(mapped.pData);
+                float* dst_ptr = depths.data();
+                size_t row_bytes = static_cast<size_t>(width_ * sizeof(float));
+                for (int y = 0; y < height_; ++y) {
+                    std::memcpy(dst_ptr + y * width_, src_ptr + y * mapped.RowPitch, row_bytes);
+                }
+                ctx->Unmap(staging_tex, 0);
+            }
+            staging_tex->Release();
+        }
+    }
+#endif
+
+    return depths;
 }
 
 } // namespace engine
