@@ -145,12 +145,12 @@ classDiagram
     }
 
     class NanobindWrapper {
-        +nb::class_<Entity>
-        +std::shared_ptr<Entity>
+        +nb_class_Entity
+        +shared_ptr~Entity~
     }
 
     class NativeSceneGraph {
-        +std::vector<std::shared_ptr<Node3D>> children_
+        +vector~shared_ptr~Node3D~~ children_
         +Node3D* parent_
     }
 
@@ -161,7 +161,7 @@ classDiagram
     }
 
     PythonScope --> NanobindWrapper : Holds Python PyObject ref
-    NanobindWrapper --> NativeSceneGraph : std::shared_ptr ref count (+1)
+    NanobindWrapper --> NativeSceneGraph : shared_ptr ref count (+1)
     NativeSceneGraph --> NativeSceneGraph : Parent holds child (+1 ref count)
     NativeSceneGraph ..> NativeSceneGraph : Child holds raw Node3D* (0 ref count)
     NativeSceneGraph --> NativeGPUResources : Manages GPU Buffer IDs

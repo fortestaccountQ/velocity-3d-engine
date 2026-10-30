@@ -19,7 +19,7 @@ flowchart TD
 
     subgraph PipelineManager["PipelineManager (Cache Engine)"]
         Entity --> PM[PipelineManager.get_or_create]
-        Key[64-Bit Cache Key\nShaderID | Side | DepthTest | BlendMode | Wireframe | SampleCount] --> PM
+        Key["64-Bit Cache Key\nShaderID | Side | DepthTest | BlendMode | Wireframe | SampleCount"] --> PM
         PM --> Pipeline[sg_pipeline Handle]
     end
 

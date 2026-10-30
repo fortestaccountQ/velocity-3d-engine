@@ -23,9 +23,9 @@ flowchart TD
     end
 
     PyCode -->|play_jump / play_footstep| VoicePool
-    PyCode -->|play_hit_3d(world_pos)| MA_Spatial
-    PyCode -->|play_sound_file(path)| FileLoader
-    FPSCtrl -->|update_listener(pos, fwd, up)| Listener
+    PyCode -->|"play_hit_3d(world_pos)"| MA_Spatial
+    PyCode -->|"play_sound_file(path)"| FileLoader
+    FPSCtrl -->|"update_listener(pos, fwd, up)"| Listener
     Listener --> MA_Engine
     VoicePool --> MA_Engine
     Synth --> VoicePool

@@ -25,7 +25,7 @@ flowchart TD
     end
 
     Camera -->|Extract 6 Planes| FrustumCull
-    Camera -->|Distance d = ||P - C||| LODManager
+    Camera -->|"Distance d = ‖P - C‖"| LODManager
     FrustumCull -->|AABB Intersection| LODGroup
     LODManager -->|Set Tier Visibility| LODGroup
     IMesh -->|Upload Instance Transforms| InstVBuf

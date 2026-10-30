@@ -180,9 +180,9 @@ When Euler rotations are modified in degrees:
 1. `Transform::set_rotation(rx, ry, rz)` evaluates:
    $$\mathbf{q} = \mathbf{q}_Y(\text{ry}) \cdot \mathbf{q}_X(\text{rx}) \cdot \mathbf{q}_Z(\text{rz})$$
 2. In reverse, when querying `.rotation`, the quaternion is decomposed into $YXZ$ Euler angles:
-   $$\text{Pitch } (X) = \arcsin\left(\text{clamp}(-2(yz - wx), -1.0, 1.0)\right)$$
-   $$\text{Yaw } (Y) = \operatorname{atan2}\left(2(xz + wy), 1 - 2(x^2 + y^2)\right)$$
-   $$\text{Roll } (Z) = \operatorname{atan2}\left(2(xy + wz), 1 - 2(x^2 + z^2)\right)$$
+   $$\text{Pitch } (X) = \arcsin\left(\mathrm{clamp}(-2(yz - wx), -1.0, 1.0)\right)$$
+   $$\text{Yaw } (Y) = \mathrm{atan2}\left(2(xz + wy), 1 - 2(x^2 + y^2)\right)$$
+   $$\text{Roll } (Z) = \mathrm{atan2}\left(2(xy + wz), 1 - 2(x^2 + z^2)\right)$$
 
 ### 2.3 World Matrix Propagation & Lazy Dirty Flags
 
@@ -227,8 +227,8 @@ Velocity provides $O(1)$ accessors to extract true global spatial parameters fro
    $$s_x = \|\mathbf{M}_{world}[0]\|, \quad s_y = \|\mathbf{M}_{world}[1]\|, \quad s_z = \|\mathbf{M}_{world}[2]\|$$
 3. **World Orientation Quaternion**:
    Normalized $3 \times 3$ rotational basis vectors:
-   $$\mathbf{R}_{pure} = \begin{bmatrix} \frac{\mathbf{M}_{world}[0]}{s_x} & \frac{\mathbf{M}_{world}[1]}{s_y} & \frac{\mathbf{M}_{world}[2]}{s_z} \end{bmatrix}$$
-   $$\mathbf{q}_{world} = \text{quat\_cast}(\mathbf{R}_{pure})$$
+   $$\mathbf{R}_{\text{pure}} = \begin{bmatrix} \frac{\mathbf{M}_{\text{world}}[0]}{s_x} & \frac{\mathbf{M}_{\text{world}}[1]}{s_y} & \frac{\mathbf{M}_{\text{world}}[2]}{s_z} \end{bmatrix}$$
+   $$\mathbf{q}_{\text{world}} = \mathrm{quatCast}(\mathbf{R}_{\text{pure}})$$
 4. **World Forward Direction**:
    Following the right-handed convention, the unrotated heading is along $-Z$:
    $$\vec{d}_{forward} = \mathbf{q}_{world} \cdot \begin{bmatrix} 0 \\ 0 \\ -1 \end{bmatrix}$$
@@ -337,7 +337,7 @@ $$\text{Push}_z = (\delta z_1 < \delta z_2) \,?\, -\delta z_1 : \delta z_2$$
 
 The algorithm selects the axis exhibiting the **minimum absolute penetration**:
 
-$$\text{axis} = \operatorname{argmin}\left( |\text{Push}_x|, |\text{Push}_y|, |\text{Push}_z| \right)$$
+$$\text{axis} = \mathrm{argmin}\left( |\text{Push}_x|, |\text{Push}_y|, |\text{Push}_z| \right)$$
 
 $$\vec{v}_{MTV} = \begin{cases}
 [\text{Push}_x, 0, 0]^T & \text{if } |\text{Push}_x| \le |\text{Push}_y| \land |\text{Push}_x| \le |\text{Push}_z| \\
@@ -391,8 +391,8 @@ The algorithm executes in four steps:
    If false, the character is completely above or below the box. Return false immediately.
 2. **Horizontal Clamping to Box Bounds**:
    Find the closest point $(c_x, c_z)$ on the 2D box footprint to the cylinder axis:
-   $$c_x = \operatorname{clamp}(base.x, box.min.x, box.max.x)$$
-   $$c_z = \operatorname{clamp}(base.z, box.min.z, box.max.z)$$
+   $$c_x = \mathrm{clamp}(base.x, box.min.x, box.max.x)$$
+   $$c_z = \mathrm{clamp}(base.z, box.min.z, box.max.z)$$
    $$dx = base.x - c_x, \quad dz = base.z - c_z, \quad d^2 = dx^2 + dz^2$$
 3. **Radial Depenetration (Center Outside Box)**:
    If $d^2 > 10^{-8}$:

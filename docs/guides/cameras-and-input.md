@@ -24,18 +24,18 @@ flowchart TD
     end
 
     subgraph InputSubsystem["Input Architecture"]
-        Hardware[OS Mouse & Keyboard Events] --> IM[InputManager]
-        IM --> Polling[Continuous State:\nis_key_down, is_mouse_down]
-        IM --> Edge[Edge Triggers:\nis_key_pressed, is_key_released]
-        IM --> Relative[Relative Deltas:\nmouse_dx, mouse_dy]
-        IM --> Lock[Cursor Capture:\nset_mouse_locked]
+        Hardware["OS Mouse & Keyboard Events"] --> IM["InputManager"]
+        IM --> Polling["Continuous State:\nis_key_down, is_mouse_down"]
+        IM --> Edge["Edge Triggers:\nis_key_pressed, is_key_released"]
+        IM --> Relative["Relative Deltas:\nmouse_dx, mouse_dy"]
+        IM --> Lock["Cursor Capture:\nset_mouse_locked"]
     end
 
     subgraph Picking["Screen Picking & Raycasting"]
-        Mouse[(mouse_x, mouse_y)] --> Unproject[camera.screen_to_ray]
-        Unproject --> Ray[3D World Ray]
-        Ray --> SceneRaycast[scene.raycast]
-        SceneRaycast --> Hit[RaycastHit: distance, point, entity]
+        Mouse[("Screen Cursor: mouse_x, mouse_y")] --> Unproject["camera.screen_to_ray"]
+        Unproject --> Ray["3D World Ray"]
+        Ray --> SceneRaycast["scene.raycast"]
+        SceneRaycast --> Hit["RaycastHit: distance, point, entity"]
     end
 ```
 
@@ -249,9 +249,9 @@ flowchart LR
     end
 
     subgraph StateBuffers["Double-Buffered State"]
-        PostProcess --> Down[keys_down_ array: Continuous State]
-        PostProcess --> Pressed[keys_pressed_ array: 1-Frame Pulse]
-        PostProcess --> Released[keys_released_ array: 1-Frame Pulse]
+        PostProcess --> Down["keys_down_ array: Continuous State"]
+        PostProcess --> Pressed["keys_pressed_ array: 1-Frame Pulse"]
+        PostProcess --> Released["keys_released_ array: 1-Frame Pulse"]
     end
 
     subgraph API["Python Query Interface"]

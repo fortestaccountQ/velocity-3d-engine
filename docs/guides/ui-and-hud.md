@@ -50,8 +50,8 @@ flowchart TD
 Unlike 3D scene rendering which uses normalized device coordinates (NDC) in range $[-1.0, +1.0]$, the 2D UI system operates in **screen-space pixel coordinates**:
 
 - **Origin $(0, 0)$**: Top-left corner of the window.
-- **$+X$ Direction**: Extends horizontally to the **right** ($0 \to \text{screen\_width}$).
-- **$+Y$ Direction**: Extends vertically **downward** ($0 \to \text{screen\_height}$).
+- **$+X$ Direction**: Extends horizontally to the **right** ($0 \to W_{\text{screen}}$).
+- **$+Y$ Direction**: Extends vertically **downward** ($0 \to H_{\text{screen}}$).
 - **$(W, H)$**: Bottom-right corner of the window.
 
 ```text
@@ -72,7 +72,7 @@ Unlike 3D scene rendering which uses normalized device coordinates (NDC) in rang
 
 In `core/src/app.cpp`, the engine transforms 2D screen-space pixel coordinates into GPU clip space using an orthographic projection matrix:
 
-$$\mathbf{M}_{\text{ortho}} = \text{glm::ortho}(0.0f, \text{screen\_w}, \text{screen\_h}, 0.0f, -1.0f, 1.0f)$$
+$$\mathbf{M}_{\text{ortho}} = \mathrm{glm::ortho}(0.0f, W_{\text{screen}}, H_{\text{screen}}, 0.0f, -1.0f, 1.0f)$$
 
 $$\mathbf{M}_{\text{ortho}} = \begin{bmatrix}
 \frac{2}{W} & 0 & 0 & -1 \\
@@ -112,7 +112,7 @@ When `add_string()` or `ui.draw_text()` is executed:
 2. If `\n` is encountered, $Y$ advances by $10.0 \times \text{scale}$ and $X$ resets.
 3. For each active bit in the glyph bitmap, a 2D quad (2 triangles, 6 vertices) is emitted into the dynamic HUD vertex buffer:
    $$\text{scale} = \frac{\text{size}}{8.0}$$
-   $$\text{px}_0 = \text{cur\_x} + \text{col} \times \text{scale}, \quad \text{py}_0 = \text{cur\_y} + \text{row} \times \text{scale}$$
+   $$\text{px}_0 = x_{\text{cursor}} + \text{col} \times \text{scale}, \quad \text{py}_0 = y_{\text{cursor}} + \text{row} \times \text{scale}$$
 4. Horizontal cursor advances by $8.0 \times \text{scale}$ pixels per character.
 
 This approach guarantees crisp, pixel-perfect text rendering at any resolution with zero texture filtering blur or mipmap bleeding.

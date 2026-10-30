@@ -138,7 +138,7 @@ $$\begin{bmatrix} x_{\text{ls}} \\ y_{\text{ls}} \\ z_{\text{ls}} \\ 1 \end{bmat
 
 The world-space size of a single shadow map texel is:
 
-$$\Delta_{\text{texel}} = \frac{2 \cdot \text{ortho\_size}}{\text{resolution}}$$
+$$\Delta_{\text{texel}} = \frac{2 \cdot S_{\text{ortho}}}{\text{resolution}}$$
 
 The snapped light-space coordinates are calculated via floor quantization:
 

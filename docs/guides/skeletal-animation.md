@@ -19,12 +19,12 @@ flowchart TD
     end
 
     subgraph RuntimeEvaluation["2. Runtime Animation Loop"]
-        Mixer[AnimationMixer.update dt] --> Action1[Action: Idle weight=0.2]
-        Mixer --> Action2[Action: Run weight=0.8]
-        Action1 --> Interp[Sample Keyframe Tracks: Translation / Slerp Rotation]
+        Mixer["AnimationMixer.update(dt)"] --> Action1["Action: Idle (weight=0.2)"]
+        Mixer --> Action2["Action: Run (weight=0.8)"]
+        Action1 --> Interp["Sample Keyframe Tracks: Translation / Slerp Rotation"]
         Action2 --> Interp
-        Interp --> Accum[Weighted Bone Transform Accumulation]
-        Accum --> BoneLocal[Update Bone Local Transform]
+        Interp --> Accum["Weighted Bone Transform Accumulation"]
+        Accum --> BoneLocal["Update Bone Local Transform"]
     end
 
     subgraph MatrixPipeline["3. Skinning Matrix Evaluation"]
@@ -46,10 +46,10 @@ A vertex in a 3D model is originally authored in **Mesh Local Space** (also know
 
 The full transformation pipeline for each bone $j$ is:
 
-$$M_{\text{bone}}[j] = M_{\text{root}}^{-1} \cdot M_{\text{world}}[j] \cdot M_{\text{inv\_bind}}[j]$$
+$$M_{\text{bone}}[j] = M_{\text{root}}^{-1} \cdot M_{\text{world}}[j] \cdot M_{\text{bind}}^{-1}[j]$$
 
 Where:
-1. **$M_{\text{inv\_bind}}[j]$ (Inverse Bind Matrix)**: Transforms the vertex from mesh rest-pose space into the local coordinate space of bone $j$ in its bind pose.
+1. **$M_{\text{bind}}^{-1}[j]$ (Inverse Bind Matrix)**: Transforms the vertex from mesh rest-pose space into the local coordinate space of bone $j$ in its bind pose.
 2. **$M_{\text{world}}[j]$ (Current World Transform)**: Transforms the vertex from bone $j$'s local space to current world space according to the current frame of animated joint transforms.
 3. **$M_{\text{root}}^{-1}$ (Model Space Normalization)**: Converts the vertex back into model/mesh space so standard entity transformations (`transform.position`, `transform.rotation`) can be applied uniformly.
 
@@ -275,19 +275,19 @@ In VelocityEngine, `Bone` is a direct subclass of `Node3D`. This design allows a
 
 ```mermaid
 graph TD
-    Root[Character Root Node3D] --> Pelvis[Bone: Pelvis]
-    Pelvis --> Spine[Bone: Spine]
-    Spine --> Neck[Bone: Neck]
-    Neck --> Head[Bone: Head]
-    Head --> Helmet[Socket: Knight Helmet Entity]
+    Root["Character Root Node3D"] --> Pelvis["Bone: Pelvis"]
+    Pelvis --> Spine["Bone: Spine"]
+    Spine --> Neck["Bone: Neck"]
+    Neck --> Head["Bone: Head"]
+    Head --> Helmet["Socket: Knight Helmet Entity"]
     
-    Spine --> RightArm[Bone: RightArm]
-    RightArm --> RightForeArm[Bone: RightForeArm]
-    RightForeArm --> RightHand[Bone: RightHand]
-    RightHand --> Sword[Socket: Gilded Broadsword Entity]
-    Sword --> Scabbard[Scabbard Mesh]
-    Sword --> Blade[Blade Mesh]
-    Sword --> TrailEmitter[ParticleEmitter / Slash Ribbon]
+    Spine --> RightArm["Bone: RightArm"]
+    RightArm --> RightForeArm["Bone: RightForeArm"]
+    RightForeArm --> RightHand["Bone: RightHand"]
+    RightHand --> Sword["Socket: Gilded Broadsword Entity"]
+    Sword --> Scabbard["Scabbard Mesh"]
+    Sword --> Blade["Blade Mesh"]
+    Sword --> TrailEmitter["ParticleEmitter / Slash Ribbon"]
 ```
 
 ### 5.1 Attaching a Weapon to the Right Hand

@@ -135,7 +135,7 @@ ambient = ve.AmbientLight(
 
 ### `HemisphereLight`
 Natural outdoor ambient model interpolating between a top sky color and a bottom ground reflection color based on surface normal orientation:
-$$\text{Color} = \text{sky\_color} \cdot \left(\frac{N_y + 1}{2}\right) + \text{ground\_color} \cdot \left(1 - \frac{N_y + 1}{2}\right)$$
+$$\mathbf{C} = \mathbf{C}_{\text{sky}} \cdot \left(\frac{N_y + 1}{2}\right) + \mathbf{C}_{\text{ground}} \cdot \left(1 - \frac{N_y + 1}{2}\right)$$
 
 ```python
 hemi = ve.HemisphereLight(

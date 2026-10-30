@@ -134,7 +134,7 @@ $$\mathbf{T}_{\text{ortho}} = \text{normalize}\left(\mathbf{T} - \mathbf{N} (\ma
 
 The bitangent handedness ($w = \pm 1.0$) is calculated via scalar triple product to preserve correct normal map orientation across mirrored UV seams:
 
-$$w = \operatorname{sign}\left((\mathbf{N} \times \mathbf{T}) \cdot \mathbf{B}\right)$$
+$$w = \mathrm{sign}\left((\mathbf{N} \times \mathbf{T}) \cdot \mathbf{B}\right)$$
 
 The complete 4-component tangent $(\mathbf{T}_{\text{ortho}}.x, \mathbf{T}_{\text{ortho}}.y, \mathbf{T}_{\text{ortho}}.z, w)$ is packed into the vertex attribute stream.
 
