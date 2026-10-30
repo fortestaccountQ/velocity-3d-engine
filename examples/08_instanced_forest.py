@@ -23,8 +23,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -133,7 +133,7 @@ def create_forest_scene(app: App) -> tuple[InstancedMesh, InstancedMesh, LOD]:
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the 50,000 instance forest example in interactive or headless mode."""
-    app = App("Pielosyty - 08 Instanced Forest (50k)", width=1280, height=720, clear_color="#0a1014")
+    app = App("Velocity - 08 Instanced Forest (50k)", width=1280, height=720, clear_color="#0a1014")
 
     # High-altitude cinematic orbit controller over the forest canopy
     orb = OrbitController(target=(0.0, 5.0, 0.0), distance=75.0, min_distance=5.0, max_distance=250.0, pitch=30.0)
@@ -143,7 +143,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 08: Instanced Forest & LOD System", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 08: Instanced Forest & LOD System", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("50,000 Live Entities: 35,000 Pine Trees + 15,000 Granite Boulders via InstancedMesh", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("Multi-Tier LOD: High (<30m) -> Med (30-80m) -> Low (>80m) with Frustum Culling", (24, 76), size=13, color=GREEN)
     app.ui.show_stats(True)

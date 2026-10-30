@@ -20,8 +20,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     FollowCamera,
     Mesh,
@@ -146,7 +146,7 @@ def check_collision(px: float, pz: float, obstacles: list[tuple[float, float, fl
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the skeletal character example in interactive or headless mode."""
-    app = App("Pielosyty - 03 Skeletal Character", width=1280, height=720, clear_color="#0e1117")
+    app = App("Velocity - 03 Skeletal Character", width=1280, height=720, clear_color="#0e1117")
 
     obstacles = create_arena(app)
 
@@ -189,7 +189,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # 4. Setup UI Overlay
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 03: Skeletal Character & Third-Person Camera", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 03: Skeletal Character & Third-Person Camera", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("WASD: Move Character (Smooth Crossfade Idle <-> Run) | FollowCamera Spring-Arm", (24, 52), size=14, color=CYAN)
     app.ui.draw_text(f"State: {current_state} | Obstacle Collision: Active", (24, 76), size=13, color=GREEN)
     app.ui.show_stats(True)

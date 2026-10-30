@@ -42,7 +42,7 @@ class App:
         self._camera_controller: Optional[Any] = None
         self._custom_camera: Optional[Any] = None
         self._ui = UIOverlay(app=self)
-        self._tweens = TweenManager.default()
+        self._tweens = TweenManager()
 
         # Raycasting event listeners
         self._click_callbacks: List[Callable] = []
@@ -316,13 +316,32 @@ class App:
 
     def close(self) -> None:
         """Request window exit and cleanup."""
-        self._core.close()
+        self._update_callback = None
+        self._click_callbacks.clear()
+        self._hover_callbacks.clear()
+        if hasattr(self, "_core") and self._core is not None:
+            self._core.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # Window properties
     @property
     def is_running(self) -> bool:
         """True if the engine loop is currently executing."""
         return self._core.is_running()
+
+    @property
+    def stats(self) -> Any:
+        """Render statistics from the most recent frame."""
+        return self._core.stats
+
+    def evaluate_frustum_culling(self) -> None:
+        """Evaluate view-frustum culling and update render statistics."""
+        self._core.evaluate_frustum_culling()
 
     @property
     def width(self) -> int:
@@ -496,3 +515,63 @@ class App:
     @tone_mapping.setter
     def tone_mapping(self, value: bool) -> None:
         self._core.tone_mapping = bool(value)
+
+    def render_target(self, scene: Any, camera: Any, target: Any) -> None:
+        """Render a scene with a camera directly into an offscreen RenderTarget."""
+        native_scene = getattr(scene, "_core", scene)
+        if hasattr(native_scene, "scene"):
+            native_scene = native_scene.scene
+        native_cam = getattr(camera, "_core", camera)
+        if hasattr(native_cam, "camera"):
+            native_cam = native_cam.camera
+        self._core.render_target(native_scene, native_cam, target)
+
+    def read_pixels(self, target: Any) -> bytes:
+        """Read pixel buffer bytes from a RenderTarget."""
+        return self._core.read_pixels(target)
+
+    def read_depth_pixels(self, target: Any) -> List[float]:
+        """Read depth buffer float values from a RenderTarget."""
+        return self._core.read_depth_pixels(target)
+
+    @property
+    def composer(self) -> Any:
+        """Active EffectComposer for post-processing."""
+        return self._core.composer
+
+    @composer.setter
+    def composer(self, comp: Any) -> None:
+        self._core.set_composer(comp)
+
+    def set_composer(self, comp: Any) -> None:
+        """Set active EffectComposer for post-processing."""
+        self._core.set_composer(comp)
+
+    @property
+    def shadow_settings(self) -> Any:
+        return self._core.shadow_settings
+
+    @shadow_settings.setter
+    def shadow_settings(self, settings: Any) -> None:
+        self._core.set_shadow_settings(settings)
+
+    def set_shadow_settings(self, settings: Any) -> None:
+        self._core.set_shadow_settings(settings)
+
+    def set_shadow_resolution(self, res: int) -> None:
+        self._core.set_shadow_resolution(res)
+
+    def set_shadow_bias(self, bias: float) -> None:
+        self._core.set_shadow_bias(bias)
+
+    def set_shadow_normal_bias(self, normal_bias: float) -> None:
+        self._core.set_shadow_normal_bias(normal_bias)
+
+    def set_shadow_ortho_size(self, size: float) -> None:
+        self._core.set_shadow_ortho_size(size)
+
+    def set_shadow_pcf_16_tap(self, enable: bool) -> None:
+        self._core.set_shadow_pcf_16_tap(enable)
+
+    def set_shadow_texel_snapping(self, enable: bool) -> None:
+        self._core.set_shadow_texel_snapping(enable)

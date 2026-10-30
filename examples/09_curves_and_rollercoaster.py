@@ -21,8 +21,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     CatmullRomCurve3,
@@ -109,13 +109,13 @@ def create_rollercoaster_scene(app: App) -> tuple[CatmullRomCurve3, ve.Entity, l
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the rollercoaster spline example in interactive or headless mode."""
-    app = App("Pielosyty - 09 Curves & Rollercoaster", width=1280, height=720, clear_color="#090d16")
+    app = App("Velocity - 09 Curves & Rollercoaster", width=1280, height=720, clear_color="#090d16")
 
     curve, track_entity, pillars = create_rollercoaster_scene(app)
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 09: CatmullRomCurve3 Rollercoaster & Frenet Banking", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 09: CatmullRomCurve3 Rollercoaster & Frenet Banking", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("Procedural create_tube() Track + Structural Pillars + Dynamic Camera Flight", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("Cockpit View with Frenet Bank Orientation & Real-time Velocity Telemetry", (24, 76), size=13, color=WHITE)
     app.ui.show_stats(True)

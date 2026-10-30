@@ -20,8 +20,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -93,7 +93,7 @@ def create_pbr_scene(app: App) -> list[ve.Entity]:
 def setup_ui(app: App) -> None:
     """Configure UI Overlay with educational HUD information."""
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 01: Hello PBR Grid", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 01: Hello PBR Grid", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("X-Axis: Metallic (0.0 -> 1.0)   |   Y-Axis: Roughness (0.05 -> 1.0)", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("LMB: Orbit Camera | RMB/MMB: Pan | Scroll: Zoom", (24, 76), size=13, color=WHITE)
     app.ui.show_stats(True)
@@ -101,7 +101,7 @@ def setup_ui(app: App) -> None:
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the Hello PBR example in interactive or headless test mode."""
-    app = App("Pielosyty - 01 Hello PBR", width=1280, height=720, clear_color="#0e1117")
+    app = App("Velocity - 01 Hello PBR", width=1280, height=720, clear_color="#0e1117")
 
     # OrbitController centered on the sphere grid center (Y=5.0)
     orb = OrbitController(target=(0.0, 5.0, 0.0), distance=12.5, min_distance=2.0, max_distance=35.0)

@@ -23,8 +23,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     FirstPersonController,
     Mesh,
@@ -122,7 +122,7 @@ def create_fps_arena(app: App) -> tuple[list[ve.Entity], dict[int, tuple[float, 
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the interactive FPS sandbox game in playable or headless mode."""
-    app = App("Pielosyty - 10 FPS Game Sandbox", width=1280, height=720, clear_color="#0b0e17")
+    app = App("Velocity - 10 FPS Game Sandbox", width=1280, height=720, clear_color="#0b0e17")
 
     targets, base_positions = create_fps_arena(app)
 
@@ -202,7 +202,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
     def render_hud() -> None:
         app.ui.clear()
         app.ui.draw_crosshair(size=12.0, color=WHITE)
-        app.ui.draw_text("Pielosyty 3D Engine | 10: FPS Game Sandbox", (24, 24), size=20, color=WARM_WHITE)
+        app.ui.draw_text("Velocity 3D Engine | 10: FPS Game Sandbox", (24, 24), size=20, color=WARM_WHITE)
 
         ammo_str = "RELOADING..." if reloading else f"AMMO: {ammo} / {max_ammo}  [R to Reload]"
         ammo_col = YELLOW if reloading else (GREEN if ammo > 2 else RED)

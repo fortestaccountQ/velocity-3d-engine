@@ -1,4 +1,4 @@
-"""Pielosyty 3D Engine: High-performance C++20 3D Game & Editor Engine with Sokol GFX, PBR Shading, and Dear ImGui."""
+"""Velocity 3D Engine: High-performance C++20 3D Game & Editor Engine with Sokol GFX, PBR Shading, and Dear ImGui."""
 
 from __future__ import annotations
 

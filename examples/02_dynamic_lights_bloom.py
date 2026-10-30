@@ -20,8 +20,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -153,7 +153,7 @@ def create_cyberpunk_scene(app: App) -> tuple[list[PointLight], list[ve.Entity],
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the dynamic lights & bloom example in interactive or headless mode."""
-    app = App("Pielosyty - 02 Dynamic Lights & Bloom", width=1280, height=720, clear_color="#07090e")
+    app = App("Velocity - 02 Dynamic Lights & Bloom", width=1280, height=720, clear_color="#07090e")
 
     # Camera looking at center totem
     orb = OrbitController(target=(0.0, 2.5, 0.0), distance=15.0, min_distance=3.0, max_distance=35.0)
@@ -169,7 +169,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # Setup UI overlay
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 02: Dynamic Lights & BloomPass", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 02: Dynamic Lights & BloomPass", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("16 Multi-colored PointLights in Lissajous Orbits + Emissive Pillars (intensity=4.0)", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("Post-Processing: EffectComposer with BloomPass (threshold=0.8, strength=2.8)", (24, 76), size=13, color=MAGENTA)
     app.ui.show_stats(True)

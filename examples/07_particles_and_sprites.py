@@ -21,8 +21,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -191,7 +191,7 @@ def create_campfire_scene(app: App) -> tuple[ParticleEmitter, ParticleEmitter, P
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the particles & sprites campfire example in interactive or headless mode."""
-    app = App("Pielosyty - 07 Particles & Sprites", width=1280, height=720, clear_color="#070a10")
+    app = App("Velocity - 07 Particles & Sprites", width=1280, height=720, clear_color="#070a10")
 
     orb = OrbitController(target=(0.0, 1.0, 0.0), distance=9.5, min_distance=2.0, max_distance=25.0, pitch=20.0)
     app.camera = orb
@@ -200,7 +200,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 07: Particles & Sprites", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 07: Particles & Sprites", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("Campfire Particles: Additive Sparks + Alpha Smoke + Falling Rain Emitter", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("Overhead Billboards: Spherical Camera-Facing Sprite Name Tag & Health Bar", (24, 76), size=13, color=YELLOW)
     app.ui.show_stats(True)

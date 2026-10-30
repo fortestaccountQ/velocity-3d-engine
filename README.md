@@ -1,4 +1,4 @@
-# Pielosyty 3D Engine
+# Velocity 3D Engine
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
@@ -13,7 +13,7 @@
 
 ## 🌟 Highlights
 
-**Pielosyty 3D Engine** combines the raw rendering performance of modern C++20 and [Sokol GFX](https://github.com/floooh/sokol) with the ergonomic expressiveness of Python via [nanobind](https://github.com/wjakob/nanobind).
+**Velocity 3D Engine** combines the raw rendering performance of modern C++20 and [Sokol GFX](https://github.com/floooh/sokol) with the ergonomic expressiveness of Python via [nanobind](https://github.com/wjakob/nanobind).
 
 - **High-Performance Core**: Written in modern C++20 with lightweight zero-overhead abstractions, GLM mathematics, and Sokol GFX (Direct3D 11, Metal, OpenGL).
 - **Pythonic Ergonomics**: Complete Python bindings with PEP-484 / PEP-561 `.pyi` type stubs for IDE auto-completion. Supports operator overloading, context managers, and vector unpackings.
@@ -59,7 +59,7 @@ python games/space_combat_arena.py
 ## 📂 Repository Structure
 
 ```text
-pielosyty-3d-engine/
+velocity-3d-engine/
 ├── assets/                     # 3D glTF/GLB models, textures, and normal maps
 │   ├── textures/               # PBR diffuse, normal, and RGBA texture maps
 │   ├── Soldier.glb             # Animated rigged character model
@@ -87,8 +87,9 @@ pielosyty-3d-engine/
 │   └── ...                     # Additional interactive showcases
 ├── games/                      # Playable standalone games (Dungeon & Space)
 ├── python/                     # Python package implementations & type stubs
-│   ├── pielosyty/              # Modern primary engine package
-│   └── VelocityEngine/         # Compatibility layer
+│   ├── VelocityEngine/         # Primary engine package
+│   ├── velocity/               # Pythonic lowercase alias
+│   └── pielosyty/              # Backwards-compatibility alias layer
 ├── scripts/                    # Utility and procedural texture generation tools
 ├── tests/                      # 420+ automated pytest test suites
 ├── third_party/                # Vendored dependencies (Sokol, GLM, ImGui, miniaudio)
@@ -114,8 +115,8 @@ pielosyty-3d-engine/
 
 ```powershell
 # Clone the repository
-git clone https://github.com/fortestaccountQ/pielosyty-3d-engine.git
-cd pielosyty-3d-engine
+git clone https://github.com/fortestaccountQ/velocity-3d-engine.git
+cd velocity-3d-engine
 
 # Install build dependencies
 pip install scikit-build-core nanobind ninja pytest numpy
@@ -142,11 +143,11 @@ pytest tests -q
 ## 💡 Quick Start Example
 
 ```python
-import pielosyty as engine
+import VelocityEngine as ve
 
 # 1. Initialize application
-app = engine.App(
-    title="Pielosyty 3D Engine - Quickstart",
+app = ve.App(
+    title="Velocity 3D Engine - Quickstart",
     width=1280,
     height=720,
     clear_color=(0.08, 0.09, 0.12, 1.0)
@@ -155,25 +156,25 @@ app = engine.App(
 # 2. Setup Camera
 camera = app.camera
 camera.set_position(0.0, 2.0, 5.0)
-camera.look_at(engine.Vec3(0.0, 0.5, 0.0))
+camera.look_at(ve.Vec3(0.0, 0.5, 0.0))
 
 # 3. Add Directional & Ambient Lighting
-app.scene.set_ambient_light(engine.Vec3(0.05, 0.05, 0.07))
-sun = engine.DirectionalLight(
-    color=engine.Vec3(1.0, 0.95, 0.8),
+app.scene.set_ambient_light(ve.Vec3(0.05, 0.05, 0.07))
+sun = ve.DirectionalLight(
+    color=ve.Vec3(1.0, 0.95, 0.8),
     intensity=2.5,
-    direction=engine.Vec3(-0.5, -1.0, -0.5)
+    direction=ve.Vec3(-0.5, -1.0, -0.5)
 )
 app.scene.add_light(sun)
 
 # 4. Create PBR Material & Mesh
-mat = engine.StandardMaterial()
-mat.base_color = engine.Vec4(0.9, 0.2, 0.2, 1.0)
+mat = ve.StandardMaterial()
+mat.base_color = ve.Vec4(0.9, 0.2, 0.2, 1.0)
 mat.roughness = 0.25
 mat.metallic = 0.8
 
-mesh = engine.Mesh.create_sphere(radius=1.0, rings=32, sectors=32)
-entity = engine.Entity(mesh=mesh, material=mat)
+mesh = ve.Mesh.create_sphere(radius=1.0, rings=32, sectors=32)
+entity = ve.Entity(mesh=mesh, material=mat)
 app.scene.add_entity(entity)
 
 # 5. Run Application Loop

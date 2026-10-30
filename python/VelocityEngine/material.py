@@ -43,5 +43,37 @@ _core.Material.plastic = staticmethod(plastic)
 _core.Material.rubber = staticmethod(rubber)
 
 Material = _core.Material
+StandardMaterial = getattr(_core, "StandardMaterial", Material)
+PhysicalMaterial = getattr(_core, "PhysicalMaterial", None)
+UnlitMaterial = getattr(_core, "UnlitMaterial", None)
+LambertMaterial = getattr(_core, "LambertMaterial", None)
+PhongMaterial = getattr(_core, "PhongMaterial", None)
+ToonMaterial = getattr(_core, "ToonMaterial", None)
+ShaderMaterial = getattr(_core, "ShaderMaterial", None)
+MaterialType = getattr(_core, "MaterialType", None)
+SideMode = getattr(_core, "SideMode", None)
+BlendMode = getattr(_core, "BlendMode", None)
+TextureFilter = getattr(_core, "TextureFilter", None)
+TextureWrap = getattr(_core, "TextureWrap", None)
+PipelineManager = getattr(_core, "PipelineManager", None)
 
-__all__ = ["Material", "gold", "metal", "plastic", "rubber"]
+__all__ = [
+    "Material",
+    "StandardMaterial",
+    "PhysicalMaterial",
+    "UnlitMaterial",
+    "LambertMaterial",
+    "PhongMaterial",
+    "ToonMaterial",
+    "ShaderMaterial",
+    "MaterialType",
+    "SideMode",
+    "BlendMode",
+    "TextureFilter",
+    "TextureWrap",
+    "PipelineManager",
+    "gold",
+    "metal",
+    "plastic",
+    "rubber",
+]

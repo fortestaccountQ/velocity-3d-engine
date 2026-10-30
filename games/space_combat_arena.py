@@ -1,6 +1,6 @@
 """Space Combat Arena - 3D 6DOF Space Flight Dogfight Game.
 
-Built with the Pielosyty 3D Engine.
+Built with the Velocity 3D Engine.
 
 Features:
 - 6DOF Newtonian flight dynamics: pitch, yaw, roll, linear velocity, boost, inertia damping.
@@ -33,8 +33,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     Mesh,
     StandardMaterial,
@@ -696,7 +696,7 @@ class SpaceCombatArena:
 
         # Initialize Engine Application
         self.app = App(
-            "Pielosyty 3D - Space Combat Arena",
+            "Velocity 3D - Space Combat Arena",
             width=width,
             height=height,
             clear_color="#040409",

@@ -20,8 +20,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     PerspectiveCamera,
@@ -151,7 +151,7 @@ def create_cctv_room(app: App) -> tuple[ve.Entity, ve.Entity, PerspectiveCamera,
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the render-to-texture portal example in interactive or headless mode."""
-    app = App("Pielosyty - 06 Render to Texture Portal", width=1280, height=720, clear_color="#0b0e14")
+    app = App("Velocity - 06 Render to Texture Portal", width=1280, height=720, clear_color="#0b0e14")
 
     # Main spectator camera looking into the room at both pedestal and wall monitor
     orb = OrbitController(target=(-1.5, 2.2, 0.0), distance=12.0, min_distance=2.0, max_distance=30.0, yaw=-30.0, pitch=15.0)
@@ -161,7 +161,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 06: Render-to-Texture Security Monitor", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 06: Render-to-Texture Security Monitor", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("Ceiling Security Cam renders to RenderTarget(512, 512) -> TV screen albedo_map", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("[REC] LIVE CCTV BROADCAST 1080p | Orbit main camera to observe both feeds", (24, 76), size=13, color=RED)
     app.ui.show_stats(True)

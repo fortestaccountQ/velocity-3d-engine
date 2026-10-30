@@ -20,8 +20,8 @@ python_dir = repo_root / "python"
 if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -174,7 +174,7 @@ def create_water_scene(app: App) -> tuple[ve.Entity, list[ve.Entity], ShaderMate
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the custom shader water example in interactive or headless mode."""
-    app = App("Pielosyty - 05 Custom Shader Water", width=1280, height=720, clear_color="#07121e")
+    app = App("Velocity - 05 Custom Shader Water", width=1280, height=720, clear_color="#07121e")
 
     # Camera looking over the ocean
     orb = OrbitController(target=(0.0, 0.0, 0.0), distance=26.0, min_distance=4.0, max_distance=70.0, pitch=25.0)
@@ -184,7 +184,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 05: Custom Shader Water", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 05: Custom Shader Water", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text("ShaderMaterial: Custom Vertex (Sine Wave Displacement) & Fragment (Fresnel + Specular)", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("Realistic Wave Kinematics & Floating Buoy Bobbing Dynamics", (24, 76), size=13, color=WHITE)
     app.ui.show_stats(True)

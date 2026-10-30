@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import time
 import numpy as np
-import pielosyty as p
+import VelocityEngine as p
 
 def create_wave_data(nx: int = 200, nz: int = 500, time_val: float = 0.0) -> np.ndarray:
     """Generate 100,000 vertex wave buffer with positions, normals, UVs, tints, and tangents."""

@@ -22,8 +22,8 @@ if str(python_dir) not in sys.path:
     sys.path.insert(0, str(python_dir))
 
 import numpy as np
-import pielosyty as ve
-from pielosyty import (
+import VelocityEngine as ve
+from VelocityEngine import (
     App,
     OrbitController,
     Mesh,
@@ -77,7 +77,7 @@ def create_wave_grid(nx: int = 316, nz: int = 317, size_x: float = 60.0, size_z:
 
 def run_example(headless: bool = False, frames: int = 60) -> App:
     """Run the 100,000 vertex wave example in interactive or headless mode."""
-    app = App("Pielosyty - 04 NumPy Wave Surface", width=1280, height=720, clear_color="#090d14")
+    app = App("Velocity - 04 NumPy Wave Surface", width=1280, height=720, clear_color="#090d14")
 
     # Camera looking at center of the wave
     orb = OrbitController(target=(0.0, 0.0, 0.0), distance=45.0, min_distance=5.0, max_distance=120.0, pitch=35.0)
@@ -116,7 +116,7 @@ def run_example(headless: bool = False, frames: int = 60) -> App:
 
     # UI Overlay setup
     app.ui.clear()
-    app.ui.draw_text("Pielosyty 3D Engine | 04: NumPy Wave Surface", (24, 24), size=20, color=WARM_WHITE)
+    app.ui.draw_text("Velocity 3D Engine | 04: NumPy Wave Surface", (24, 24), size=20, color=WARM_WHITE)
     app.ui.draw_text(f"Dynamic Surface: {total_vertices:,} Vertices (316 x 317 Grid)", (24, 52), size=14, color=CYAN)
     app.ui.draw_text("GPU Buffer Streaming: mesh.update_vertices_from_numpy() @ 60+ FPS", (24, 76), size=13, color=GREEN)
     app.ui.show_stats(True)
