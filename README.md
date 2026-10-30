@@ -1,5 +1,7 @@
 # Velocity 3D Engine
 
+[ **English** | [Русский](doc/README_ru.md) | [中文](doc/README_zh.md) | [Español](doc/README_es.md) | [Français](doc/README_fr.md) | [العربية](doc/README_ar.md) | [Deutsch](doc/README_de.md) | [日本語](doc/README_ja.md) | [Português](doc/README_pt.md) ]
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -8,6 +10,20 @@
 > [!WARNING]
 > ### ⚠️ Project Status: Early Alpha / Work-in-Progress
 > This engine is currently in an **early experimental alpha** stage. It is an active architectural proof-of-concept and technical foundation. Many subsystems are undergoing heavy iteration, APIs are subject to breaking changes, and significant modernization, refactoring, and optimizations are planned. **It is not yet production-ready.** However, a solid core foundation (C++20, Sokol GFX, nanobind, PBR, skeletal animation, and full test suite) is established and functional.
+
+---
+
+## 🌐 Documentation & Translations
+
+The documentation for Velocity 3D Engine is available in the official UN languages and major global languages:
+
+| Language | Document | Language | Document |
+|:---|:---|:---|:---|
+| 🇬🇧 **English** | [README.md](README.md) *(Original)* | 🇸🇦 **العربية** | [README_ar.md](doc/README_ar.md) |
+| 🇷🇺 **Русский** | [README_ru.md](doc/README_ru.md) | 🇩🇪 **Deutsch** | [README_de.md](doc/README_de.md) |
+| 🇨🇳 **简体中文** | [README_zh.md](doc/README_zh.md) | 🇯🇵 **日本語** | [README_ja.md](doc/README_ja.md) |
+| 🇪🇸 **Español** | [README_es.md](doc/README_es.md) | 🇧🇷 **Português** | [README_pt.md](doc/README_pt.md) |
+| 🇫🇷 **Français** | [README_fr.md](doc/README_fr.md) | | |
 
 ---
 
