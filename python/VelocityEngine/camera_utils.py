@@ -15,6 +15,7 @@ def screen_to_ray(camera: Any, mouse_x: float, mouse_y: float, screen_w: float, 
     """Convert screen coordinate (mouse_x, mouse_y) into a 3D world space Ray.
 
     Screen space origin (0, 0) is top-left, (screen_w, screen_h) is bottom-right.
+    The ray originates at the camera position and points through the given pixel.
     """
     w = max(1.0, float(screen_w))
     h = max(1.0, float(screen_h))
